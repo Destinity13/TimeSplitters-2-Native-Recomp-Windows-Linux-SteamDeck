@@ -19,6 +19,7 @@
 
 #ifdef _WIN32
 #include "common/RedtapeWindows.h"
+#include <dxgi1_6.h>
 #endif
 
 #include "fmt/format.h"
@@ -4406,6 +4407,39 @@ namespace ps2xdiag
 #define PS2XDIAG(text) ((void)0)
 #endif
 
+#ifdef _WIN32
+// Laptops with two graphics chips (Intel + Nvidia/AMD): without a hint Windows hands a program the power-saving chip and
+// the first DXGI adapter is the Intel one - the game then ran on it (measured on a GTX 1050 laptop: its helper window
+// reported "Intel(R) HD Graphics 630"). Ask DXGI for the high-performance adapter and give its name to the renderer.
+// PS2XGS_ADAPTER=<name> picks a card by name, PS2XGS_ADAPTER=default leaves the choice to Windows.
+static std::string ps2xStarkeGrafikkarte()
+{
+	if (const char* e = std::getenv("PS2XGS_ADAPTER"); e && *e)
+		return std::strcmp(e, "default") == 0 ? std::string() : std::string(e);
+	std::string name;
+	IDXGIFactory1* f1 = nullptr;
+	if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&f1))) || !f1)
+		return name;
+	IDXGIFactory6* f6 = nullptr;
+	if (SUCCEEDED(f1->QueryInterface(__uuidof(IDXGIFactory6), reinterpret_cast<void**>(&f6))) && f6)
+	{
+		for (UINT i = 0;; ++i)
+		{
+			IDXGIAdapter1* a = nullptr;
+			if (f6->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, __uuidof(IDXGIAdapter1), reinterpret_cast<void**>(&a)) != S_OK || !a)
+				break;
+			DXGI_ADAPTER_DESC1 d{};
+			const bool ok = SUCCEEDED(a->GetDesc1(&d)) && !(d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE);
+			a->Release();
+			if (ok) { name = StringUtil::WideStringToUTF8String(d.Description); break; }
+		}
+		f6->Release();
+	}
+	f1->Release();
+	return name;
+}
+#endif
+
 PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, int widescreen)
 {
 #ifdef _WIN32
@@ -4428,6 +4462,16 @@ PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, 
 		return 0;
 	}
 	PS2XDIAG("[ps2xgs] start: configuration ok");
+#ifdef _WIN32
+	{
+		const std::string karte = ps2xStarkeGrafikkarte();
+		if (!karte.empty())
+			s_settings_interface.SetStringValue("EmuCore/GS", "Adapter", karte.c_str());
+		const std::string z = "[ps2xgs] graphics adapter: " + (karte.empty() ? std::string("(Windows default)") : karte);
+		Console.WriteLn(z);
+		PS2XDIAG(z.c_str());
+	}
+#endif
 	// PS2XGS_SURFACELESS=1 (Testlaeufe): ohne sichtbares Fenster rendern, Screenshots gehen trotzdem
 	const char *surfaceless = std::getenv("PS2XGS_SURFACELESS");
 	ps2xmenu::load(upscale);
