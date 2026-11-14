@@ -1221,6 +1221,15 @@ namespace ps2xfeed
 	std::atomic<long long> tafelMs{0};     // last scoreboard data from the game (= a match is running)
 	bool imMatch() { return ps2xosd::jetztMs() - tafelMs.load() < 2000; }
 }
+// Screenshots at internal resolution: with the aspect ratio "fill the window" (Stretch) PCSX2 does not know the display
+// ratio and writes the file as 4:3 - the wide picture came out squeezed. Hand over the window ratio for the file.
+static void ps2xShotAspect()
+{
+	if (EmuConfig.GS.AspectRatio == AspectRatioType::Stretch && s_wi.surface_width && s_wi.surface_height)
+		EmuConfig.CurrentCustomAspectRatio = static_cast<float>(s_wi.surface_width) / static_cast<float>(s_wi.surface_height);
+	else
+		EmuConfig.CurrentCustomAspectRatio = 0.0f;
+}
 // Hotkeys: F9 FPS-Anzeige, F10 Turbo (ohne Bildratenbegrenzung), F12 Screenshot; kurze Einblendung (Toast)
 // ps2x: MTGS::RunOnGSThread writes the MTGS ring, which has exactly one producer: the CPU thread (live playback).
 // Calls from other threads (screenshots from the port, hotkeys, recording start/stop) raced with the GIF packets of
@@ -3641,7 +3650,7 @@ static void ps2xKey(KeySym ks, bool down, bool alt)
 			char tb[32]; const std::time_t now = std::time(nullptr);
 			std::strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", std::localtime(&now));
 			const std::string p = ps2xhot::shotDir() + "/ts2_" + tb + ".png";
-			gsCall([p]() { GSQueueSnapshot(p); });
+			gsCall([p]() { ps2xShotAspect(); GSQueueSnapshot(p); });
 			ps2xhot::toast("Screenshot: " + p);
 		}
 		else if (ps2xmenu::open.load())
@@ -4630,7 +4639,7 @@ PS2XGS_API void ps2xgs_capture_end() { ps2xhot::aufnahmeBeenden(); }
 PS2XGS_API void ps2xgs_screenshot(const char* path)
 {
 	std::string p(path);
-	gsCall([p]() { GSQueueSnapshot(p); });
+	gsCall([p]() { ps2xShotAspect(); GSQueueSnapshot(p); });
 }
 
 // Input for the port: pressed PS2 buttons (1 = pressed) and sticks (lx, ly, rx, ry; 0x80 = centre).
