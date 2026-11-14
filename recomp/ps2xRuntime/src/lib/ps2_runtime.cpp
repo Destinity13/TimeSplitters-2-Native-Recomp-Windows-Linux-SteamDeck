@@ -47,12 +47,12 @@ bool ps2xGsBridgeActive(); // gs_frontend.cpp (globaler Namensraum)
 void ps2xGsBridgeFlush();  // gs_frontend.cpp (globaler Namensraum)
 namespace
 {
-    // SOTC_SKIP_VU1_NODRAW=1: VU1-Programme im Vorlauf (Zeichnen aus) überspringen.
+    // SOTC_SKIP_VU1_NODRAW=1: skip VU1 programs during the lead-in (drawing off).
     inline bool ps2xSkipVu1WhileNoDraw()
     {
         static const bool enabled = [] {
             const char *e = std::getenv("SOTC_SKIP_VU1_NODRAW");
-            return e && *e && std::atoi(e) != 0 && !ps2xGsBridgeActive(); // "0" heisst aus; mit PCSX2-GS nie
+            return e && *e && std::atoi(e) != 0 && !ps2xGsBridgeActive(); // "0" means off; never with the PCSX2 GS
         }();
         return enabled && g_ps2xSkipDraws.load(std::memory_order_relaxed);
     }
@@ -417,7 +417,7 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
     static std::vector<uint8_t> s_scratch;
     static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
 
-    // Mit PCSX2-GS zeichnet dessen Fenster: unser altes Bild nicht mehr aus dem Grafikspeicher zusammensetzen (sparte ~7 % CPU)
+    // With the PCSX2 GS its window draws: no longer assemble our old picture from graphics memory (saved ~7 % CPU)
     if (ps2xGsBridgeActive())
     {
         outWidth = FB_WIDTH;
@@ -563,14 +563,14 @@ void PS2Runtime::setDebugUiCallbacks(DebugUiCallback initCallback,
 }
 
 
-// ---- MTVU (PS2X_MTVU=1): VIF1 + VU1 auf eigenem Thread, wie PCSX2s MTVU ------------------------------
-// Der EE-Thread kopiert nur die VIF1-DMA-Daten und laeuft weiter; Entpacken, VU1-Programme und deren GIF-Pakete
-// erledigt der Arbeiter in Reihenfolge. Gewartet wird nur, wo die EE davon abhaengt (ps2xVu1Fence) und je VSync.
+// ---- MTVU (PS2X_MTVU=1): VIF1 + VU1 on their own thread, like PCSX2's MTVU ------------------------------
+// The EE thread only copies the VIF1 DMA data and carries on; unpacking, VU1 programs and their GIF packets
+// are done by the worker in order. Waiting only happens where the EE depends on it (ps2xVu1Fence) and per VSync.
 extern std::atomic<bool> g_ps2xVu1Pending;
 extern thread_local bool g_ps2xOnVu1Worker;
 extern void (*g_ps2xVu1Sync)();
 
-// ---- Diagnose PS2X_FLOATLOG=1: Gleitkomma-Sonderfaelle mit Gast-PC (siehe ps2_runtime_macros.h) ----
+// ---- Diagnosis PS2X_FLOATLOG=1: floating-point special cases with guest PC (see ps2_runtime_macros.h) ----
 void (*g_ps2xFloatHook)(int kind, float a, float b, float r) = nullptr;
 extern R5900Context *g_ps2xCurCtx;
 namespace
@@ -593,7 +593,7 @@ namespace
         const uint32_t n = ++s_seen[{pc, kind}];
         ++s_total;
         if (n <= 2 || (s_total & (s_total - 1)) == 0)
-            std::fprintf(stderr, "[FLOAT] pc=%08x %s a=%g(%08x) b=%g(%08x) -> %g(%08x)  #%u an dieser Stelle, %llu gesamt\n", pc,
+            std::fprintf(stderr, "[FLOAT] pc=%08x %s a=%g(%08x) b=%g(%08x) -> %g(%08x)  #%u at this place, %llu total\n", pc,
                          kKind[kind], a, std::bit_cast<uint32_t>(a), b, std::bit_cast<uint32_t>(b), r, std::bit_cast<uint32_t>(r), n,
                          static_cast<unsigned long long>(s_total));
     }
@@ -606,8 +606,8 @@ namespace ps2x_mtvu
     static std::thread g_thread;
     static std::deque<std::function<void()>> g_jobs;
     static bool g_running = false, g_quit = false, g_started = false;
-    std::atomic<uint32_t> g_fbrst{0};    // VU0-FBRST zum Zeitpunkt der Uebergabe (D/T-Bit-Freigabe)
-    std::atomic<uint32_t> g_stopBits{0}; // D/T-Stopp des letzten Programms
+    std::atomic<uint32_t> g_fbrst{0};    // VU0 FBRST at the time of handover (D/T bit enable)
+    std::atomic<uint32_t> g_stopBits{0}; // D/T stop of the last program
     static std::atomic<uint64_t> g_waits{0}, g_jobCount{0}, g_waitUs{0}, g_busyUs{0}, g_cpuUs{0};
 
     bool enabled()
@@ -630,15 +630,15 @@ namespace ps2x_mtvu
         if (t0 - s_last > std::chrono::seconds(5))
         {
             s_last = t0;
-            std::fprintf(stderr, "[MTVU] %llu Auftraege, %llu Wartepunkte, EE wartete %.1f ms, Arbeiter beschaeftigt %.1f ms, davon Rechenzeit %.1f ms\n", (unsigned long long)g_jobCount.load(),
+            std::fprintf(stderr, "[MTVU] %llu jobs, %llu wait points, EE waited %.1f ms, worker busy %.1f ms, of that compute time %.1f ms\n", (unsigned long long)g_jobCount.load(),
                          (unsigned long long)n, g_waitUs.load() / 1000.0, g_busyUs.load() / 1000.0, g_cpuUs.load() / 1000.0);
         }
     }
     void workerMain()
     {
         g_ps2xOnVu1Worker = true;
-        // VU-Rundung (Richtung null) + keine Denormalen (FTZ/DAZ) wie die PS2-VU und wie ohne MTVU auf dem EE-Thread.
-        // Ohne FTZ/DAZ rechnete der VU1-Thread anders als der EE-Pfad -> SotC: Bild wird weiss, Haare/Zuegel explodieren.
+        // VU rounding (towards zero) + no denormals (FTZ/DAZ) like the PS2 VU and like without MTVU on the EE thread.
+        // Without FTZ/DAZ the VU1 thread computed differently from the EE path -> SotC: picture turns white, hair/reins explode.
         _mm_setcsr(_mm_getcsr() | 0x6000u | 0x8040u);
         for (;;)
         {
@@ -655,7 +655,7 @@ namespace ps2x_mtvu
             const auto tj = std::chrono::steady_clock::now();
             timespec c0{}, c1{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &c0);
             job();
-            clock_gettime(CLOCK_THREAD_CPUTIME_ID, &c1); // reine Rechenzeit des Auftrags (ohne Warten auf den GS-Thread)
+            clock_gettime(CLOCK_THREAD_CPUTIME_ID, &c1); // pure computing time of the job (without waiting for the GS thread)
             g_cpuUs.fetch_add((uint64_t)((c1.tv_sec - c0.tv_sec) * 1000000LL + (c1.tv_nsec - c0.tv_nsec) / 1000LL), std::memory_order_relaxed);
             ::ps2xGsBridgeFlush(); // Grafikpakete dieses Auftrags abgeben
             g_busyUs.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - tj).count(), std::memory_order_relaxed);
@@ -680,7 +680,7 @@ namespace ps2x_mtvu
             g_thread = std::thread(workerMain);
         }
         g_jobCount.fetch_add(1, std::memory_order_relaxed);
-        ::ps2xGsBridgeFlush(); // erst die Pakete der EE, dann die des Arbeiters
+        ::ps2xGsBridgeFlush(); // first the EE's packets, then the worker's
         {
             std::lock_guard<std::mutex> lk(g_mutex);
             g_fbrst.store(fbrst, std::memory_order_relaxed);
@@ -713,7 +713,7 @@ namespace ps2x_mtvu
         return on;
     }
 }
-// Am Bildende: nur auf das VORIGE Bild warten (dessen VSync-Auftrag), nicht auf das aktuelle.
+// At the end of the frame: only wait for the PREVIOUS frame (its VSync job), not for the current one.
 void ps2xMtvuFrameFence()
 {
     using namespace ps2x_mtvu;
@@ -731,8 +731,8 @@ void ps2xMtvuFrameFence()
     }
     g_waitUs.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count(), std::memory_order_relaxed);
 }
-// Arbeit an den VU1-Arbeiter anhaengen statt auf ihn zu warten (GIF-Pakete/GS-Register der EE, in Reihenfolge).
-// false = Arbeiter ist frei, Aufrufer erledigt es selbst sofort.
+// Append work to the VU1 worker instead of waiting for it (the EE's GIF packets/GS registers, in order).
+// false = the worker is idle, the caller does it itself right away.
 bool ps2xMtvuDefer(std::function<void()> fn)
 {
     using namespace ps2x_mtvu;
@@ -747,7 +747,7 @@ bool ps2xMtvuDefer(std::function<void()> fn)
     g_cvWork.notify_one();
     return true;
 }
-// VSync an den Arbeiter haengen, wenn dort noch Arbeit dieses Bildes liegt. false = selbst sofort senden.
+// Attach the VSync to the worker if work of this frame is still queued there. false = send it yourself right away.
 bool ps2xMtvuPipeVsync(std::function<void()> fn)
 {
     using namespace ps2x_mtvu;
@@ -928,8 +928,8 @@ bool PS2Runtime::syncCoreSubsystems()
     g_ps2xMtvuRuntime = this;
     m_memory.setVu1MscalCallback([this](uint32_t startPC, uint32_t top, uint32_t itop)
                                  {
-                                     // Test-Beschleunigung: im schnellen Vorlauf (es wird nicht gezeichnet)
-                                     // braucht die VU1 nicht zu rechnen – ihre Ausgabe geht nur an den Grafikchip.
+                                     // Test speed-up: in the fast lead-in (nothing is drawn)
+                                     // the VU1 does not need to compute – its output only goes to the graphics chip.
                                      if (ps2xSkipVu1WhileNoDraw())
                                          return;
                                      R5900Context *cpuContext = g_ps2xOnVu1Worker ? nullptr : (m_eeScheduler ? m_eeScheduler->currentContext() : nullptr);
@@ -1021,7 +1021,7 @@ bool PS2Runtime::initialize(const char *title)
         InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
 #else
         {
-            // Mit PCSX2-GS ist dessen Fenster das einzige Spielfenster (Bild + Eingabe); unser altes bleibt unsichtbar
+            // With the PCSX2 GS its window is the only game window (picture + input); our old one stays invisible
             const char *gsLib = std::getenv("PS2X_PCSX2_GS");
             const char *show = std::getenv("PS2X_SHOW_HOST_WINDOW");
             unsigned int flags = FLAG_WINDOW_RESIZABLE;
@@ -1029,19 +1029,19 @@ bool PS2Runtime::initialize(const char *title)
                 flags |= FLAG_WINDOW_HIDDEN;
             SetConfigFlags(flags);
         }
-        // raylib 5.5 ruft nach einem gescheiterten Fensteraufbau trotzdem rlglInit auf (OpenGL-Funktionszeiger leer ->
-        // Absturz). Ohne OpenGL (VM ohne Grafiktreiber, Remotedesktop, kein DISPLAY) erst gar kein Host-Fenster anlegen:
-        // vorher mit GLFW (in raylib enthalten) ein unsichtbares Probefenster versuchen.
+        // raylib 5.5 still calls rlglInit after a failed window creation (OpenGL function pointers empty ->
+        // crash). Without OpenGL (VM without a graphics driver, remote desktop, no DISPLAY) do not create a host window at all:
+        // first try an invisible probe window with GLFW (included in raylib).
         if (ps2xOpenGlVerfuegbar())
             InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title);
         else
-            std::fprintf(stderr, "[init] kein OpenGL - ohne Host-Fenster (Bild/Eingabe ueber das PCSX2-Fenster)\n");
-        // PCSX2-Bruecke (Grafik + Ton) frueh starten: der Sound-Treiber des IOP richtet den SPU2 beim Booten ein
+            std::fprintf(stderr, "[init] no OpenGL - without host window (picture/input through the PCSX2 window)\n");
+        // Start the PCSX2 bridge (graphics + sound) early: the IOP's sound driver sets up the SPU2 while booting
         (void)ps2xGsBridgeActive();
         InitAudioDevice();
-        // Mit echtem SPU2 (PCSX2-Bruecke) spielt der Chip den Ton; die alte Sample-Wiedergabe bleibt dann aus
+        // With the real SPU2 (PCSX2 bridge) the chip plays the sound; the old sample playback then stays off
         m_audioBackend.setAudioReady(IsAudioDeviceReady() && !ps2x::iop::g_spuBridge.async);
-        if (IsWindowReady())   // ohne OpenGL gibt es kein Host-Fenster (GLFW-Aufrufe mit leerem Fenster stuerzen ab)
+        if (IsWindowReady())   // without OpenGL there is no host window (GLFW calls with an empty window crash)
         {
             // Test-Fenster: PS2X_WINDOW_SIZE=w,h  PS2X_WINDOW_POS=x,y  PS2X_WINDOW_TITLE=text
             int a = 0, b = 0;
@@ -1291,8 +1291,8 @@ bool PS2Runtime::loadELF(const std::string &elfPath)
         const uint32_t hardLimit = std::min(kGuestHeapHardLimit, PS2_RAM_SIZE);
         m_asyncCallbackStackFloor = std::min(std::max(hardLimit, suggestedHeapBase), PS2_RAM_SIZE);
         m_asyncCallbackStackTop = PS2_RAM_SIZE;
-        // Echte PS2: Interrupt-Handler laufen auf dem Kernel-Stapel (Kernel-RAM unter 0x80000), nicht im Spielspeicher.
-        // Spiele (z. B. SotC) belegen RAM bis zum Hauptstapel; Rueckruf-Stapel dort zerstoerten Spieldaten.
+        // Real PS2: interrupt handlers run on the kernel stack (kernel RAM below 0x80000), not in game memory.
+        // Games (e.g. SotC) use RAM up to the main stack; callback stacks there destroyed game data.
         if (!std::getenv("PS2X_CBSTACK_ALT"))
         {
             m_asyncCallbackStackFloor = 0x00080000u;
@@ -1686,8 +1686,8 @@ bool PS2Runtime::dispatchGuestBranch(uint8_t *rdram,
         std::lock_guard<std::mutex> lock(g_ps2xCallHistMutex);
         ++g_ps2xCallHist[targetPc];
     }
-    // Alle Sprung-Diagnosen (PS2X_SPCHECK_*, PS2X_CALLRING, PS2X_TRACE_BRANCH_TARGET) hinter einem Schalter:
-    // im Normalbetrieb eine einzige vorhersagbare Abfrage statt sechs je Funktionsaufruf.
+    // All jump diagnostics (PS2X_SPCHECK_*, PS2X_CALLRING, PS2X_TRACE_BRANCH_TARGET) behind one switch:
+    // in normal operation a single predictable check instead of six per function call.
     static const bool s_branchDiag = std::getenv("PS2X_SPCHECK_LO") || std::getenv("PS2X_CALLRING") || std::getenv("PS2X_TRACE_BRANCH_TARGET");
     if (__builtin_expect(s_branchDiag, 0))
     {
@@ -1717,7 +1717,7 @@ bool PS2Runtime::dispatchGuestBranch(uint8_t *rdram,
         }
     }
     {
-        // PS2X_CALLRING=1: letzte Spruenge je Kontext in einem Ring (Ausgabe, wenn ein Thread mit pc=0 endet)
+        // PS2X_CALLRING=1: last jumps per context in a ring (printed when a thread ends with pc=0)
         static const bool ring = std::getenv("PS2X_CALLRING") != nullptr;
         if (ring)
         {
@@ -1727,7 +1727,7 @@ bool PS2Runtime::dispatchGuestBranch(uint8_t *rdram,
             static const uint32_t dumpAt = [] { const char *e = std::getenv("PS2X_CALLRING_AT"); return e ? static_cast<uint32_t>(std::strtoul(e, nullptr, 0)) : 0u; }();
             if (dumpAt != 0u && targetPc == dumpAt)
             {
-                std::fprintf(stderr, "[ring] Aufruf von 0x%08X erreicht (aus 0x%08X), Vorgeschichte:\n", dumpAt, sourcePc);
+                std::fprintf(stderr, "[ring] call of 0x%08X reached (from 0x%08X), history:\n", dumpAt, sourcePc);
                 const uint32_t end = i + 1u;
                 for (uint32_t k = (end > 4096u ? end - 4096u : 0u); k < end; ++k)
                 {
@@ -1803,7 +1803,7 @@ bool PS2Runtime::dispatchGuestBranch(uint8_t *rdram,
         return false;
     }
 
-    pushDispatchPc(targetPc); // wie lookupFunction (Absturz-Protokoll)
+    pushDispatchPc(targetPc); // like lookupFunction (crash log)
     const uint32_t entryPc = ctx->pc;
     static const bool spReturnCheck = std::getenv("PS2X_SP_RETURN_CHECK") != nullptr;
     const uint32_t spBeforeCall = static_cast<uint32_t>(_mm_cvtsi128_si32(ctx->r[29]));
@@ -1868,8 +1868,8 @@ void PS2Runtime::executeVU0Microprogram(uint8_t *rdram, R5900Context *ctx, uint3
 
     m_vu0.reset();
     copyVu0ContextToState(ctx, m_vu0.state());
-    // VU0-Mikroprogramme (SotC: Physik, Stoff, Haare, Zuegel) laufen auf der PS2 bis zum E-Bit zu Ende.
-    // Frueher nach 4096 Takten abgeschnitten -> halbe Ergebnisse -> explodierende Haare/Zuegel, wirre Physik.
+    // VU0 micro programs (SotC: physics, cloth, hair, reins) run to the E bit on the PS2.
+    // Previously cut off after 4096 cycles -> half results -> exploding hair/reins, erratic physics.
     static const uint32_t kVu0Budget = [] { const char *e = std::getenv("PS2X_VU0_BUDGET"); return (e && *e) ? static_cast<uint32_t>(std::strtoul(e, nullptr, 0)) : 1u << 22; }();
     m_vu0.execute(vu0Code, PS2_VU0_CODE_SIZE,
                   vu0Data, PS2_VU0_DATA_SIZE,
@@ -1882,7 +1882,7 @@ void PS2Runtime::executeVU0Microprogram(uint8_t *rdram, R5900Context *ctx, uint3
         {
             ++s_cut;
             if (s_cut <= 10 || (s_cut & (s_cut - 1)) == 0)
-                std::fprintf(stderr, "[VU0] Programm 0x%04x nach %u Takten abgeschnitten, %llu von %llu Aufrufen\n", startPC, kVu0Budget,
+                std::fprintf(stderr, "[VU0] program 0x%04x cut off after %u cycles, %llu of %llu calls\n", startPC, kVu0Budget,
                              static_cast<unsigned long long>(s_cut), static_cast<unsigned long long>(s_calls));
         }
     }
@@ -2429,20 +2429,20 @@ uint32_t PS2Runtime::guestHeapLimit() const
 void PS2Runtime::excludeAsyncCallbackStackRange(uint32_t lo, uint32_t hi)
 {
     std::lock_guard<std::mutex> lock(m_asyncCallbackStackMutex);
-    // Rueckruf-Stapel wachsen von m_asyncCallbackStackTop nach unten. Ueberlappt der Bereich, Obergrenze darunter legen.
-    // Frueher lagen Interrupt-/Rueckruf-Stapel genau auf dem Stapel des Hauptthreads (0x1FE0000..0x2000000):
-    // Timer-Handler ueberschrieben die gesicherten Register von main/loaderLoop -> Thread 1 endete beim "Spiel beenden".
+    // Callback stacks grow downwards from m_asyncCallbackStackTop. If the range overlaps, put the upper limit below it.
+    // Previously the interrupt/callback stacks sat exactly on the main thread's stack (0x1FE0000..0x2000000):
+    // timer handlers overwrote the saved registers of main/loaderLoop -> thread 1 ended at "quit game".
     if (hi > m_asyncCallbackStackFloor && lo < m_asyncCallbackStackTop)
     {
         const uint32_t newTop = lo & ~0xFFFu;
         if (newTop > m_asyncCallbackStackFloor)
         {
-            std::fprintf(stderr, "[ps2x] Rueckruf-Stapel unter Hauptstapel verlegt: Obergrenze 0x%08X -> 0x%08X\n", m_asyncCallbackStackTop, newTop);
+            std::fprintf(stderr, "[ps2x] callback stacks moved below the main stack: upper limit 0x%08X -> 0x%08X\n", m_asyncCallbackStackTop, newTop);
             m_asyncCallbackStackTop = newTop;
         }
         else
         {
-            std::fprintf(stderr, "[ps2x] WARNUNG: Rueckruf-Stapel ueberlappen Hauptstapel 0x%08X..0x%08X, kein Platz darunter\n", lo, hi);
+            std::fprintf(stderr, "[ps2x] WARNING: callback stacks overlap the main stack 0x%08X..0x%08X, no room below\n", lo, hi);
         }
     }
 }
@@ -2681,9 +2681,9 @@ void PS2Runtime::postEeEvent(EeEvent event)
     m_eeScheduler->postEvent(event);
 }
 
-// Taktschätzung der EE (für Timer, VSync-Abstand, Zeitbudgets im Spiel), zur Laufzeit einstellbar:
-//   PS2X_EE_LOOP_CYCLES  Takte je Schleifen-Rücksprung im übersetzten Code (Standard 32)
-//   PS2X_EE_CALL_CYCLES  Takte je Funktionsübergang (Standard 8)
+// Cycle estimate of the EE (for timers, VSync spacing, time budgets in the game), adjustable at run time:
+//   PS2X_EE_LOOP_CYCLES  cycles per backward loop jump in the translated code (default 32)
+//   PS2X_EE_CALL_CYCLES  cycles per function transition (default 8)
 uint32_t ps2xEeLoopCycles() noexcept
 {
     static const uint32_t v = [] { const char *e = std::getenv("PS2X_EE_LOOP_CYCLES"); const unsigned long x = e ? std::strtoul(e, nullptr, 10) : 0ul; return x ? (uint32_t)x : 32u; }();
@@ -2697,7 +2697,7 @@ uint32_t ps2xEeCallCycles() noexcept
 
 bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
 {
-    if (cycles == 32u) cycles = ps2xEeLoopCycles();   // Standardwert aus dem generierten Code
+    if (cycles == 32u) cycles = ps2xEeLoopCycles();   // default from the generated code
     const bool due = m_eeScheduler->checkpointDue(cycles);
     if (due)
         ++g_dispatchUnwindCount; // generated code returns with ctx->pc at a loop head: an unwind, not a return
@@ -2850,7 +2850,7 @@ void PS2Runtime::run()
     // A blank image to use as a framebuffer
     Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
     Texture2D frameTex{};
-    if (IsWindowReady())   // Textur braucht einen OpenGL-Kontext
+    if (IsWindowReady())   // the texture needs an OpenGL context
         frameTex = LoadTextureFromImage(blank);
     UnloadImage(blank);
 
@@ -2859,10 +2859,10 @@ void PS2Runtime::run()
     std::thread gameThread([&]()
                            {
         ThreadNaming::SetCurrentThreadName("GameThread");
-        // EE-FPU-Rundung wie in PCSX2 (EmuConfig.Cpu.FPUFPCR -> MXCSR des EE-Threads):
-        // Die EE-FPU rundet in Hardware Richtung null; PCSX2 erzwingt für SotC eeRoundMode=3 (Chop).
-        // PS2X_EE_ROUND=chop setzt MXCSR.RC=11 für den Spielthread, "chop_daz" zusätzlich FTZ+DAZ.
-        // Standard "chop_daz" wie PCSX2-GameDB fuer SotC (eeRoundMode 3); "aus" = Host-Standard
+        // EE FPU rounding as in PCSX2 (EmuConfig.Cpu.FPUFPCR -> MXCSR of the EE thread):
+        // The EE FPU rounds towards zero in hardware; PCSX2 forces eeRoundMode=3 (chop) for SotC.
+        // PS2X_EE_ROUND=chop sets MXCSR.RC=11 for the game thread, "chop_daz" additionally FTZ+DAZ.
+        // Default "chop_daz" like the PCSX2 GameDB for SotC (eeRoundMode 3); "aus" = host default
         const char *rmEnv = std::getenv("PS2X_EE_ROUND");
         if (const char *rm = (rmEnv && *rmEnv) ? rmEnv : "chop_daz"; std::strcmp(rm, "aus") != 0)
         {
@@ -2893,15 +2893,20 @@ void PS2Runtime::run()
         gameThreadFinished.store(true, std::memory_order_release); });
 
     uint64_t tick = 0;
-    // Ohne OpenGL (VM ohne Grafiktreiber, Remotedesktop) scheitert InitWindow; dann gibt es kein Host-Fenster und
-    // WindowShouldClose() meldet sofort "schliessen". Das Spiel laeuft trotzdem (PCSX2-GS-Fenster bzw. VU1-Dekodierlauf
-    // beim Einrichten): Schleife nur noch takten statt zu zeichnen.
+    // Without OpenGL (VM without a graphics driver, remote desktop) InitWindow fails; then there is no host window and
+    // WindowShouldClose() reports "close" right away. The game still runs (PCSX2 GS window or the VU1 decode run
+    // during setup): only pace the loop instead of drawing.
     const bool ohneHostFenster = !IsWindowReady();
     if (ohneHostFenster)
-        std::fprintf(stderr, "[run] kein Host-Fenster (OpenGL nicht verfuegbar) - laufe ohne\n");
+        std::fprintf(stderr, "[run] no host window (OpenGL not available) - running without\n");
     while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
     {
-        if (ohneHostFenster)
+        // Without a host window, or with the PCSX2 GS drawing into its own window (our window is hidden): the old
+        // present loop only spun in raylib's frame wait (~12 % of a core in glfwGetTime). Sleep instead.
+        static const bool nurGsFenster = [] {
+            const char *show = std::getenv("PS2X_SHOW_HOST_WINDOW");
+            return ps2xGsBridgeActive() && !(show && *show == '1'); }();
+        if (ohneHostFenster || nurGsFenster)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             continue;

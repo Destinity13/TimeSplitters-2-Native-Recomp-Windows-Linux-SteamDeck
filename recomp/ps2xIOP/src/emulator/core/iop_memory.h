@@ -44,8 +44,8 @@ namespace ps2x::iop::detail
         [[nodiscard]] uint8_t read8(uint32_t address) const;
         [[nodiscard]] uint16_t read16(uint32_t address) const;
         void finishSpuDma(int core); // ps2x: echter SPU2 meldet DMA fertig -> CHCR-Startbit loeschen
-        // ps2x: SPU-DMA wird sofort als fertig gemeldet (Daten liegen schon im SPU2); die spaetere Fertig-Meldung des
-        // SPU2 fuer genau diese DMA wird dann verworfen
+        // ps2x: SPU DMA is reported done immediately (the data is already in the SPU2); the SPU2's later done message
+        // for exactly this DMA is then dropped
         bool consumeSpuDmaIgnore(int core) noexcept { if (m_spuDmaIgnore[core & 1] == 0u) return false; --m_spuDmaIgnore[core & 1]; return true; }
         uint32_t m_spuDmaIgnore[2] = {0u, 0u};
         [[nodiscard]] uint32_t read32(uint32_t address) const;

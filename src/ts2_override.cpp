@@ -1,7 +1,7 @@
-// TimeSplitters 2 (NTSC-U, SLUS-203.14) – Spiel-Override für PS2Recomp.
-// Abgeleitet aus sotc_override.cpp (Shadow of the Colossus): allgemeine Teile (ISO-Zugriff, Testgeschirr mit
-// Screenshots/Abbruch-Tick, Watchdog, Minutenprofil, RAM-Dumps) übernommen; alle SotC-Adressen entfernt.
-// Umgebungsvariablen heißen vorerst weiter SOTC_* (gleiche Testfarm/Werkzeuge); TS2_ISO geht zusätzlich.
+// TimeSplitters 2 (NTSC-U, SLUS-203.14) – game override for PS2Recomp.
+// Derived from sotc_override.cpp (Shadow of the Colossus): the general parts (ISO access, test harness with
+// screenshots/exit tick, watchdog, per-minute profile, RAM dumps) were kept; all SotC addresses were removed.
+// Environment variables are still called SOTC_* for now (same test farm/tools); TS2_ISO works as well.
 #if defined(__linux__)
 #include <unistd.h>
 #include <dlfcn.h>
@@ -16,6 +16,7 @@
 #include <dirent.h>
 #endif
 #include <cstring>
+#include <random>
 #include <cerrno>
 #include <ctime>
 #include <vector>
@@ -43,17 +44,28 @@
 #include "ps2_recompiled_functions.h"
 bool ps2xGsBridgeMenuOpen();   // gs_frontend.cpp
 namespace ts2_dtoa_test { void versuch(uint8_t *rdram, R5900Context *ctx, PS2Runtime *rt); }   // TS2_DTOA_TEST
-extern std::atomic<uint64_t> g_ps2xBildwechsel;   // gs_frontend.cpp: echte Bildwechsel
+extern std::atomic<uint64_t> g_ps2xBildwechsel;   // gs_frontend.cpp: real frame flips
 bool ps2xGsBridgePad(uint16_t &pressed, uint8_t axes[4]);   // gs_frontend.cpp
-int ps2xGsBridgeMouse(int &dx, int &dy);                     // gs_frontend.cpp (Mauszielen)
+int ps2xGsBridgeMouse(int &dx, int &dy);                     // gs_frontend.cpp (mouse aiming)
 int ps2xGsBridgeOption(int id, int fallback);               // gs_frontend.cpp
-void ps2xGsBridgeCaptureEnd();                              // gs_frontend.cpp: Videoaufnahme abschliessen
-extern std::atomic<unsigned> g_ps2xPadZusatz;               // gs_frontend.cpp: zusaetzliche PS2-Tasten Spieler 1
+void ps2xGsBridgeText(int id, const char *text);          // gs_frontend.cpp
+int ps2xGsBridgeTextGet(int id, char *buf, int len);      // gs_frontend.cpp
+// Online+ in-game server browser: chosen server (overrides online_server from the settings at the next network init)
+std::mutex g_opServerM; std::string g_opServerWahl;
+void ps2xGsBridgeCaptureEnd();                              // gs_frontend.cpp: finish the video recording
+// view offset the Online+ impact effects applied since the last mouse tick (the mouse keeps it instead of undoing it)
+static float g_ts2PunchDP = 0.f, g_ts2PunchDY = 0.f;
+extern std::atomic<unsigned> g_ps2xPadZusatz;
+extern std::atomic<unsigned> g_ps2xPadMaske;
+extern std::atomic<unsigned> g_ps2xPadRoh;
+extern std::atomic<unsigned> g_ps2xPadRStickAus;
+extern std::atomic<unsigned> g_ps2xPadAchsenRoh;
+extern std::atomic<long long> g_ps2xScopeMs;                // ps2_memory.cpp: sniper scope feedback last seen (ms)               // gs_frontend.cpp: additional PS2 buttons for player 1
 
 #include <chrono>
 #include <thread>
 #ifdef _WIN32
-extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int); // winmm, ohne windows.h (Makros near/far ...)
+extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int); // winmm, without windows.h (near/far macros ...)
 #endif
 
 #include <algorithm>
@@ -75,6 +87,184 @@ extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned
 void ps2xSetPadOverridePort2(uint16_t buttons, uint8_t lx, uint8_t ly, uint8_t rx, uint8_t ry);
 void ps2xSetPadOverridePlayer(int player, uint16_t buttons, uint8_t lx, uint8_t ly, uint8_t rx, uint8_t ry);
 bool ps2xMultitapActive();
+// Online+ hits/kills not yet reported to the online server (ts2netz sends them every 5 s)
+std::atomic<uint32_t> g_opTrefferOffen{0}, g_opKillsOffen{0};
+namespace ts2melde {
+    // Online+ texts shown through the game's OWN on-screen message system (same font, place and animation as
+    // "First kill: X!" / "Killed by X"): 0x32A9B0(screen a0, delay f12, type a1 1..6, text a2) - per screen a queue
+    // of 16 messages at 0x4D9D60 + screen * 0x1254. Called from the game thread (hook in applyTs2), never from VBlank.
+    std::mutex m; std::deque<std::pair<std::string, int>> q;
+    void push(const std::string &t, int typ) { std::lock_guard<std::mutex> lk(m); if (q.size() < 16) q.emplace_back(t, typ); }
+    bool pop(std::string &t, int &typ) { std::lock_guard<std::mutex> lk(m); if (q.empty()) return false; t = q.front().first; typ = q.front().second; q.pop_front(); return true; }
+}
+static int g_ts2Serie = 0;   // own kills since the last death (Online+ streak messages)
+namespace ts2impact {
+    // Online+ impact effects (bridge options: 15 = on/off, 16 = damage kick 0..100; events 13 = hit counter, 14 = kill counter).
+    // Characters (player and enemies) share one struct: health float at +0x19C, max at +0x1A0 (as the game's
+    // "infinite health" code shows). Player: *(*(0x59DC0C) + 0x1BC). Enemies are found by a periodic scan for the struct
+    // signature (zero words that props do not have, plausible health/max); a drop of their health is a hit, 0 a kill.
+    // TS2_IMPACT=1 switches it on without the menu (test runs).
+    constexpr uint32_t kSpielerZeiger = 0x0059DC0Cu;
+    inline float rf(const uint8_t *r, uint32_t a) { float v; std::memcpy(&v, r + (a & 0x1FFFFFCu), 4); return v; }
+    inline uint32_t ru(const uint8_t *r, uint32_t a) { uint32_t v; std::memcpy(&v, r + (a & 0x1FFFFFCu), 4); return v; }
+    inline void wf(uint8_t *r, uint32_t a, float v) { std::memcpy(r + (a & 0x1FFFFFCu), &v, 4); }
+    bool istFigur(const uint8_t *r, uint32_t b)
+    {
+        // zero in every character (player and enemies), not in props; 36 words keep random data out
+        static const uint32_t nullen[] = {0x28, 0x34, 0x38, 0x44, 0x48, 0x4C, 0x50, 0x54, 0x88, 0x90, 0x94, 0xB0, 0xB8, 0xC0, 0xC4,
+                                          0xDC, 0xE0, 0xE4, 0xEC, 0xFC, 0x104, 0x114, 0x120, 0x12C, 0x134, 0x13C, 0x140, 0x144, 0x148,
+                                          0x150, 0x154, 0x158, 0x15C, 0x160, 0x164, 0x168};
+        if (b < 0x100000u || b + 0x2A0u > 0x2000000u) return false;
+        const float h = rf(r, b + 0x19C), m = rf(r, b + 0x1A0);
+        if (!(m >= 2.0f && m <= 500.0f) || !(h >= -1.0f && h <= m + 0.01f)) return false;
+        for (uint32_t o : nullen) if (ru(r, b + o) != 0u) return false;
+        return true;
+    }
+    void tick(uint8_t *r, uint64_t t, bool feuer)
+    {
+        if (!r) return;
+        static uint64_t letzterSchuss = 0; if (feuer) letzterSchuss = t;
+        static const int envAn = [] { const char *e = std::getenv("TS2_IMPACT"); return (e && *e == '1') ? 1 : 0; }();
+        static int an = 0, stoss = 50; static uint64_t naechsteOpt = 0;
+        if (t >= naechsteOpt) { an = ::ps2xGsBridgeOption(15, envAn); stoss = ::ps2xGsBridgeOption(16, 50); naechsteOpt = t + 30; }
+        struct Fig { uint32_t b; float h, m; uint64_t seit; };   // last health, max, tick of the last change
+        static std::vector<Fig> figuren; static uint64_t naechsterScan = 0;
+        static int treffer = 0, kills = 0; static float spielerLetzt = -1.0f; static uint32_t spielerLetztAdr = 0;
+        static float kickPitch = 0.0f, kickYaw = 0.0f;
+        {
+            static const bool plog = std::getenv("TS2_IMPACT_LOG") != nullptr;
+            const uint32_t so = ru(r, kSpielerZeiger) & 0x1FFFFFFu;
+            if (plog && so && so < 0x1FFF000u && t % 60u == 0u) std::fprintf(stderr, "[impact] tick %llu pitch %.2f obj %08x\n", (unsigned long long)t, rf(r, so + 0x14C), so);
+        }
+        if (!an) { figuren.clear(); spielerLetzt = -1.0f; return; }
+        const uint32_t spObj = ru(r, kSpielerZeiger) & 0x1FFFFFFu;
+        const uint32_t sp = (spObj && spObj < 0x1FFF000u) ? (ru(r, spObj + 0x1BC) & 0x1FFFFFFu) : 0u;
+        // rescan twice a second (new enemies spawn); keep the last health of known ones
+        if (t >= naechsterScan)
+        {
+            naechsterScan = t + 30;
+            std::vector<Fig> neu;
+            for (uint32_t b = 0x500000u; b < 0x1C00000u && neu.size() < 256; b += 16u)
+                if (b != sp && istFigur(r, b))
+                {
+                    Fig n{b, rf(r, b + 0x19C), rf(r, b + 0x1A0), t};
+                    for (const auto &f : figuren) if (f.b == b) { n = f; break; }
+                    neu.push_back(n);
+                }
+            figuren.swap(neu);
+        }
+        // only in a level (player character valid); damage is a step: the value was stable before, max stays the same,
+        // the drop is at least 2 % of max
+        // ... and only shortly after the player fired (other damage - enemies among themselves, scenery - gives no marker)
+        const bool imLevel = sp && istFigur(r, sp) && letzterSchuss && t - letzterSchuss <= 60;
+        bool hatTreffer = false, hatKill = false;
+        for (auto &f : figuren)
+        {
+            if (!istFigur(r, f.b)) { f.h = -2.0f; f.seit = t; continue; }
+            const float h = rf(r, f.b + 0x19C), m = rf(r, f.b + 0x1A0);
+            if (m != f.m) { f.m = m; f.h = h; f.seit = t; continue; }
+            if (h != f.h)
+            {
+                if (imLevel && f.h > 0.0f && h < f.h && f.h - h >= 0.02f * m && t - f.seit >= 3) { hatTreffer = true; if (h <= 0.0f) hatKill = true; }
+                f.h = h; f.seit = t;
+            }
+        }
+        if (hatTreffer) { ::ps2xGsBridgeOption(13, ++treffer); ++g_opTrefferOffen; }
+        if (hatKill)
+        {
+            ::ps2xGsBridgeOption(14, ++kills); ++g_opKillsOffen;
+            // multi-kill (kills within 4 s) and streak (kills without dying) -> the game's own big on-screen messages
+            static uint64_t letzterKill = 0; static int kette = 0;
+            kette = (letzterKill && t - letzterKill <= 240) ? kette + 1 : 1; letzterKill = t; ++g_ts2Serie;
+            static const char *kKette[] = {"", "", "DOUBLE KILL", "TRIPLE KILL", "MULTI KILL", "MEGA KILL", "MONSTER KILL"};
+            static const char *kSerie[] = {"KILLING SPREE", "RAMPAGE", "UNSTOPPABLE", "GODLIKE"};
+            if (::ps2xGsBridgeOption(23, 1))
+            {
+                if (g_ts2Serie >= 5 && g_ts2Serie % 5 == 0) ts2melde::push(kSerie[std::min(g_ts2Serie / 5 - 1, 3)], 3);
+                else if (kette >= 2) ts2melde::push(kKette[std::min(kette, 6)], 4);
+            }
+        }
+        static const bool log = std::getenv("TS2_IMPACT_LOG") != nullptr;
+        if (log && (hatTreffer || hatKill)) std::fprintf(stderr, "[impact] tick %llu hit %d kill %d (figures %zu)\n", (unsigned long long)t, treffer, kills, figuren.size());
+        if (log && t % 600u == 0u) std::fprintf(stderr, "[impact] tick %llu figures %zu player %08x\n", (unsigned long long)t, figuren.size(), sp);
+        // Arcade punch (Online+): camera offsets that spring back, so the aim is not moved for good.
+        // Damage taken -> kick up + sideways (option 16), own shots -> small recoil punch (option 21, not while zoomed).
+        // Damage / death are reported to the bridge (19 = damage strength 1..100, 20 = death counter) for the red edge
+        // flash and the kill streaks.
+        static float punchP = 0.0f, punchY = 0.0f, angewP = 0.0f, angewY = 0.0f;
+        static int rueckstoss = 40, tode = 0; static uint64_t naechsteOpt2 = 0, letzterPunch = 0; static bool feuerVor = false;
+        static const int envRs = [] { const char *e = std::getenv("TS2_RUECKSTOSS"); return e ? std::atoi(e) : -1; }();
+        if (t >= naechsteOpt2) { rueckstoss = envRs >= 0 ? envRs : ::ps2xGsBridgeOption(21, 40); naechsteOpt2 = t + 30; }
+
+        const bool spielerOk = sp && istFigur(r, sp);
+        if (spielerOk)
+        {
+            const float h = rf(r, sp + 0x19C), m = rf(r, sp + 0x1A0);
+            if (sp == spielerLetztAdr && spielerLetzt > 0.0f && h < spielerLetzt - 0.001f)
+            {
+                const float anteil = std::min(1.0f, (spielerLetzt - h) / std::max(1.0f, m * 0.15f));
+                if (stoss > 0)
+                {
+                    const float staerke = (0.8f + 2.6f * anteil) * (static_cast<float>(stoss) / 50.0f);   // degrees
+                    punchP += staerke; punchY += ((t * 2654435761u) & 1u ? 1.0f : -1.0f) * staerke * 0.6f;
+                }
+                ::ps2xGsBridgeOption(19, 1 + static_cast<int>(anteil * 99.0f));
+                if (h <= 0.0f) { ::ps2xGsBridgeOption(20, ++tode); g_ts2Serie = 0; }
+            }
+            spielerLetzt = h; spielerLetztAdr = sp;
+            if (rueckstoss > 0 && feuer && (!feuerVor || t - letzterPunch >= 7) && ::ps2xGsBridgeOption(10, 0) == 0)
+            {
+                punchP += 0.55f * static_cast<float>(rueckstoss) / 40.0f; letzterPunch = t;
+            }
+        }
+        feuerVor = feuer;
+        // target offset = punch (decays fast); the difference to what is already applied goes into the view angles
+        punchP *= 0.72f; punchY *= 0.72f;
+        if (std::fabs(punchP) < 0.005f) punchP = 0.0f;
+        if (std::fabs(punchY) < 0.005f) punchY = 0.0f;
+        // the applied offset belongs to one player object: a new object (respawn, level) starts from zero. A short
+        // signature miss during a hit must NOT reset it (that left the offset in the view for good -> view sank down)
+        static uint32_t punchObj = 0;
+        if (spObj != punchObj) { punchObj = spObj; angewP = angewY = punchP = punchY = 0.0f; }
+        if (spObj && (punchP != angewP || punchY != angewY))
+        {
+            const float yaw = rf(r, spObj + 0x148), pitch = rf(r, spObj + 0x14C);
+            if (std::isfinite(yaw) && std::isfinite(pitch))
+            {
+                wf(r, spObj + 0x14C, pitch + (punchP - angewP)); wf(r, spObj + 0x148, yaw + (punchY - angewY));   // positive pitch = looking up
+                g_ts2PunchDP += punchP - angewP; g_ts2PunchDY += punchY - angewY;
+                angewP = punchP; angewY = punchY;
+            }
+        }
+        (void)kickPitch; (void)kickYaw;
+    }
+}
+namespace {
+    // TS2_PROBE="59D6B4,4D47A0,..;file": writes the 32-bit values at these addresses (hex) every VSync, like the PINE probe of the PCSX2 reference run
+    void ts2Probe(const uint8_t *rdram, uint64_t tickNow)
+    {
+        // TS2_SPIELERDUMP=file (research for Online+): every 10 VBlanks the player object (pointer 0x59DC0C, 0x1000 bytes)
+        // as binary records: u64 tick, u32 pointer, then the bytes (pointer 0 -> zeros)
+        {
+            static std::FILE *df = [] { const char *e = std::getenv("TS2_SPIELERDUMP"); return (e && *e) ? std::fopen(e, "wb") : nullptr; }();
+            if (df && tickNow % 10u == 0u)
+            {
+                uint32_t ptr = 0; std::memcpy(&ptr, rdram + 0x59DC0Cu, 4); ptr &= 0x1FFFFFFu;
+                static uint8_t buf[0x1000]; std::memset(buf, 0, sizeof(buf));
+                if (ptr && ptr + sizeof(buf) <= 0x2000000u) std::memcpy(buf, rdram + ptr, sizeof(buf));
+                const uint64_t t = tickNow; std::fwrite(&t, 8, 1, df); std::fwrite(&ptr, 4, 1, df); std::fwrite(buf, 1, sizeof(buf), df); std::fflush(df);
+            }
+        }
+        static std::vector<uint32_t> adr; static std::FILE *pf = nullptr; static bool init = false;
+        if (!init) { init = true; if (const char *e = std::getenv("TS2_PROBE")) { std::string q(e); const size_t sc = q.find(';');
+            if (sc != std::string::npos) { pf = std::fopen(q.c_str() + sc + 1, "w"); size_t p = 0;
+                while (p < sc) { adr.push_back(static_cast<uint32_t>(std::strtoul(q.c_str() + p, nullptr, 16)) & 0x1FFFFFCu); p = q.find(',', p); if (p == std::string::npos || p > sc) break; ++p; } } } }
+        if (!pf) return;
+        std::fprintf(pf, "%llu", (unsigned long long)tickNow);
+        for (uint32_t a2 : adr) { uint32_t v = 0; std::memcpy(&v, rdram + a2, 4); std::fprintf(pf, " %08X", v); }
+        std::fputc('\n', pf); std::fflush(pf);
+    }
+}
 namespace { void sotcRamDumpCheck(const uint8_t *r, uint64_t vs); void sotcRamDump(const uint8_t *r, uint64_t vs, const char *tag); }
 
 namespace {
@@ -104,13 +294,13 @@ extern std::map<uint32_t, uint64_t> g_ps2xVu1ProgCount;
 extern std::mutex g_ps2xCallHistMutex;
 extern std::unordered_map<uint32_t, uint64_t> g_ps2xCallHist;
 
-// VU0-Zufallsregister R: auf der PS2 genau ein Hardware-Register, nicht pro Thread gesichert (PCSX2: VU0.VI[REG_R]).
-// Die generierten VRNEXT/VRINIT/VRXOR-Stellen (patch_026) lesen/schreiben dieses globale Register.
+// VU0 random register R: exactly one hardware register on the PS2, not saved per thread (PCSX2: VU0.VI[REG_R]).
+// The generated VRNEXT/VRINIT/VRXOR sites (patch_026) read/write this global register.
 uint32_t g_ps2xVu0R = 0x3F800000u;
 
-// SOTC_PROFILE=<us>: eingebauter Stichproben-Profiler (SIGPROF über CPU-Zeit aller Threads). Speichert die unterbrochene
-// Befehlsadresse (RIP) als Versatz zur Ladeadresse + Thread-ID. Beim Laufende -> $SOTC_DEBUG_DIR/profil_roh.txt,
-// Auflösung offline mit nm (tools/profil_aufloesen.py). Ersatz für perf, das auf dem PC nicht installiert ist.
+// SOTC_PROFILE=<us>: built-in sampling profiler (SIGPROF on the CPU time of all threads). Stores the interrupted
+// instruction address (RIP) as an offset from the load address + thread ID. At exit -> $SOTC_DEBUG_DIR/profil_roh.txt,
+// resolved offline with nm (tools/profil_aufloesen.py). Replaces perf, which is not installed on the PC.
 #if defined(__linux__)
 #include <ucontext.h>
 #include <sys/time.h>
@@ -120,9 +310,10 @@ uint32_t g_ps2xVu0R = 0x3F800000u;
 // GS bridge hooks (lib/gs/gs_frontend.cpp)
 void ps2xGsBridgeRumble(int smallOn, int large);
 int ps2xGsBridgeWideMode();
+int ps2xGsBridgeAspectMilli();
 void ps2xGsBridgeGameWide(int wide);
 #ifdef SOTC_PGO_GEN
-extern "C" void __gcov_dump(void); // nur im PGO-Messbuild (libgcov)
+extern "C" void __gcov_dump(void); // only in the PGO measuring build (libgcov)
 #endif
 #if defined(__linux__)
 namespace sotc_prof
@@ -148,13 +339,13 @@ namespace sotc_prof
         struct sigaction sa{}; sa.sa_sigaction = handler; sa.sa_flags = SA_SIGINFO | SA_RESTART; sigemptyset(&sa.sa_mask);
         sigaction(SIGPROF, &sa, nullptr);
         itimerval tv{}; tv.it_interval.tv_usec = us; tv.it_value.tv_usec = us; setitimer(ITIMER_PROF, &tv, nullptr);
-        g_on = true; std::fprintf(stderr, "[SotC profil] an, alle %ld us CPU-Zeit, Basis 0x%lx\n", us, (unsigned long)g_base);
-        // SOTC_PROFILE_MINUTEN=1 (Spielbetrieb): jede Minute ein kumulativer Zwischenstand profil_mNNN.txt; die Differenz
-        // zweier Staende ist das Profil dieser Minute (tools/profil_aufloesen.py auf die Differenz anwenden)
+        g_on = true; std::fprintf(stderr, "[profile] on, every %ld us CPU time, base 0x%lx\n", us, (unsigned long)g_base);
+        // SOTC_PROFILE_MINUTEN=1 (while playing): a cumulative snapshot profil_mNNN.txt every minute; the difference
+        // between two snapshots is that minute's profile (run tools/profil_aufloesen.py on the difference)
         if (const char *m = std::getenv("SOTC_PROFILE_MINUTEN"); m && *m == '1')
             std::thread([] { for (unsigned k = 1;; ++k) { std::this_thread::sleep_for(std::chrono::seconds(60)); char nm[32]; std::snprintf(nm, sizeof(nm), "profil_m%03u.txt", k); dump(false, nm); } }).detach();
     }
-    // stop=false: Zwischenstand (Profiler laeuft weiter), name = Dateiname im Ausgabeordner
+    // stop=false: snapshot (profiler keeps running), name = file name in the output directory
     inline void dump(bool stop = true, const char *name = "profil_roh.txt");
     inline void dump(bool stop, const char *name)
     {
@@ -165,8 +356,8 @@ namespace sotc_prof
         std::string path = std::string(dd ? dd : ".") + "/" + name;
         if (FILE *f = std::fopen(path.c_str(), "w"))
         {
-            std::fprintf(f, "# basis 0x%lx proben %zu\n", (unsigned long)g_base, n);
-            // Ausfuehrbare Abbildungen (Bibliotheken), damit Proben ausserhalb der Binary zugeordnet werden koennen
+            std::fprintf(f, "# base 0x%lx samples %zu\n", (unsigned long)g_base, n);
+            // Executable mappings (libraries), so that samples outside the binary can be attributed
             if (FILE *m = std::fopen("/proc/self/maps", "r"))
             {
                 char line[1024];
@@ -182,14 +373,14 @@ namespace sotc_prof
             for (size_t i = 0; i < n; ++i) ++h[((g_rip[i] - g_base) << 20) ^ (g_tid[i] & 0xFFFFFu)];
             for (const auto &[k, c] : h) std::fprintf(f, "%lx %u %u\n", (unsigned long)(k >> 20), (unsigned)(k & 0xFFFFFu), c);
             std::fclose(f);
-            std::fprintf(stderr, "[SotC profil] %zu Proben -> %s\n", n, path.c_str());
+            std::fprintf(stderr, "[profile] %zu samples -> %s\n", n, path.c_str());
         }
     }
 }
 #else
-namespace sotc_prof { inline void start() {} inline void dump(bool = true, const char * = nullptr) {} } // Windows: kein SIGPROF
+namespace sotc_prof { inline void start() {} inline void dump(bool = true, const char * = nullptr) {} } // Windows: no SIGPROF
 #endif
-bool ps2xGsBridgeScreenshot(const char *path);   // gs_frontend.cpp (PCSX2-GS-Brücke)
+bool ps2xGsBridgeScreenshot(const char *path);   // gs_frontend.cpp (PCSX2 GS bridge)
 namespace sotc_vif_trace { void dump(); }
 
 namespace
@@ -290,7 +481,7 @@ namespace
 
     // Use the original disc image for sector reads: $SOTC_ISO, else the first *.iso next to the
     // boot ELF or one directory above it.
-    // Dateizugriff auf das Disc-Abbild (bis 4,7 GB): unter Windows ist long 32 Bit -> 64-Bit-Seek und Unicode-Pfad
+    // File access to the disc image (up to 4.7 GB): on Windows long is 32 bits -> 64-bit seek and Unicode path
     std::FILE *ts2Oeffnen(const std::filesystem::path &p)
     {
 #ifdef _WIN32
@@ -639,7 +830,7 @@ namespace
     }
 
 #else
-    void startWriteProtect(PS2Runtime &) {} // Windows: kein mprotect/SIGSEGV
+    void startWriteProtect(PS2Runtime &) {} // Windows: no mprotect/SIGSEGV
 #endif // __linux__ (WPROT)
 
     // ---- Test harness ----
@@ -649,15 +840,15 @@ namespace
     std::atomic<uint32_t> g_abortCount{0}, g_assertCount{0};
     void dumpFramePpm(PS2Runtime *rt, const std::string &path, unsigned fbp, unsigned fbw, unsigned psm, unsigned w, unsigned h)
     {
-        // PCSX2-GS-Brücke aktiv: Bild so speichern, wie PCSX2 es ausgibt (PNG neben der .ppm-Endung)
+        // PCSX2 GS bridge active: save the picture the way PCSX2 outputs it (PNG next to the .ppm name)
         if (ps2xGsBridgeScreenshot((path.substr(0, path.size() - 4) + ".png").c_str()))
             return;
         if (FILE *f = std::fopen(path.c_str(), "wb"))
         {
             std::fprintf(f, "P6\n%u %u\n255\n", w, h);
             std::vector<unsigned char> row(w * 3u);
-            // Konsistentes Abbild: ganzes VRAM auf einmal kopieren (wartet bei MTGS auf den Rasterizer), dann aus der
-            // Kopie lesen. Pixelweises ReadVram würde bei MTGS ein halb neu gezeichnetes Bild erwischen.
+            // Consistent image: copy the whole VRAM at once (waits for the rasterizer with MTGS), then read from the
+            // copy. Reading VRAM pixel by pixel would catch a half-redrawn frame with MTGS.
             rt->gs().refreshDisplaySnapshot();
             uint32_t snapSize = 0;
             uint8_t *snap = const_cast<uint8_t *>(rt->gs().lockDisplaySnapshot(snapSize));
@@ -690,11 +881,11 @@ namespace
     uint64_t g_texTraceBytes = 0;
     std::map<uint32_t, uint64_t> g_texTraceByRa;
     uint64_t g_skipDrawUntil = 0;
-    void (*g_subThreadReport)(uint64_t) = nullptr; // SOTC_TRACE_SUBTHREAD: Bericht pro 500 Bilder
-    void (*g_oomReportNow)(uint64_t) = nullptr;    // SOTC_TRACE_OOM: Bericht beim Absturz
-    // Eigener Partitions-Durchlauf nach dem Vorbild von iosDebugPartitionDump (0x1AB358 -> 0x1AA720), nur lesend:
-    // Partition: +0x08 erster Block (Wörter). Block-Kopf 0x20 Bytes: +0x00 Größe (Wörter), +0x08 nächster Block,
-    // +0x0C Bit24 belegt / Bit25 Unterpartition (Kopf bei Block+0x24), +0x18 Aufrufer-PC (Wörter).
+    void (*g_subThreadReport)(uint64_t) = nullptr; // SOTC_TRACE_SUBTHREAD: report every 500 frames
+    void (*g_oomReportNow)(uint64_t) = nullptr;    // SOTC_TRACE_OOM: report on a crash
+    // Own walk through the partitions, modelled on iosDebugPartitionDump (0x1AB358 -> 0x1AA720), read-only:
+    // Partition: +0x08 first block (words). Block header 0x20 bytes: +0x00 size (words), +0x08 next block,
+    // +0x0C bit 24 used / bit 25 sub-partition (header at block+0x24), +0x18 caller PC (words).
     void sotcDumpPartition(const uint8_t *r, uint32_t part, int depth, const char *why)
     {
         if (depth > 6 || part >= 0x2000000u) return;
@@ -729,18 +920,18 @@ namespace
         std::fprintf(stderr, "\n");
         for (uint32_t sp : subs)
         {
-            // nur Unterpartitionen ab 256 KB einzeln ausgeben
+            // print sub-partitions individually only from 256 KB up
             const uint32_t blk = sp - 0x24u;
             if (((Ps2FastRead32(r, blk) & 0xFFFFFFu) << 2) >= 0x40000u) sotcDumpPartition(r, sp, depth + 1, why);
         }
     }
-    // SOTC_COUNT_FUNCS=addr,addr,... : Aufrufe beliebiger Gastfunktionen zählen (Laden vs. Entladen).
+    // SOTC_COUNT_FUNCS=addr,addr,... : count calls of arbitrary guest functions (load vs. unload).
     constexpr int kCountSlots = 32;
     PS2Runtime::RecompiledFunction g_countOrig[kCountSlots] = {};
     uint32_t g_countAddr[kCountSlots] = {};
     std::atomic<uint64_t> g_countHits[kCountSlots] = {};
     int g_countN = 0;
-    // SOTC_CALLERS=1 zusätzlich: je gezählter Funktion ein Histogramm der Rücksprungadressen ($ra) -> wer ruft wie oft?
+    // SOTC_CALLERS=1 in addition: a histogram of return addresses ($ra) per counted function -> who calls how often?
     bool g_countCallers = false;
     std::mutex g_callerMutex;
     std::unordered_map<uint32_t, uint64_t> g_callerHist[kCountSlots];
@@ -787,7 +978,7 @@ namespace
         }
         if (g_skipDrawUntil != 0u)
         {
-            // Auch im Vorlauf vor jedem Screenshot ein Zeichenfenster öffnen (sonst sind alle Vorlauf-Bilder schwarz).
+            // Also open a draw window during the lead-in before each screenshot (otherwise all lead-in frames are black).
             const uint64_t win = g_drawWindow ? g_drawWindow : 20u;
             const bool nearShot = g_shotNext < g_shotTicks.size() && tick + win >= g_shotTicks[g_shotNext];
             const bool skip = tick < g_skipDrawUntil && !nearShot;
@@ -801,7 +992,7 @@ namespace
             if (tick >= g_skipDrawUntil)
                 g_skipDrawUntil = 0;
         }
-        // SOTC_DRAW_WINDOW=N: nach dem Vorlauf nur in den N Bildern vor jedem Screenshot zeichnen.
+        // SOTC_DRAW_WINDOW=N: after the lead-in, draw only in the N frames before each screenshot.
         else if (g_drawWindow != 0u)
         {
             const bool near = g_shotNext < g_shotTicks.size() && tick + g_drawWindow >= g_shotTicks[g_shotNext];
@@ -929,7 +1120,7 @@ namespace
                     std::fflush(stderr);
                     std::fflush(stdout);
                     #ifdef SOTC_PGO_GEN
-                    __gcov_dump(); // PGO-Lauf: Profil schreiben
+                    __gcov_dump(); // PGO run: write the profile
 #endif
                     std::_Exit(0);
                 }
@@ -939,10 +1130,10 @@ namespace
     }
 
 #if defined(__linux__)
-    // Haenger-Bericht (immer aktiv, ohne gdb, auch auf dem Steam Deck): wechselt der angezeigte Bildpuffer (DISPFB) laenger
-    // nicht (8 s, Ladepausen sind kuerzer), obwohl VBlanks weiterlaufen und das Port-Menue zu ist, werden einmal die EE-Threads (Status/Warten/PC),
-    // Semaphoren und die Host-Stapel aller Threads (aufgeloest ueber die Symboltabelle des Programms) ins Protokoll
-    // geschrieben. Danach erst wieder nach dem naechsten Bildwechsel. TS2_HAENGERBERICHT=0 schaltet ihn ab.
+    // Hang report (always on, without gdb, also on the Steam Deck): if the displayed frame buffer (DISPFB) does not change
+    // for a while (8 s, loading pauses are shorter) although VBlanks keep coming and the port menu is closed, the EE threads (status/wait/PC),
+    // semaphores and the host stacks of all threads (resolved through the program's symbol table) are written to the log
+    // once. After that only again after the next frame flip. TS2_HAENGERBERICHT=0 turns it off.
     namespace haenger
     {
         constexpr int kMaxTiefe = 40;
@@ -968,7 +1159,7 @@ namespace
             while ((k = std::fread(buf, 1, sizeof(buf), f)) > 0) d.insert(d.end(), buf, buf + k);
             std::fclose(f);
             if (d.size() < 64 || std::memcmp(d.data(), "\x7f" "ELF", 4) != 0 || d[4] != 2) return;
-            // ET_EXEC (Zig-Paket): Symbolwerte sind absolute Adressen; ET_DYN (PIE): relativ zur Ladeadresse
+            // ET_EXEC (Zig package): symbol values are absolute addresses; ET_DYN (PIE): relative to the load address
             g_symBasis = (d[0x10] == 2) ? 0u : g_basis;
             auto u16 = [&](size_t o) { uint16_t v; std::memcpy(&v, d.data() + o, 2); return v; };
             auto u32 = [&](size_t o) { uint32_t v; std::memcpy(&v, d.data() + o, 4); return v; };
@@ -1006,7 +1197,7 @@ namespace
         }
         void bericht(PS2Runtime *rt, uint64_t seitTick)
         {
-            std::fprintf(stderr, "===== TS2 HAENGER-BERICHT: kein neues Bild seit VBlank %llu (jetzt %llu) =====\n",
+            std::fprintf(stderr, "===== TS2 HANG REPORT: no new frame since VBlank %llu (now %llu) =====\n",
                          (unsigned long long)seitTick, (unsigned long long)rt->memory().gs().vsyncTick.load());
             const EeKernelSnapshot snap = rt->eeScheduler().snapshot();
             std::fprintf(stderr, "EE: running=%d cycle=%llu\n", snap.runningThreadId, (unsigned long long)snap.eeCycle);
@@ -1016,7 +1207,7 @@ namespace
             for (const auto &se : snap.semaphores)
                 if (se.waiters) std::fprintf(stderr, "  Sema %d count=%d/%d wartende=%u\n", se.id, se.count, se.maxCount, se.waiters);
             if (g_syms.empty()) ladeSymbole();
-            std::fprintf(stderr, "Symbole: %zu (Programm-Basis %p)\n", g_syms.size(), reinterpret_cast<void *>(g_basis));
+            std::fprintf(stderr, "symbols: %zu (program base %p)\n", g_syms.size(), reinterpret_cast<void *>(g_basis));
             std::vector<int> tids;
             if (DIR *dir = opendir("/proc/self/task")) { while (dirent *e = readdir(dir)) if (e->d_name[0] != '.') tids.push_back(std::atoi(e->d_name)); closedir(dir); }
             const int self = int(syscall(SYS_gettid));
@@ -1030,23 +1221,23 @@ namespace
                 if (syscall(SYS_tgkill, getpid(), tid, SIGRTMIN + 3) != 0) continue;
                 for (int w = 0; w < 60 && !z.fertig.load(); ++w) std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 g_slot.store(-1);
-                std::fprintf(stderr, "-- Host-Thread %d (%s)%s\n", tid, name, z.fertig.load() ? "" : " (keine Antwort)");
+                std::fprintf(stderr, "-- Host-Thread %d (%s)%s\n", tid, name, z.fertig.load() ? "" : " (no answer)");
                 for (int i = 2; i < z.n; ++i) std::fprintf(stderr, "     #%d %s\n", i - 2, aufloesen(z.adr[i]).c_str());
                 ++slot;
             }
-            std::fprintf(stderr, "===== Ende Haenger-Bericht (Spiel laeuft weiter) =====\n");
+            std::fprintf(stderr, "===== end of hang report (game keeps running) =====\n");
             std::fflush(stderr);
         }
         void start(PS2Runtime &runtime)
         {
             if (const char *e = std::getenv("TS2_HAENGERBERICHT"); e && *e == '0') return;
-            { void *tmp[4]; backtrace(tmp, 4); }   // libgcc vorladen (backtrace im Signal-Handler)
+            { void *tmp[4]; backtrace(tmp, 4); }   // preload libgcc (backtrace inside the signal handler)
             struct sigaction sa{}; sa.sa_handler = sigHandler; sa.sa_flags = SA_RESTART; sigemptyset(&sa.sa_mask);
             sigaction(SIGRTMIN + 3, &sa, nullptr);
             PS2Runtime *rt = &runtime;
             std::thread([rt]() {
                 uint64_t letzterFb = ~0ull, seitTick = 0; auto seit = std::chrono::steady_clock::now(); bool gemeldet = false;
-                // TS2_HAENGER_TEST=<VBlank>: Bericht einmal erzwingen (Test des Berichts selbst)
+                // TS2_HAENGER_TEST=<VBlank>: force the report once (tests the report itself)
                 uint64_t testTick = 0; if (const char *e = std::getenv("TS2_HAENGER_TEST")) testTick = std::strtoull(e, nullptr, 10);
                 for (;;)
                 {
@@ -1389,20 +1580,20 @@ namespace
             leave(ctx);
             return;
         }
-        // Eingabe-Aufnahme/-Wiedergabe je VSync (Fehler beim echten Spielen im Testlauf exakt nachstellen)
+        // Input recording/playback per VSync (reproduce a bug from real play exactly in a test run)
         {
             const uint64_t tickNow = runtime->memory().gs().vsyncTick.load();
-            if (std::getenv("SOTC_RAMDUMP")) sotcRamDumpCheck(rdram, tickNow); // Speicherabbilder an festen Spielpunkten
-            // Spielzaehler (iosGetISchedulerExecCnt, 0x1DC9EC): gemeinsamer Zeitmassstab mit PCSX2 (per PINE lesbar)
+            if (std::getenv("SOTC_RAMDUMP")) sotcRamDumpCheck(rdram, tickNow); // Memory dumps at fixed points in the game
+            // Game counter (iosGetISchedulerExecCnt, 0x1DC9EC): common time base with PCSX2 (readable through PINE)
             uint32_t gameCnt = 0; std::memcpy(&gameCnt, rdram + 0x1DC9ECu, 4);
             {
-                static const char *mapPath = std::getenv("SOTC_TICKMAP"); // "vsyncTick spielzaehler" je Pad-Abfrage
+                static const char *mapPath = std::getenv("SOTC_TICKMAP"); // "vsyncTick gamecounter" per pad query
                 static std::FILE *mf = (mapPath && *mapPath) ? std::fopen(mapPath, "w") : nullptr;
                 static uint64_t lastT = ~0ull;
                 if (mf && tickNow != lastT)
                 {
                     lastT = tickNow;
-                    // Spielerobjekt wie GAMEUTIL_get_player_obj / isysGroupForFirst(0x1477360) + Position (Diagnose/Abgleich)
+                    // Player object like GAMEUTIL_get_player_obj / isysGroupForFirst(0x1477360) + position (diagnosis/comparison)
                     auto r32 = [&](uint32_t a) { uint32_t v = 0; std::memcpy(&v, rdram + (a & 0x1FFFFFCu), 4); return v; };
                     auto r16 = [&](uint32_t a) { uint16_t v = 0; std::memcpy(&v, rdram + (a & 0x1FFFFFEu), 2); return v; };
                     uint32_t player = 0;
@@ -1420,7 +1611,7 @@ namespace
                 }
             }
             {
-                // SOTC_RAMDUMP_GC="1000,2000": Speicherabbild, sobald der Spielzaehler den Wert erreicht (Vergleich mit PCSX2-Savestates)
+                // SOTC_RAMDUMP_GC="1000,2000": memory dump as soon as the game counter reaches the value (comparison with PCSX2 savestates)
                 static std::vector<uint32_t> todo = [] { std::vector<uint32_t> v; if (const char *e = std::getenv("SOTC_RAMDUMP_GC"))
                     { std::string q(e); size_t p = 0; while (p < q.size()) { v.push_back(static_cast<uint32_t>(std::strtoul(q.c_str() + p, nullptr, 10)));
                       p = q.find(',', p); if (p == std::string::npos) break; ++p; } std::sort(v.rbegin(), v.rend()); } return v; }();
@@ -1442,7 +1633,7 @@ namespace
                             rep.push_back({t, {uint8_t(v[0]), uint8_t(v[1]), uint8_t(v[2]), uint8_t(v[3]), uint8_t(v[4]), uint8_t(v[5])}});
                         std::fclose(f);
                     }
-                    std::fprintf(stderr, "[Eingabe] Wiedergabe: %zu Eintraege aus %s\n", rep.size(), repPath);
+                    std::fprintf(stderr, "[input] playback: %zu entries from %s\n", rep.size(), repPath);
                 }
                 std::array<uint8_t, 6> cur = {0xFF, 0xFF, 0x80, 0x80, 0x80, 0x80};
                 for (const auto &e : rep) { if (e.first > tickNow) break; cur = e.second; }
@@ -1466,7 +1657,7 @@ namespace
         // SOTC_INPUT="tick:key,tick:key,..." scripted presses (held 8 vsyncs), keys: x o s t start select up down left right
         if (const char *script = std::getenv("SOTC_INPUT"); script && *script)
         {
-            // Testlauf: nur die Skript-Eingaben, kein echtes Gamepad/Tastatur dazwischen
+            // Test run: only the scripted input, no real gamepad/keyboard in between
             raw[2] = raw[3] = 0xFF;
             raw[4] = raw[5] = raw[6] = raw[7] = 0x80;
             static std::vector<std::pair<uint64_t, std::string>> events;
@@ -1555,9 +1746,9 @@ namespace
                 if (ts2Seek(f, static_cast<uint64_t>(lbn) * 2048u) &&
                     std::fread(tmp.data(), 1, tmp.size(), f) == tmp.size())
                 {
-                    // Der IOP laeuft im ps2xIOP-Emulator mit eigenem RAM: dorthin schreiben (sonst bleiben die
-                    // Musik-Streampuffer leer = Stille). Altes Runtime-IOP-RAM zusaetzlich fuer Altpfade.
-                    static const bool oldPath = std::getenv("PS2X_CDREAD_OLD") != nullptr; // Diagnose: Musik-Fix aus
+                    // The IOP runs in the ps2xIOP emulator with its own RAM: write there (otherwise the
+                    // music stream buffers stay empty = silence). The old runtime IOP RAM as well, for legacy paths.
+                    static const bool oldPath = std::getenv("PS2X_CDREAD_OLD") != nullptr; // Diagnosis: music fix off
                     if (!oldPath && runtime->isIopMemoryRange(iopBuf & kIopMask, static_cast<uint32_t>(tmp.size())))
                         runtime->writeIopMemory(iopBuf & kIopMask, tmp.data(), tmp.size());
                     for (size_t i = 0; i < tmp.size(); ++i)
@@ -1782,12 +1973,12 @@ namespace
 
 namespace
 {
-    // SOTC_RAMDUMP="5000,7000,8500": schreibt bei Erreichen jedes vsync-Werts das 32-MB-EE-RAM nach
-    // $SOTC_RAMDUMP_DIR/sotc_ram_<vsync>.bin (gleicher Auswerter wie für PCSX2-Savestates). Zusätzlich beim Abbruch.
+    // SOTC_RAMDUMP="5000,7000,8500": writes the 32 MB EE RAM when each vsync value is reached to
+    // $SOTC_RAMDUMP_DIR/sotc_ram_<vsync>.bin (same evaluator as for PCSX2 savestates). Also on abort.
     void sotcRamDump(const uint8_t *r, uint64_t vs, const char *tag)
     {
         const char *dir = std::getenv("SOTC_RAMDUMP_DIR");
-        if (!dir) dir = std::getenv("SOTC_DEBUG_DIR");   // Testfarm: Ergebnisordner des Laufs
+        if (!dir) dir = std::getenv("SOTC_DEBUG_DIR");   // Test farm: result directory of the run
         char path[512];
         std::snprintf(path, sizeof(path), "%s/sotc_ram_%s%05llu.bin", dir ? dir : ".", tag, (unsigned long long)vs);
         if (FILE *f = std::fopen(path, "wb")) { std::fwrite(r, 1, 32u * 1024u * 1024u, f); std::fclose(f);
@@ -1804,7 +1995,7 @@ namespace
     }
 }
 
-// ---- ISO9660: echte LSNs direkt aus dem Disc-Image (allgemein, ersetzt SotCs feste Dateitabelle) ----
+// ---- ISO9660: real LSNs straight from the disc image (general, replaces SotC's fixed file table) ----
 namespace ts2_iso
 {
     std::mutex g_m;
@@ -1818,7 +2009,7 @@ namespace ts2_iso
         if (!g_f)
         {
             static bool gemeldet = false;
-            if (!gemeldet) std::fprintf(stderr, "[TS2] FEHLER: Disc-Abbild nicht lesbar (verschoben oder umbenannt?): %s\n", p.string().c_str());
+            if (!gemeldet) std::fprintf(stderr, "[TS2] ERROR: disc image not readable (moved or renamed?): %s\n", p.string().c_str());
             gemeldet = true;
         }
         return g_f != nullptr;
@@ -1827,7 +2018,7 @@ namespace ts2_iso
     {
         return ts2Seek(g_f, static_cast<uint64_t>(lsn) * 2048u) && std::fread(buf, 1, 2048, g_f) == 2048;
     }
-    // Pfad wie "\PAK\CHR.PAK;1" oder "cdrom0:\MUSIC\LEVEL1\3.VAG;1" -> lsn/size; Groß-/Kleinschreibung egal
+    // Path like "\PAK\CHR.PAK;1" or "cdrom0:\MUSIC\LEVEL1\3.VAG;1" -> lsn/size; case-insensitive
     bool lookup(const std::string &path, uint32_t &lsn, uint32_t &size)
     {
         std::lock_guard<std::mutex> lk(g_m);
@@ -1891,19 +2082,19 @@ namespace
         }
         else
         {
-            std::fprintf(stderr, "[TS2] sceCdSearchFile %s -> nicht gefunden\n", name.c_str());
+            std::fprintf(stderr, "[TS2] sceCdSearchFile %s -> not found\n", name.c_str());
             ret(ctx, 0);
         }
         leave(ctx);
     }
 }
-// Definitionen unter den generierten Namen (tools/ts2_bauen.sh leert die generierten Dateien gleichen Namens)
+// Definitions under the generated names (tools/ts2_bauen.sh empties the generated files of the same name)
 #define TS2_DEFINE(GEN_NAME, IMPL) \
     void GEN_NAME(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime) { IMPL(rdram, ctx, runtime); }
 TS2_DEFINE(sceCdLayerSearchFile_0x488dc0, ts2_sceCdSearchFile)
 
-// libmtap (Multitap): Original fragt MTAPMAN.IRX, das ueber SIO2 die Hardware abfragt (im Port nicht nachgebildet).
-// Die Pad-Eingabe ist ohnehin HLE (Pad.cpp), daher hier: Multitap an Port 1, wenn ein 3. Gamepad steckt.
+// libmtap (multitap): the original asks MTAPMAN.IRX, which queries the hardware over SIO2 (not reproduced in the port).
+// Pad input is HLE anyway (Pad.cpp), so here: multitap on port 1 when a third gamepad is plugged in.
 namespace
 {
     void ts2_sceMtapPortOpen(uint8_t *, R5900Context *ctx, PS2Runtime *) { ret(ctx, 1); leave(ctx); }
@@ -1922,10 +2113,10 @@ TS2_DEFINE(sceMtapPortOpen_0x44e248, ts2_sceMtapPortOpen)
 TS2_DEFINE(sceMtapPortClose_0x44e2b8, ts2_sceMtapPortClose)
 TS2_DEFINE(sceMtapGetConnection_0x44e328, ts2_sceMtapGetConnection)
 
-// TS2_STUBCOUNT=1 (nur mit instrumentiertem Code, tools/ts2_stub_zaehlen.py): wie oft wird welche HLE-Ersatzfunktion
-// aufgerufen? Ausgabe beim Ende und jede Minute nach stderr ("[STUBS] name=anzahl ...").
+// TS2_STUBCOUNT=1 (only with instrumented code, tools/ts2_stub_zaehlen.py): how often is each HLE replacement function
+// called? Output at exit and every minute to stderr ("[STUBS] name=count ...").
 #include <unordered_map>
-extern uint32_t g_ps2xGameGParamAddr;   // Laufzeit GS.cpp: sceGsGParam des Spiels (sceGsGetGParam 0x4416E0 -> 0x56A250)
+extern uint32_t g_ps2xGameGParamAddr;   // Runtime GS.cpp: the game's sceGsGParam (sceGsGetGParam 0x4416E0 -> 0x56A250)
 void ts2StubCount(const char *name)
 {
     static std::mutex m; static std::unordered_map<const char *, uint64_t> cnt; static auto last = std::chrono::steady_clock::now();
@@ -1943,9 +2134,9 @@ void ts2StubCount(const char *name)
     }
 }
 
-// TS2_DTOA_TEST=1 (nur Testlaeufe): einmal im laufenden Spiel die ORIGINALEN Funktionen malloc (0x48EE78) und
-// sprintf (0x490180) des Spiels aufrufen, wie am Geschuetz (printf("%f") -> _dtoa_r -> _Balloc -> malloc).
-// Laeuft im EE-Kontext (beim ersten sceCdSearchFile), Register werden danach wiederhergestellt.
+// TS2_DTOA_TEST=1 (test runs only): call the game's ORIGINAL functions malloc (0x48EE78) and sprintf (0x490180)
+// once while the game is running, as at the gun turret (printf("%f") -> _dtoa_r -> _Balloc -> malloc).
+// Runs in the EE context (on the first sceCdSearchFile); registers are restored afterwards.
 namespace ts2_dtoa_test
 {
     bool rufe(uint8_t *rdram, R5900Context *ctx, PS2Runtime *rt, uint32_t fn, uint32_t magic)
@@ -1955,7 +2146,7 @@ namespace ts2_dtoa_test
         for (int i = 0; i < 2000000 && ctx->pc != magic; ++i)
         {
             auto f = rt->lookupFunction(ctx->pc);
-            if (!f) { std::fprintf(stderr, "[DTOA-TEST] keine Funktion fuer pc=0x%08X\n", ctx->pc); return false; }
+            if (!f) { std::fprintf(stderr, "[DTOA-TEST] no function for pc=0x%08X\n", ctx->pc); return false; }
             f(rdram, ctx, rt);
         }
         return ctx->pc == magic;
@@ -1977,7 +2168,7 @@ namespace ts2_dtoa_test
             const bool ok1 = rufe(rdram, ctx, rt, 0x0048EE78u, magic);
             const uint32_t m = GPR_U32(ctx, 2);
             std::fprintf(stderr, "[DTOA-TEST] malloc(64) -> 0x%08X (%s)\n", m, ok1 ? "zurueck" : "NICHT zurueck");
-            // Softfloat-Routinen (libgcc fp-bit) einzeln gegen den Host: dpadd/dpsub/dpmul/dpdiv (a0,a1 -> v0)
+            // Soft-float routines (libgcc fp-bit) one by one against the host: dpadd/dpsub/dpmul/dpdiv (a0,a1 -> v0)
             {
                 struct R { const char *n; uint32_t ad; int op; };
                 const R rs[] = {{"dpadd", 0x0048C9F8u, 0}, {"dpsub", 0x0048CA50u, 1}, {"dpmul", 0x0048CAB8u, 2}, {"dpdiv", 0x0048CD68u, 3}};
@@ -1998,7 +2189,7 @@ namespace ts2_dtoa_test
                     }
                 std::fprintf(stderr, "[DTOA-TEST] Softfloat: %d Abweichungen\n", fehler);
             }
-            // mehrere Werte einzeln: "%f" mit genau einem double (in $a2), dazu "%d"-Kontrolle
+            // several values one by one: "%f" with exactly one double (in $a2), plus a "%d" check
             const double werte[] = {1.5, 0.5, 100.0, 1234.5678, 3.14159, -2.25, 0.001, 1e10, 123456789.0};
             const char *f1 = "%f";
             std::memcpy(rdram + fmt, f1, 3);
@@ -2021,25 +2212,27 @@ namespace ts2_dtoa_test
 namespace ps2_stubs { void setPadOverrideState(uint16_t buttons, uint8_t lx, uint8_t ly, uint8_t rx, uint8_t ry); void clearPadOverrideState(); }
 namespace
 {
-    // SOTC_INPUT="tick:key,tick:key*N,..." (gleiches Format wie SotC): "key" hält 8 VSyncs, "key*N" N VSyncs.
-    // Tasten: x o s t start select up down left right l1 l2 r1 r2, analog lup/ldown/lleft/lright, rup/rdown/rleft/rright.
-    // Über setPadOverrideState der Laufzeit (libpad-HLE), Port 0. Ohne SOTC_INPUT bleibt das echte Gamepad aktiv.
-    // TS2_WIDESCREEN=1: echtes 16:9 - Seitenverhaeltnis-Konstanten wie PCSX2-Patch SLUS-20314_12532F1C.pnach
-    // ("Widescreen 16:9", Autor No.47, patch=1 = jedes Bild): 0x3f955555 (1.1667) -> 0x3fc71c71 (1.5556).
-    // Nur Daten, kein Code -> kein Neuuebersetzen noetig. Renderer dazu auf 16:9 (PS2X_PCSX2_WIDESCREEN=1).
-    // ---- Mauszielen (PC): Kamera-Drehung direkt im Spielerobjekt setzen ----
-    // Verfahren und Objekt-Layout wie der Mouse Injector (GameCube-Fassung von TS2, GPL-2.0+, Carnivorous/garungorp):
-    // Gier +0x148 und Nick +0x14C (Grad), Fadenkreuz-Schwanken +0x8B8/+0x8BC (-1..1). Die PS2-Adressen wurden per
-    // RAM-Vergleich (rechter Stick dreht/hebt) gefunden: Spielerzeiger 0x59DC0C, Nick-Grenze 0x59DC1C (40 Grad).
-    // Letzter Pad-Zustand aus SOTC_INPUT (Testlaeufe): die freie Kamera liest ihn statt des echten Pads
-    static uint16_t g_skriptPad = 0; static uint8_t g_skriptAx[4] = {0x80, 0x80, 0x80, 0x80}; static bool g_skriptPadDa = false;
+    // SOTC_INPUT="tick:key,tick:key*N,..." (same format as SotC): "key" holds 8 VSyncs, "key*N" N VSyncs.
+    // Keys: x o s t start select up down left right l1 l2 r1 r2, analog lup/ldown/lleft/lright, rup/rdown/rleft/rright.
+    // Through the runtime's setPadOverrideState (libpad HLE), port 0. Without SOTC_INPUT the real gamepad stays active.
+    // TS2_WIDESCREEN=1: true 16:9 - aspect ratio constants as in the PCSX2 patch SLUS-20314_12532F1C.pnach
+    // ("Widescreen 16:9", author No.47, patch=1 = every frame): 0x3f955555 (1.1667) -> 0x3fc71c71 (1.5556).
+    // Data only, no code -> no retranslation needed. The renderer is set to 16:9 as well (PS2X_PCSX2_WIDESCREEN=1).
+    // ---- Mouse aiming (PC): set the camera rotation directly in the player object ----
+    // Method and object layout as in the Mouse Injector (GameCube version of TS2, GPL-2.0+, Carnivorous/garungorp):
+    // yaw +0x148 and pitch +0x14C (degrees), crosshair sway +0x8B8/+0x8BC (-1..1). The PS2 addresses were found by
+    // comparing RAM (right stick turns/tilts): player pointer 0x59DC0C, pitch limit 0x59DC1C (40 degrees).
+    // Last pad state from SOTC_INPUT (test runs): the free camera reads it instead of the real pad
+    static uint16_t g_skriptPad = 0; static uint8_t g_skriptAx[4] = {0x80, 0x80, 0x80, 0x80}; static bool g_skriptPadDa = false; static uint16_t g_skriptPadRoh = 0; static uint8_t g_skriptRStickRoh[2] = {0x80, 0x80};
+    std::atomic<bool> g_ts2EigenesZiel{false};   // mouse aim mode active: the game's aim HUD is hidden, the port draws its crosshair
+    std::atomic<bool> g_ts2MausZielt{false};     // mouse captured in first-person view: no game auto-aim
     namespace maus
     {
         constexpr uint32_t kSpielerZeiger = 0x0059DC0Cu;
         constexpr uint32_t kNickGrenze = 0x0059DC1Cu;
         inline float rf(const uint8_t *r, uint32_t a) { float v; std::memcpy(&v, r + (a & 0x1FFFFFCu), 4); return v; }
         inline void wf(uint8_t *r, uint32_t a, float v) { std::memcpy(r + (a & 0x1FFFFFCu), &v, 4); }
-        // TS2_MAUS_TEST="tick:dx:dy*N,..." (Testlaeufe ohne echte Maus): N VBlanks lang dx/dy Zaehler je VBlank
+        // TS2_MAUS_TEST="tick:dx:dy*N,..." (test runs without a real mouse): dx/dy counts per VBlank for N VBlanks
         bool testDelta(uint64_t tick, int &dx, int &dy)
         {
             static const char *e = std::getenv("TS2_MAUS_TEST");
@@ -2059,46 +2252,203 @@ namespace
         {
             int dx = 0, dy = 0;
             const bool test = testDelta(tick, dx, dy);
-            const bool gefangen = test || ::ps2xGsBridgeMouse(dx, dy) != 0;
-            // Ego-Ansicht? (Spielerobjekt da, Gier/Nick im gueltigen Bereich) - sonst nichts anfassen
+            bool gefangen = test || ::ps2xGsBridgeMouse(dx, dy) != 0;
+            // Modern gamepad aiming (settings menu, Controls; TS2_PAD_MODERN=1 for test runs; off by default, the original
+            // controls stay as they are): the right stick turns the view directly, like the mouse does - crosshair fixed in
+            // the screen centre, shots land on it, no auto-aim pulling the view. L2 is the zoom/scope button.
+            static const int envModern = [] { const char *e = std::getenv("TS2_PAD_MODERN"); return (e && *e == '1') ? 1 : 0; }();
+            static int modern = 0; if ((tick & 31u) == 0u) modern = ::ps2xGsBridgeOption(32, envModern);
+            const bool padZiel = modern != 0 && !gefangen;
+            float padX = 0.f, padY = 0.f;
+            if (padZiel)
+            {
+                uint8_t rx = 0x80, ry = 0x80;
+                if (g_skriptPadDa) { rx = g_skriptRStickRoh[0]; ry = g_skriptRStickRoh[1]; }
+                else { const unsigned a = g_ps2xPadAchsenRoh.load(std::memory_order_relaxed); rx = static_cast<uint8_t>(a >> 16); ry = static_cast<uint8_t>(a >> 24); }
+                float x = (static_cast<float>(rx) - 128.f) / 127.f, y = (static_cast<float>(ry) - 128.f) / 127.f;
+                const float m = std::sqrt(x * x + y * y);
+                constexpr float tot = 0.16f;   // radial dead zone, then a soft curve: fine aiming near the centre, fast turns at the edge
+                if (m > tot) { const float n = std::min((m - tot) / (1.f - tot), 1.f); const float f = (0.35f * n + 0.65f * n * n) / m; padX = x * f; padY = y * f; }
+                gefangen = true;
+            }
+            // First-person view? (player object present, yaw/pitch in the valid range) - otherwise touch nothing
             uint32_t pb = 0; std::memcpy(&pb, r + kSpielerZeiger, 4);
             bool ego = pb >= 0x100000u && pb < 0x1FF0000u;
             float gier = 0.f, nick = 0.f, grenze = 0.f;
             if (ego)
             {
                 gier = rf(r, pb + 0x148); nick = rf(r, pb + 0x14C); grenze = rf(r, kNickGrenze);
-                ego = gier >= 0.f && gier < 360.f && grenze > 1.f && grenze <= 90.f && nick >= -grenze - 1.f && nick <= grenze + 1.f;
+                // Own pitch limit for the mouse (original 40 degrees): TS2_NICK_MAX or bridge option 11, at most 89
+                static const float envMax = [] { const char *e = std::getenv("TS2_NICK_MAX"); return e ? static_cast<float>(std::atof(e)) : 0.f; }();
+                const float wunsch = envMax > 0.f ? envMax : static_cast<float>(::ps2xGsBridgeOption(11, 0));
+                const float spielGrenze = grenze;
+                // The game clamps the pitch to its own limit every frame (test ts2_522) -> raise the game's limit
+                // while the mouse is captured; otherwise restore the original value.
+                static float s_origGrenze = 0.f;
+                if (s_origGrenze == 0.f && grenze > 1.f && grenze <= 90.f) s_origGrenze = grenze;
+                if (s_origGrenze > 0.f)
+                {
+                    const float soll = (gefangen && wunsch > s_origGrenze) ? std::min(wunsch, 89.f) : s_origGrenze;
+                    if (grenze != soll && grenze > 1.f && grenze <= 90.f) { wf(r, kNickGrenze, soll); grenze = soll; }
+                }
+                ego = gier >= 0.f && gier < 360.f && spielGrenze > 1.f && spielGrenze <= 90.f && nick >= -grenze - 1.f && nick <= grenze + 1.f;
+                // Only inside a level: the player's health struct must be alive (in the menus at game start the pointer
+                // already looks plausible - the crosshair showed up in the main menu)
+                {
+                    const uint32_t hs = ts2impact::ru(r, pb + 0x1BC) & 0x1FFFFFFu;
+                    const bool lebt = hs >= 0x100000u && hs < 0x1FFF000u && rf(r, hs + 0x1A0) >= 0.2f && rf(r, hs + 0x1A0) <= 500.f &&
+                                      rf(r, hs + 0x19C) > 0.f && rf(r, hs + 0x19C) <= rf(r, hs + 0x1A0) + 0.01f;
+                    if (!lebt) ego = false;
+                }
             }
-            // Original-Fadenkreuz: beim Maus-Spielen den Zielmodus (L2) halten. Das Spiel zielt dann selbst genau ins Kreuz.
-            const bool zielmodus = gefangen && ego && ::ps2xGsBridgeOption(5, 1) != 0;
-            g_ps2xPadZusatz.store(zielmodus ? 0x0100u : 0u, std::memory_order_relaxed);
-            static bool s_aktiv = false; static float s_gier = 0.f, s_nick = 0.f;
-            if (!gefangen || !ego) { s_aktiv = false; return; }
-            if (zielmodus)
+            // Aim mode (L2) slows walking by ~16 % (test ts2_300). So it is only held while zooming (the bridge holds L2 itself,
+            // option 10) or when "always hold aim mode" is selected (option 5). Otherwise full walking speed and the
+            // bridge's own crosshair (option 9 reports: first-person view with the mouse captured).
+            // Mouse aiming: the game's aim mode (L2) is held all the time - only it shoots exactly where the crosshair is
+            // (without it the game adds a random spread around its free-aim point). Its own wobbling aim HUD is hidden
+            // (hook 0x2E18E8 below), the port's centre crosshair is the only one. TS2_MAUS_ZIELMODUS=0 = old behaviour.
+            static const bool immerZiel = [] { const char *e = std::getenv("TS2_MAUS_ZIELMODUS"); return !(e && *e == '0'); }();
+            bool dauer = gefangen && ego && (immerZiel || ::ps2xGsBridgeOption(5, 0) != 0);
+            // TS2_ZIEL_PAUSE=a-b (tests): no permanent aim mode between these ticks (like a short menu / focus loss)
+            { static const std::pair<uint64_t, uint64_t> pz = [] { const char *e = std::getenv("TS2_ZIEL_PAUSE"); uint64_t a = 0, b = 0; if (e) std::sscanf(e, "%llu-%llu", reinterpret_cast<unsigned long long *>(&a), reinterpret_cast<unsigned long long *>(&b)); return std::make_pair(a, b); }();
+              if (pz.second && tick >= pz.first && tick < pz.second) dauer = false; }
+            // Option 7 (zoom key held) counts too: older bridges do not know option 10 and do not hold L2 themselves.
+            const bool padL2 = padZiel && ((g_skriptPadDa ? g_skriptPadRoh : static_cast<uint16_t>(g_ps2xPadRoh.load(std::memory_order_relaxed))) & 0x0100u) != 0;
+            const bool zoomt = gefangen && ego && (::ps2xGsBridgeOption(10, 0) != 0 || ::ps2xGsBridgeOption(7, 0) != 0 || padL2);
+            g_ps2xPadRStickAus.store((padZiel && ego) ? 1u : 0u, std::memory_order_relaxed);
+            // Sniper rifle: its aim mode IS the scope. If the scope comes up although no zoom key is held, the permanent
+            // aim mode is switched off until the weapon changes (D-pad left/right = mouse wheel) or the player respawns.
+            // The zoom key still brings the scope up and takes it down again.
             {
-                // Kreuz fest in der Bildmitte (kein Zurueckfedern), die Maus dreht die Kamera
-                wf(r, pb + 0x8B8, 0.f);
-                wf(r, pb + 0x8BC, 0.f);
+                static bool sperre = false; static uint32_t sperrePb = 0;
+                const long long jetztMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                const bool scope = jetztMs - g_ps2xScopeMs.load(std::memory_order_relaxed) < 250;
+                uint16_t pt = 0; uint8_t ax[4] = {0x80, 0x80, 0x80, 0x80};
+                const bool dreieck = g_skriptPadDa ? (g_skriptPad & 0x00A0u) != 0 : (::ps2xGsBridgePad(pt, ax) && (pt & 0x00A0u) != 0);   // weapon change: D-pad right/left (mouse wheel)
+                if (sperre && (pb != sperrePb || dreieck)) sperre = false;
+                if (!sperre && dauer && !zoomt && scope) { sperre = true; sperrePb = pb; std::fprintf(stderr, "[maus] scope weapon: permanent aim mode off until weapon change\n"); }
+                if (sperre) dauer = false;
             }
-            // Kamera gehoert der Maus: kleine Aenderungen des Spiels (Auto-Lookahead zieht den Blick beim Laufen zur
-            // Waagerechten) werden zurueckgenommen, grosse (Rueckstoss, Skript, Tod) uebernommen.
+            const bool zielmodus = dauer || zoomt;
+            // A held aim mode (L2) never gives the game a new press: with the sniper rifle the scope only opens on an
+            // L2 press edge, so the zoom key / aim key did nothing (test sn713). When the player
+            // presses the zoom key or the aim key himself while L2 is already held, L2 is released for 3 VBlanks.
+            {
+                static bool altZoom = false, altL2 = false, altGehalten = false; static int loslassen = 0;
+                const bool roh = ((g_skriptPadDa ? g_skriptPadRoh : static_cast<uint16_t>(g_ps2xPadRoh.load(std::memory_order_relaxed))) & 0x0100u) != 0;
+                if (altGehalten && ((zoomt && !altZoom) || (roh && !altL2))) loslassen = 3;
+                // The permanent aim mode needs a press edge too: L2 held from the first tick of a life was not taken by the
+                // game - the accurate aim only worked after the player had pressed the zoom key once (user report 14 Nov).
+                // So when the permanent aim mode starts (level start, respawn = new player object, mouse captured again)
+                // L2 is released for 3 VBlanks, and once more 1.5 s later in case the game was not ready for input yet.
+                {
+                    static bool altDauer = false; static uint32_t altDauerPb = 0; static uint64_t nochmal = 0;
+                    if (dauer && (!altDauer || pb != altDauerPb)) { loslassen = 3; nochmal = tick + 90; }
+                    else if (dauer && nochmal && tick >= nochmal) { if (!zoomt) loslassen = 3; nochmal = 0; }
+                    if (!dauer) nochmal = 0;
+                    altDauer = dauer; altDauerPb = pb;
+                }
+                altZoom = zoomt; altL2 = roh; altGehalten = zielmodus || roh;
+                g_ps2xPadMaske.store(loslassen > 0 ? 0x0100u : 0u, std::memory_order_relaxed);
+                if (loslassen > 0) --loslassen;
+            }
+            ::ps2xGsBridgeOption(9, (gefangen && ego && !padL2) ? 1 : 0);   // while zooming with the gamepad the game shows its own aim HUD / scope
+            g_ps2xPadZusatz.store(zielmodus ? 0x0100u : 0u, std::memory_order_relaxed);
+            g_ts2EigenesZiel.store(dauer && !zoomt, std::memory_order_relaxed);
+            g_ts2MausZielt.store(gefangen && ego, std::memory_order_relaxed);
+            // diagnosis in play.log (every ~10 s): mouse state for crosshair / aim mode problems
+            if (tick % 600u == 0u)
+                std::fprintf(stderr, "[maus] gefangen=%d ego=%d dauer=%d zoom=%d (opt10=%d opt7=%d) hudAus=%d\n", gefangen ? 1 : 0, ego ? 1 : 0, dauer ? 1 : 0, zoomt ? 1 : 0,
+                             ::ps2xGsBridgeOption(10, 0), ::ps2xGsBridgeOption(7, 0), (dauer && !zoomt) ? 1 : 0);
+            // TS2_POSLOG=1 (tests): player position every 10 ticks (walking speed in aim mode)
+            static const bool poslog = std::getenv("TS2_POSLOG") != nullptr;
+            if (poslog && ego && pb && tick % 10u == 0u)
+                std::fprintf(stderr, "[pos] t=%llu x=%.3f z=%.3f l2=%d\n", (unsigned long long)tick, rf(r, pb + 0x1A0), rf(r, pb + 0x1A8), (dauer || zoomt) ? 1 : 0);
+            // Permanent aim mode (mouse aiming) must not zoom: some weapons (Soviet S47 and others) zoom the view a little
+            // as soon as the aim mode is held - with the mouse it is held all the time, so the view stayed zoomed in.
+            // The view scale is the player float +0x914 (test fov856: writing 0.5 zooms the picture). Its normal value is
+            // taken whenever the aim mode is not held (and at the first tick of a new player object); while the aim mode
+            // is only held by the port (no zoom key) the scale is put back to that value. The zoom key zooms as before.
+            // TS2_ZIEL_ZOOM=1 = old behaviour.
+            {
+                static const bool alt = [] { const char *e = std::getenv("TS2_ZIEL_ZOOM"); return e && *e == '1'; }();
+                static float normal = 0.f; static uint32_t normalPb = 0; static bool altEgo = false;
+                if (ego && pb)
+                {
+                    const float v = rf(r, pb + 0x914);
+                    const bool plausibel = v > 0.3f && v < 3.0f;
+                    if (pb != normalPb || !altEgo || !zielmodus) { if (plausibel) { normal = v; normalPb = pb; } }
+                    else if (!alt && dauer && !zoomt && normal > 0.f && plausibel && v < normal - 0.001f)
+                    {
+                        static long lg = [] { const char *e = std::getenv("TS2_ZIEL_ZOOM_LOG"); return e ? std::atol(e) : 0L; }();
+                        if (lg > 0) { --lg; std::fprintf(stderr, "[aimzoom] t=%llu view scale %.3f -> %.3f\n", (unsigned long long)tick, v, normal); }
+                        wf(r, pb + 0x914, normal);
+                    }
+                }
+                altEgo = ego && pb;
+            }
+            // TS2_FOV_TEST=value (tests): write the player float +0x914 (candidate: view/zoom scale, 0.93 -> 0.2 while zooming)
+            if (const char *fe = std::getenv("TS2_FOV_TEST"); fe && *fe && ego && pb)
+                wf(r, pb + 0x914, static_cast<float>(std::atof(fe)));
+            // TS2_FOVPROBE=1 (tests): float words of the player object (+0..0x1000) in 5..170 that change (search for the
+            // view angle: the sniper zoom changes it)
+            static const bool fovprobe = std::getenv("TS2_FOVPROBE") != nullptr;
+            static const std::pair<float, float> fovBereich = [] { float a = 5.f, b = 170.f; if (const char *e = std::getenv("TS2_FOVPROBE")) std::sscanf(e, "%f:%f", &a, &b); return std::make_pair(a, b); }();
+            if (fovprobe && ego && pb && tick % 20u == 0u)
+            {
+                static std::vector<float> altF; static uint32_t altFPb = 0;
+                std::vector<float> neuF(0x1000 / 4);
+                for (size_t i = 0; i < neuF.size(); ++i) neuF[i] = rf(r, pb + static_cast<uint32_t>(i * 4));
+                if (altFPb == pb && altF.size() == neuF.size())
+                {
+                    std::string z;
+                    for (size_t i = 0; i < neuF.size(); ++i)
+                        if (neuF[i] != altF[i] && std::fabs(neuF[i]) >= fovBereich.first && std::fabs(neuF[i]) <= fovBereich.second && std::fabs(altF[i]) >= fovBereich.first && std::fabs(altF[i]) <= fovBereich.second)
+                        { char b2[48]; std::snprintf(b2, sizeof b2, " +%03zx:%.2f>%.2f", i * 4, altF[i], neuF[i]); z += b2; }
+                    if (!z.empty()) std::fprintf(stderr, "[fov] t=%llu%s\n", (unsigned long long)tick, z.c_str());
+                }
+                altF = std::move(neuF); altFPb = pb;
+            }
+            // TS2_WAFFENPROBE=1 (tests): words of the player object that change, small values only (weapon slot search)
+            static const bool probe = std::getenv("TS2_WAFFENPROBE") != nullptr;
+            if (probe && ego && pb && tick % 30u == 0u)
+            {
+                static std::vector<uint32_t> alt; static uint32_t altPb = 0;
+                std::vector<uint32_t> neu(0x1000 / 4);
+                for (size_t i = 0; i < neu.size(); ++i) neu[i] = ts2impact::ru(r, pb + static_cast<uint32_t>(i * 4));
+                if (altPb == pb && alt.size() == neu.size())
+                {
+                    std::string z;
+                    for (size_t i = 0; i < neu.size(); ++i)
+                        if (neu[i] != alt[i] && neu[i] < 64u && alt[i] < 64u) { char b2[40]; std::snprintf(b2, sizeof b2, " +%03zx:%u>%u", i * 4, alt[i], neu[i]); z += b2; }
+                    if (!z.empty()) std::fprintf(stderr, "[waffe] t=%llu%s\n", (unsigned long long)tick, z.c_str());
+                }
+                alt = std::move(neu); altPb = pb;
+            }
+            static bool s_aktiv = false; static float s_gier = 0.f, s_nick = 0.f;
+            if (!gefangen || !ego) { s_aktiv = false; g_ts2PunchDP = g_ts2PunchDY = 0.f; return; }
+            // Aim point fixed at the screen centre (no springing back), the mouse turns the camera. Also without aim mode:
+            // otherwise the game's free-aim offset moves the real aim point away from the port's centre crosshair
+            // (it looked precise, but the shots went elsewhere).
+            wf(r, pb + 0x8B8, 0.f);
+            wf(r, pb + 0x8BC, 0.f);
+            // The camera belongs to the mouse: small changes by the game (auto look-ahead pulls the view towards the
+            // horizon while walking) are undone, large ones (recoil, script, death) are accepted.
             if (s_aktiv)
             {
-                // Auto-Lookahead zieht den Nick proportional zur Waagerechten (bis ~1 Grad je Bild); Rueckstoss kommt nur
-                // beim Feuern -> waehrend R1/R2 gedrueckt ist, alles uebernehmen, sonst Drift Richtung 0 zuruecknehmen.
-                uint16_t pt = 0; uint8_t ax[4] = {0x80, 0x80, 0x80, 0x80};
-                const bool feuert = ::ps2xGsBridgePad(pt, ax) && (pt & 0x0A00u) != 0;
+                // Everything the game turns by itself is undone: auto look-ahead (pull towards the horizon) and above all the
+                // auto-aim while firing, which dragged the view towards enemies ("magnetic" mouse). Only big jumps
+                // (respawn, scripted camera, death) are accepted. The port's own impact kick is kept.
+                s_nick += g_ts2PunchDP; s_gier += g_ts2PunchDY; g_ts2PunchDP = g_ts2PunchDY = 0.f;
                 const float dn = nick - s_nick;
                 float dg = gier - s_gier; while (dg > 180.f) dg -= 360.f; while (dg < -180.f) dg += 360.f;
-                const bool zurNull = std::fabs(nick) < std::fabs(s_nick) - 0.001f;
-                if (!feuert && zurNull && std::fabs(dn) < 3.0f && std::fabs(dg) < 0.6f)
-                { nick = s_nick; gier = s_gier; }
+                if (std::fabs(dn) < 20.f && std::fabs(dg) < 30.f) { nick = std::clamp(s_nick, -grenze, grenze); gier = s_gier; while (gier < 0.f) gier += 360.f; while (gier >= 360.f) gier -= 360.f; }
             }
             s_aktiv = true;
             if (dx != 0 || dy != 0)
             {
-                // Empfindlichkeit in Zehntel (Menue: 0.1-10.0, Standard 3.0) -> Grad je Mauszaehler wie bei PC-Shootern;
-                // beim Zoomen (rechte Maustaste) zusaetzlich die Zoom-Empfindlichkeit in %
+                // Sensitivity in tenths (menu: 0.1-10.0, default 3.0) -> degrees per mouse count as in PC shooters;
+                // while zooming (right mouse button) additionally the zoom sensitivity in %
                 const float sens = static_cast<float>(::ps2xGsBridgeOption(3, 30)) / 10.f;
                 const bool invert = ::ps2xGsBridgeOption(4, 0) != 0;
                 const float zoom = ::ps2xGsBridgeOption(7, 0) ? static_cast<float>(::ps2xGsBridgeOption(6, 50)) / 100.f : 1.f;
@@ -2109,16 +2459,29 @@ namespace
                 while (gier >= 360.f) gier -= 360.f;
                 nick = std::clamp(nick, -grenze, grenze);
             }
+            if (padX != 0.f || padY != 0.f)
+            {
+                // full deflection: 200 degrees/s sideways, 130 up/down (TS2_PAD_SENS in percent); slower while zooming
+                static const float envSens = [] { const char *e = std::getenv("TS2_PAD_SENS"); return e ? static_cast<float>(std::atof(e)) : 100.f; }();
+                const float padSens = std::clamp(static_cast<float>(::ps2xGsBridgeOption(33, static_cast<int>(envSens))), 20.f, 400.f) / 100.f;
+                const float zf = padL2 ? static_cast<float>(::ps2xGsBridgeOption(6, 50)) / 100.f : 1.f;
+                const bool invert = ::ps2xGsBridgeOption(4, 0) != 0;
+                gier -= padX * (200.f / 60.f) * padSens * zf;
+                nick += (invert ? padY : -padY) * (130.f / 60.f) * padSens * zf;
+                while (gier < 0.f) gier += 360.f;
+                while (gier >= 360.f) gier -= 360.f;
+                nick = std::clamp(nick, -grenze, grenze);
+            }
             wf(r, pb + 0x148, gier);
             wf(r, pb + 0x14C, nick);
             s_gier = gier; s_nick = nick;
         }
 
-        // ---- Freie Kamera (Dev-Modus, Bridge-Option 8 / F7 / TS2_FREECAM=1) ----
-        // Spielerposition im Spielerobjekt: +0x1A0/+0x1A4/+0x1A8 (x, Augenhoehe ~1.62, z), Bodenkopie +0x194..+0x19C,
-        // Vorbild +0xF0..+0xF8, Lauftempo +0x1B4/+0x1B8. Vorwaerts = (sin(gier), 0, cos(gier)) (RAM-Diff ts2_344/346).
-        // Jedes Bild wird die Position neu gesetzt; die Spieleingabe wird eingefroren (Pad-Override), damit die Figur
-        // weder laeuft noch schiesst. Blickrichtung kommt weiter von der Maus (oben).
+        // ---- Free camera (dev mode, bridge option 8 / F7 / TS2_FREECAM=1) ----
+        // Player position in the player object: +0x1A0/+0x1A4/+0x1A8 (x, eye height ~1.62, z), ground copy +0x194..+0x19C,
+        // template +0xF0..+0xF8, walking speed +0x1B4/+0x1B8. Forward = (sin(yaw), 0, cos(yaw)) (RAM diff ts2_344/346).
+        // The position is set anew every frame; game input is frozen (pad override) so that the character
+        // neither walks nor shoots. The view direction still comes from the mouse (above).
         void flug(uint8_t *r, uint64_t tick)
         {
             static const bool envAn = [] { const char *e = std::getenv("TS2_FREECAM"); return e && *e == '1'; }();
@@ -2127,21 +2490,21 @@ namespace
             static bool war = false;
             static float px = 0.f, py = 0.f, pz = 0.f;
             uint32_t pb = 0; std::memcpy(&pb, r + kSpielerZeiger, 4);
-            // Nur im Level (Nick-Grenze gesetzt, Blickwinkel gueltig) - im Titel/Menue existiert das Spielerobjekt auch
+            // Only inside a level (pitch limit set, view angles valid) - the player object also exists in the title/menu
             const float grenze = rf(r, kNickGrenze);
             const bool ego = pb >= 0x100000u && pb < 0x1FF0000u && rf(r, pb + 0x148) >= 0.f && rf(r, pb + 0x148) < 360.f && grenze > 1.f && grenze <= 90.f;
             if (!an || !ego)
             {
-                if (war) { ps2_stubs::clearPadOverrideState(); war = false; std::fprintf(stderr, "[TS2] Freie Kamera aus\n"); }
+                if (war) { ps2_stubs::clearPadOverrideState(); war = false; std::fprintf(stderr, "[TS2] free camera off\n"); }
                 return;
             }
             if (!war)
             {
                 px = rf(r, pb + 0x1A0); py = rf(r, pb + 0x1A4); pz = rf(r, pb + 0x1A8);
-                std::fprintf(stderr, "[TS2] Freie Kamera an bei (%.1f %.1f %.1f)\n", px, py, pz);
+                std::fprintf(stderr, "[TS2] free camera on at (%.1f %.1f %.1f)\n", px, py, pz);
                 war = true;
             }
-            // Eingabe: linker Stick / WASD (Vorwaerts/Seitwaerts), Kreuz (Space/E) hoch, L1 (Strg/C) runter, L2 (Shift) schnell
+            // Input: left stick / WASD (forward/sideways), Cross (Space/E) up, L1 (Ctrl/C) down, L2 (Shift) fast
             uint16_t pt = 0; uint8_t ax[4] = {0x80, 0x80, 0x80, 0x80};
             if (g_skriptPadDa) { pt = g_skriptPad; std::memcpy(ax, g_skriptAx, 4); }
             else ::ps2xGsBridgePad(pt, ax);
@@ -2152,7 +2515,7 @@ namespace
             static const float tempoBasis = [] { const char *e = std::getenv("TS2_FREECAM_TEMPO"); return e && *e ? static_cast<float>(std::atof(e)) : 0.12f; }();
             const float tempo = tempoBasis * ((pt & 0x0100u) ? 4.f : 1.f);
             const float gier = rf(r, pb + 0x148) * 3.14159265f / 180.f, nick = rf(r, pb + 0x14C) * 3.14159265f / 180.f;
-            // Blickrichtung (mit Nick), Seitwaerts rechtwinklig in der Ebene
+            // View direction (with pitch), sideways at a right angle in the plane
             const float fx = std::sin(gier) * std::cos(nick), fy = std::sin(nick), fz = std::cos(gier) * std::cos(nick);
             const float sx = std::cos(gier), sz = -std::sin(gier);
             px += (fx * vor + sx * seit) * tempo;
@@ -2162,8 +2525,8 @@ namespace
             wf(r, pb + 0x194, px); wf(r, pb + 0x198, py - 1.62f); wf(r, pb + 0x19C, pz);
             wf(r, pb + 0x0F0, px); wf(r, pb + 0x0F4, py - 1.62f); wf(r, pb + 0x0F8, pz);
             wf(r, pb + 0x1B4, 0.f); wf(r, pb + 0x1B8, 0.f);
-            // Kamerakopien an festen Adressen (RAM-Suche ts2_350): Augenpunkt (y = Boden + 1.62) und Bodenpunkt; ohne sie
-            // bleibt die Hoehe am Boden kleben, weil das Spiel den Augenpunkt je Bild aus dem Bodenkontakt neu setzt
+            // Camera copies at fixed addresses (RAM search ts2_350): eye point (y = ground + 1.62) and ground point; without them
+            // the height stays glued to the ground because the game recomputes the eye point from ground contact every frame
             static const bool kopien = [] { const char *e = std::getenv("TS2_FREECAM_KOPIEN"); return !(e && *e == '0'); }();
             if (kopien)
             {
@@ -2172,7 +2535,7 @@ namespace
                 for (uint32_t a : {0x7849A8u, 0x7849F0u, 0x7B2368u, 0x7B23B0u})
                 { wf(r, a, px); wf(r, a + 4, py - 1.62f); wf(r, a + 8, pz); }
             }
-            // Spieleingabe einfrieren (kein Laufen, kein Feuern); Maus-Blick laeuft weiter ueber tick()
+            // Freeze game input (no walking, no firing); the mouse view keeps running through tick()
             ps2_stubs::setPadOverrideState(0xFFFFu, 0x80, 0x80, 0x80, 0x80);
             (void)tick;
         }
@@ -2182,9 +2545,9 @@ namespace
     {
         static const bool an = [] { const char *e = std::getenv("TS2_WIDESCREEN"); return e && *e == '1'; }();
         if (!rdram) return;
-        // TS2_POKE="adresse=wert[/16],..." (hex, nur fuer Testlaeufe): Speicherwoerter je Bild setzen, z. B. die
-        // Freischaltungen aus den CodeBreaker-Codes (entschluesselt): 5cc268/5cc26c/5cc270 Story Easy/Normal/Hard,
-        // 5cc280/16 Challenges, 59d6fc "alles freischalten".
+        // TS2_POKE="address=value[/16],..." (hex, for test runs only): set memory words every frame, e.g. the
+        // unlocks from the CodeBreaker codes (decrypted): 5cc268/5cc26c/5cc270 story Easy/Normal/Hard,
+        // 5cc280/16 challenges, 59d6fc "unlock everything".
         {
             struct Poke { uint32_t ad, val; bool half; };
             static const std::vector<Poke> pokes = [] {
@@ -2200,10 +2563,26 @@ namespace
                 return v; }();
             for (const auto &k : pokes) { if (k.half) { const uint16_t h = static_cast<uint16_t>(k.val); std::memcpy(rdram + k.ad, &h, 2); } else std::memcpy(rdram + k.ad, &k.val, 4); }
         }
-        // Divisor der fest eingebauten 4:3-Projektionen (Befehls-Patch in tools/ts2_rec_elf.py): 3.0 = Original, 2.25 = 16:9
-        { const uint32_t v = an ? 0x40100000u : 0x40400000u; std::memcpy(rdram + 0x0059e9f0u, &v, 4); }
-        // Letterbox in Zwischensequenzen (Befehls-Patch, Werte wie Original bzw. PCSX2-Patch "No Cutscene Letterbox").
-        // TS2_LETTERBOX=1 Balken wie im Original, 0 ohne Balken; Standard: ohne Balken bei 16:9, Original bei 4:3.
+        // "Unlock everything" (settings menu, Save data tab; TS2_UNLOCK_ALL=1 for test runs): the game's own switch at
+        // 0x59d6fc opens all levels, characters and cheats while it is set. It is not part of the profile, so the
+        // player's own progress stays as it is; switching the option off restores the normal state.
+        {
+            static const int envAn = [] { const char *e = std::getenv("TS2_UNLOCK_ALL"); return (e && *e == '1') ? 1 : 0; }();
+            static bool gesetzt = false; static uint32_t zaehler = 0; static int frei = 0;
+            if ((zaehler++ & 31u) == 0) frei = ::ps2xGsBridgeOption(31, envAn);
+            if (frei) { if (!gesetzt) { uint32_t w; std::memcpy(&w, rdram + 0x0059d6fcu, 4); std::fprintf(stderr, "[TS2] unlock everything: on (switch was %08x)\n", w); } rdram[0x0059d6fcu] = 1; gesetzt = true; }
+            else if (gesetzt) { rdram[0x0059d6fcu] = 0; gesetzt = false; }
+        }
+        // Ultrawide (bridge aspect option "any window shape"): the projection follows the window, A = width/height.
+        // Divisor = 4/A (3.0 at 4:3, 2.25 at 16:9) and the aspect constants = A * 7/8 (1.1667 at 4:3, 1.5556 at 16:9).
+        // Any window from 4:3 to 32:9 (16:10 included); outside that range 16:9 stays. Read every frame: resizing the window takes effect at once.
+        float breit = 0.f;
+        if (an) { const int m = ::ps2xGsBridgeAspectMilli(); if (m > 1250 && m < 6000) breit = static_cast<float>(m) / 1000.f; }
+        // Divisor of the hard-coded 4:3 projections (instruction patch in tools/ts2_rec_elf.py): 3.0 = original, 2.25 = 16:9
+        if (breit > 0.f) { const float d = 4.f / breit; std::memcpy(rdram + 0x0059e9f0u, &d, 4); }
+        else { const uint32_t v = an ? 0x40100000u : 0x40400000u; std::memcpy(rdram + 0x0059e9f0u, &v, 4); }
+        // Letterbox in cutscenes (instruction patch, values as in the original or the PCSX2 patch "No Cutscene Letterbox").
+        // TS2_LETTERBOX=1 bars as in the original, 0 no bars; default: no bars at 16:9, original at 4:3.
         {
             static const bool balken = [] { const char *e = std::getenv("TS2_LETTERBOX"); const char *w = std::getenv("TS2_WIDESCREEN");
                                             if (e && *e) return *e == '1'; return !(w && *w == '1'); }();
@@ -2213,8 +2592,9 @@ namespace
         }
         if (!an) return;
         static const uint32_t adr[] = {0x005995dc, 0x00598a08, 0x00599664, 0x0059a304, 0x0059a308, 0x0059a39c, 0x0059a3ac, 0x0059ca10};
-        for (uint32_t a : adr) { const uint32_t v = 0x3fc71c71u; std::memcpy(rdram + a, &v, 4); }
-        // TS2_WS_EXTRA="adresse[=wert],..." (hex): weitere Datenwoerter je Bild setzen (Suche nach HUD-/Waffen-Konstanten)
+        { const float k = breit > 0.f ? breit * 0.875f : 0.f; uint32_t v = 0x3fc71c71u; if (k > 0.f) std::memcpy(&v, &k, 4);
+          for (uint32_t a : adr) std::memcpy(rdram + a, &v, 4); }
+        // TS2_WS_EXTRA="address[=value],..." (hex): set further data words every frame (search for HUD/weapon constants)
         static const std::vector<std::pair<uint32_t, uint32_t>> extra = [] {
             std::vector<std::pair<uint32_t, uint32_t>> v; const char *e = std::getenv("TS2_WS_EXTRA");
             for (const char *p = e; p && *p;)
@@ -2228,8 +2608,8 @@ namespace
         for (const auto &[ad, val] : extra) std::memcpy(rdram + ad, &val, 4);
     }
     void ts2InputTickScript(uint64_t tick, const char *envName, int port);
-    // TS2_EINGABE_AUFNAHME=datei: echte Pad-Eingaben je VBlank mitschreiben (nur bei Aenderung: "tick tasten lx ly rx ry",
-    // tasten 1 = gedrueckt). TS2_EINGABE_WIEDERGABE=datei spielt sie ueber den Pad-Override wieder ab (Fehler nachstellen).
+    // TS2_EINGABE_AUFNAHME=file: record real pad input per VBlank (only on change: "tick buttons lx ly rx ry",
+    // buttons 1 = pressed). TS2_EINGABE_WIEDERGABE=file plays it back through the pad override (reproduce bugs).
     void ts2EingabeAufnahme(uint64_t tick)
     {
         static const char *rep = std::getenv("TS2_EINGABE_WIEDERGABE");
@@ -2241,7 +2621,7 @@ namespace
                 std::vector<E> v; if (std::FILE *f = std::fopen(rep, "r")) { unsigned long long t; unsigned p, a0, a1, a2, a3;
                     while (std::fscanf(f, "%llu %x %x %x %x %x", &t, &p, &a0, &a1, &a2, &a3) == 6)
                         v.push_back({t, uint16_t(p), {uint8_t(a0), uint8_t(a1), uint8_t(a2), uint8_t(a3)}}); std::fclose(f); }
-                std::fprintf(stderr, "[TS2] Eingabe-Wiedergabe: %zu Eintraege\n", v.size()); return v; }();
+                std::fprintf(stderr, "[TS2] input playback: %zu entries\n", v.size()); return v; }();
             static size_t i = 0;
             while (i + 1 < ev.size() && ev[i + 1].t <= tick) ++i;
             if (!ev.empty() && ev[0].t <= tick)
@@ -2264,9 +2644,9 @@ namespace
     {
         ts2EingabeAufnahme(tick);
         ts2InputTickScript(tick, "SOTC_INPUT", 0);
-        ts2InputTickScript(tick, "TS2_INPUT2", 1);   // Splitscreen: Spieler 2 (Port 2)
-        ts2InputTickScript(tick, "TS2_INPUT3", 2);   // Multitap: Spieler 3
-        ts2InputTickScript(tick, "TS2_INPUT4", 3);   // Multitap: Spieler 4
+        ts2InputTickScript(tick, "TS2_INPUT2", 1);   // Split screen: player 2 (port 2)
+        ts2InputTickScript(tick, "TS2_INPUT3", 2);   // Multitap: player 3
+        ts2InputTickScript(tick, "TS2_INPUT4", 3);   // Multitap: player 4
     }
     void ts2InputTickScript(uint64_t tick, const char *envName, int port)
     {
@@ -2302,6 +2682,12 @@ namespace
         }
         if (port == 0)
         {
+            // buttons the override holds (mouse aiming: aim mode L2) also apply to scripted input, like in real play
+            g_skriptPadRoh = static_cast<uint16_t>(~(b2 | (b3 << 8)));
+            { const unsigned z = g_ps2xPadZusatz.load(std::memory_order_relaxed); b2 &= static_cast<uint8_t>(~(z & 0xFFu)); b3 &= static_cast<uint8_t>(~((z >> 8) & 0xFFu)); }
+            { const unsigned m = g_ps2xPadMaske.load(std::memory_order_relaxed); b2 |= static_cast<uint8_t>(m & 0xFFu); b3 |= static_cast<uint8_t>((m >> 8) & 0xFFu); }
+            g_skriptRStickRoh[0] = rx; g_skriptRStickRoh[1] = ry;
+            if (g_ps2xPadRStickAus.load(std::memory_order_relaxed)) rx = ry = 0x80;   // modern gamepad aiming turns the view itself
             ps2_stubs::setPadOverrideState(static_cast<uint16_t>(b2 | (b3 << 8)), lx, ly, rx, ry);
             g_skriptPad = static_cast<uint16_t>(~(b2 | (b3 << 8))); g_skriptAx[0] = lx; g_skriptAx[1] = ly; g_skriptAx[2] = rx; g_skriptAx[3] = ry; g_skriptPadDa = true;
         }
@@ -2312,22 +2698,283 @@ namespace
     }
 }
 
+// ---- Online+: quick bot match ----
+// The Online+ hub (bridge option 18) asks for a bot match: code = 1 + mode * 16 + level index. From the main menu
+// (cursor on "Online+", where the hub was opened) we drive the game's own menus with the pad override:
+// Arcade -> Arcade Custom -> pace Normal -> game mode -> level -> GO! -> character -> match against the bots of the
+// recommended bot set. The real pad is blocked meanwhile and released afterwards.
+namespace ts2feed {
+    // Online+ killfeed + scoreboard. The game keeps one record per match participant (stride 0x2A0, heap):
+    //   +0      u32 kills                      (found by RAM diffing in a bot match)
+    //   -0xE8   pointer to the character object, its +0x18 = pointer into the character name table (0x5ECD8C -> strings)
+    //   -0x20C  pointer to the participant's health struct (health +0x19C, max +0x1A0, same layout as the player's)
+    // Kill counters going up name the killer, health dropping to 0 names the victim; both are paired within half a second.
+    // Results go to the bridge as text: id 1 = feed line "killer\tvictim\tflags" (1 you killed, 2 you died, 4 suicide),
+    // id 2 = scoreboard "name\tkills\tdeaths\tyou\n..." (twice a second).
+    using ts2impact::ru; using ts2impact::rf;
+    constexpr uint32_t kNamenTab = 0x005ECD8Cu, kNamenN = 154;
+    bool istName(const uint8_t *r, uint32_t v) { return v >= 0x5EF900u && v < 0x5F0200u && r[v] >= 0x20 && r[v] < 0x7F; }
+    bool istGesundheit(const uint8_t *r, uint32_t p)
+    {
+        p &= 0x1FFFFFFu; if (p < 0x100000u || p > 0x1FFF000u) return false;
+        const float m = rf(r, p + 0x1A0), h = rf(r, p + 0x19C);
+        return m >= 0.2f && m <= 500.0f && h >= -50.0f && h <= m + 0.01f;
+    }
+    struct Platz { uint32_t a; uint32_t kills; bool tot; int tode; uint64_t todSeit; std::string name; int su = 0, serie = 0, best = 0; };
+    std::vector<Platz> plaetze; uint64_t naechsterScan = 0; uint32_t basis = 0;
+    std::string nameVon(const uint8_t *r, uint32_t a)
+    {
+        const uint32_t obj = ru(r, a - 0xE8u) & 0x1FFFFFFu;
+        if (obj < 0x100000u || obj > 0x1FFF000u) return "";
+        const uint32_t n = ru(r, obj + 0x18u);
+        if (!istName(r, n)) return "";
+        return std::string(reinterpret_cast<const char *>(r + n), strnlen(reinterpret_cast<const char *>(r + n), 40));
+    }
+    bool gueltig(const uint8_t *r, uint32_t a) { return ru(r, a) < 1000u && istGesundheit(r, ru(r, a - 0x20Cu)); }
+    void suchen(const uint8_t *r)
+    {
+        // The records sit in one array (stride 0x2A0) that also holds unused/other entries. Participants are the named
+        // records (bots: character name) plus the human player's record (no name, field -0x200 = 32 or 2048) lying
+        // between the first and the last named one (RAM dumps ts2_601 / ts2_620).
+        plaetze.clear(); basis = 0;
+        for (uint32_t a = 0x900000u; a < 0x1800000u; a += 4u)
+        {
+            if (ru(r, a) >= 1000u) continue;
+            if (nameVon(r, a).empty() || !gueltig(r, a)) continue;
+            uint32_t erster = a, letzter = a;
+            for (int k = 1; k <= 16; ++k) { const uint32_t c = a - k * 0x2A0u; if (c < 0x900000u || !gueltig(r, c)) break; if (!nameVon(r, c).empty()) erster = c; }
+            for (int k = 1; k <= 16; ++k) { const uint32_t c = a + k * 0x2A0u; if (c >= 0x1800000u || !gueltig(r, c)) break; if (!nameVon(r, c).empty()) letzter = c; }
+            bool spieler = false;
+            for (uint32_t c = erster; c <= letzter; c += 0x2A0u)
+            {
+                const std::string n = nameVon(r, c);
+                const uint32_t art = ru(r, c - 0x200u);
+                if (n.empty() && (spieler || (art != 32u && art != 2048u))) continue;
+                if (n.empty()) spieler = true;
+                Platz p{c, ru(r, c), false, 0, 0, n};
+                p.tot = rf(r, (ru(r, c - 0x20Cu) & 0x1FFFFFFu) + 0x19C) <= 0.0f;
+                plaetze.push_back(p);
+                if (plaetze.size() >= 16) break;
+            }
+            if (plaetze.size() >= 2) { basis = erster; return; }
+            plaetze.clear();
+            a = std::max(a, letzter);
+        }
+    }
+    void tick(const uint8_t *r, uint64_t t)
+    {
+        if (!r) return;
+        static const int envAn = [] { const char *e = std::getenv("TS2_IMPACT"); return (e && *e == '1') ? 1 : 0; }();
+        static int an = 0; static uint64_t naechsteOpt = 0;
+        if (t >= naechsteOpt) { an = ::ps2xGsBridgeOption(22, envAn); naechsteOpt = t + 60; }
+        static const bool log = std::getenv("TS2_IMPACT_LOG") != nullptr;
+        if (!an) { plaetze.clear(); return; }
+        // the player must be in a level; otherwise forget the records (next match allocates new ones)
+        const uint32_t spObj = ru(r, ts2impact::kSpielerZeiger) & 0x1FFFFFFu;
+        if (!spObj) { if (!plaetze.empty()) { plaetze.clear(); ::ps2xGsBridgeText(2, ""); } return; }
+        // only during a match: the player's own character must be valid
+        // (a dead or respawning character briefly has no valid health pointer: that must not drop the records)
+        bool kaputt = plaetze.empty();
+        for (const auto &p : plaetze) if (ru(r, p.a) >= 1000u || (t % 60u == 0u && nameVon(r, p.a) != p.name)) { kaputt = true; break; }
+        if (kaputt) { const uint32_t hs = ru(r, spObj + 0x1BC) & 0x1FFFFFFu; if (!hs || !istGesundheit(r, hs)) { if (!plaetze.empty()) { plaetze.clear(); ::ps2xGsBridgeText(2, ""); } return; } }
+        if (kaputt)
+        {
+            if (t < naechsterScan) return;
+            naechsterScan = t + 60;
+            suchen(r);
+            if (log && !plaetze.empty()) { std::fprintf(stderr, "[feed] %zu participants at %08x:", plaetze.size(), basis); for (auto &p : plaetze) std::fprintf(stderr, " %s=%u", p.name.empty() ? "YOU" : p.name.c_str(), p.kills); std::fprintf(stderr, "\n"); }
+            return;
+        }
+        // participants can still be spawning when the block is first found (names missing -> list cut short):
+        // look again every 5 s and take a longer list, keeping the counters of known records
+        static uint64_t naechsteNachsuche = 0; bool neueListe = false;
+        if (t >= naechsteNachsuche)
+        {
+            naechsteNachsuche = t + 300;
+            std::vector<Platz> alt; alt.swap(plaetze);
+            suchen(r);
+            if (plaetze.size() > alt.size())
+            {
+                for (auto &p : plaetze) for (const auto &q : alt) if (q.a == p.a) { p = q; p.name = nameVon(r, p.a); break; }
+                neueListe = true;
+                if (log) { std::fprintf(stderr, "[feed] now %zu participants:", plaetze.size()); for (auto &p : plaetze) std::fprintf(stderr, " %s", p.name.empty() ? "YOU" : p.name.c_str()); std::fprintf(stderr, "\n"); }
+            }
+            else plaetze.swap(alt);
+        }
+        // events of this frame
+        struct Ev { int wer; uint64_t t; };
+        static std::vector<Ev> killer, opfer;
+        if (neueListe) { killer.clear(); opfer.clear(); }   // indices refer to the old list
+        for (int i = 0; i < static_cast<int>(plaetze.size()); ++i)
+        {
+            Platz &p = plaetze[i];
+            const uint32_t k = ru(r, p.a);
+            if (k > p.kills && k - p.kills < 5) for (uint32_t n = p.kills; n < k; ++n) killer.push_back({i, t});
+            p.kills = k;
+            const uint32_t hp = ru(r, p.a - 0x20Cu);
+            if (!istGesundheit(r, hp)) continue;   // between death and respawn: keep the last state
+            const bool tot = rf(r, (hp & 0x1FFFFFFu) + 0x19C) <= 0.0f;
+            if (tot && !p.tot) { opfer.push_back({i, t}); ++p.tode; }
+            p.tot = tot;
+        }
+        auto nm = [](const Platz &p) { return p.name.empty() ? std::string("YOU") : p.name; };
+        // pair: a victim with a killer seen within 30 ticks; a victim alone after 30 ticks = suicide / world
+        while (!opfer.empty())
+        {
+            const Ev o = opfer.front();
+            int kIdx = -1;
+            for (size_t j = 0; j < killer.size(); ++j) if (killer[j].wer != o.wer && (killer[j].t + 90 >= o.t && o.t + 90 >= killer[j].t)) { kIdx = static_cast<int>(j); break; }
+            if (kIdx < 0 && t < o.t + 90) break;   // wait for the counter (it can lag the death by about a second)
+            const Platz &v = plaetze[o.wer];
+            std::string zeile; int fl = 0;
+            if (kIdx >= 0) { Platz &k = plaetze[killer[kIdx].wer]; zeile = nm(k) + "\t" + nm(v); if (k.name.empty()) fl |= 1; ++k.serie; k.best = std::max(k.best, k.serie); killer.erase(killer.begin() + kIdx); }
+            else { zeile = std::string("\t") + nm(v); fl |= 4; ++plaetze[o.wer].su; }
+            plaetze[o.wer].serie = 0;
+            if (v.name.empty()) fl |= 2;
+            zeile += "\t" + std::to_string(fl);
+            ::ps2xGsBridgeText(1, zeile.c_str());
+            if (kIdx >= 0 || true) ts2melde::push(kIdx >= 0 || !(fl & 4) ? (zeile.substr(0, zeile.find('\t')) + "  >>  " + nm(v)) : (nm(v) + "  (suicide)"), 2);
+            if (log) std::fprintf(stderr, "[feed] tick %llu %s\n", (unsigned long long)t, zeile.c_str());
+            opfer.erase(opfer.begin());
+        }
+        // stale killer entries (victim not detected): still show the kill
+        while (!killer.empty() && t > killer.front().t + 120)
+        {
+            const Platz &k = plaetze[killer.front().wer];
+            const std::string zeile = nm(k) + "\t?\t" + std::to_string(k.name.empty() ? 1 : 0);
+            ::ps2xGsBridgeText(1, zeile.c_str());
+            if (log) std::fprintf(stderr, "[feed] tick %llu %s\n", (unsigned long long)t, zeile.c_str());
+            killer.erase(killer.begin());
+        }
+        if (t % 30u == 0u)
+        {
+            std::string sb;
+            for (const auto &p : plaetze) sb += nm(p) + "\t" + std::to_string(p.kills) + "\t" + std::to_string(p.tode) + "\t" + (p.name.empty() ? "1" : "0") + "\t" +
+                                                std::to_string(p.su) + "\t" + std::to_string(p.serie) + "\t" + std::to_string(p.best) + "\n";
+            ::ps2xGsBridgeText(2, sb.c_str());
+        }
+    }
+}
+namespace ts2botmatch
+{
+    // A step either presses a button, or ("select") presses down until the menu item with that text is highlighted.
+    // Menu items: text pointer at +0x20, flags at +0x28 (0x100 = item, 0x10 = highlighted).
+    struct Schritt { const char *taste; uint32_t warten; std::string text; };
+    std::vector<Schritt> plan; size_t pos = 0; uint64_t naechster = 0, loslassen = 0, schrittStart = 0; bool aktiv = false;
+    uint64_t letzteAbfrage = 0; int druecke = 0; const char *halten = "";
+    // all copies of the text in the game's string area (menus may use different copies)
+    const std::vector<uint32_t> &textAdressen(const uint8_t *r, const std::string &t)
+    {
+        static std::map<std::string, std::vector<uint32_t>> cache;
+        if (auto it = cache.find(t); it != cache.end() && !it->second.empty()) return it->second;
+        std::vector<uint32_t> v;
+        const std::string such = std::string(1, '\0') + t + std::string(1, '\0');
+        const char *b = reinterpret_cast<const char *>(r + 0x400000u); const char *e = b + 0x400000u;
+        for (const char *f = b; (f = std::search(f, e, such.begin(), such.end())) != e; ++f) v.push_back(static_cast<uint32_t>(0x400000u + (f - b) + 1));
+        return cache[t] = v;
+    }
+    // -1 = no such item on screen (yet), 0 = there but not highlighted, 1 = highlighted
+    int zustand(const uint8_t *r, const std::vector<uint32_t> &texte, bool debug)
+    {
+        if (texte.empty()) return -1;
+        int z = -1;
+        for (uint32_t a = 0x00600000u; a < 0x01FF0000u; a += 4)
+        {
+            uint32_t v; std::memcpy(&v, r + a, 4);
+            if (std::find(texte.begin(), texte.end(), v) == texte.end()) continue;
+            uint32_t fl; std::memcpy(&fl, r + a + 8, 4);   // base + 0x28 = (a - 0x20) + 0x28
+            if (debug) std::fprintf(stderr, "[Online+] candidate %08x -> text %08x flags(+8) %08x\n", a, v, fl);
+            if (!(fl & 0x100u) || (fl & ~0xFFFu)) continue;
+            if (fl & 0x10u) return 1;
+            z = 0;
+        }
+        return z;
+    }
+    void starten(uint64_t t, int code)
+    {
+        static const char *kModi[] = {"Deathmatch", "Team Deathmatch", "Capture the Bag"};
+        static const char *kKarten[] = {"Mexican Mission", "Ice Station", "Hospital", "Training Ground", "Aztec", "Scrapyard", "Nightclub", "Hangar",
+                                        "Robot Factory", "Ufopia", "Chinese", "Chasm", "Streets", "Compound", "Site", "Circus"};
+        static const char *kKartenCtb[] = {"Mexican Mission", "Ice Station", "Training Ground", "Hangar", "Streets"};
+        static const char *kSets[] = {"Recommended", "Misfits", "Freaks", "The Living Dead", "Lovely Ladies", "Military", "Classic", "Leads", "Sidekicks"};
+        // code = 1 + (set * 3 + mode) * 16 + level
+        const int modus = ((code - 1) >> 4) % 3, level = (code - 1) & 15, set = std::min(((code - 1) >> 4) / 3, 8);
+        plan.clear();
+        plan.push_back({"", 45, ""});                                       // hub closes, game resumes
+        for (int i = 0; i < 4; ++i) plan.push_back({"up", 18, ""});         // main menu: Online+ -> Arcade
+        plan.push_back({"sel", 0, "Arcade"});                              // check it (coming back from the hub an extra press can slip in)
+        plan.push_back({"x", 115, ""});                                    // -> Arcade Type (wait for the screen)
+        plan.push_back({"sel", 0, "Arcade Custom"}); plan.push_back({"x", 115, ""});
+        plan.push_back({"sel", 0, "Normal"}); plan.push_back({"x", 125, ""});
+        // mode cards and level pictures are not plain menu items: those lists open at the top, so count instead
+        for (int i = 0; i < modus; ++i) plan.push_back({"down", 25, ""});
+        plan.push_back({"x", 125, ""});
+        for (int i = 0; i < level; ++i) plan.push_back({"down", 24, ""});
+        plan.push_back({"x", 125, ""});                                    // -> options (cursor on GO!)
+        if (set > 0)
+        {
+            // Bot Set (one up from GO!) -> Setup Bots, the preset selector at the top: right = next preset, triangle = back
+            plan.push_back({"up", 25, ""}); plan.push_back({"x", 110, ""});
+            for (int i = 0; i < set; ++i) plan.push_back({"right", 25, ""});
+            plan.push_back({"tri", 110, ""}); plan.push_back({"down", 25, ""});
+        }
+        plan.push_back({"x", 125, ""});                                    // GO! -> character
+        for (int i = 0; i < 3; ++i) plan.push_back({"x", 90, ""});         // character -> match (a press during a transition is lost)
+        pos = 0; naechster = t; aktiv = true; druecke = 0; halten = "";
+        std::fprintf(stderr, "[Online+] bot match: %s on %s, bots %s (%zu steps)\n", kModi[modus], modus == 2 ? kKartenCtb[level % 5] : kKarten[level], kSets[set], plan.size());
+    }
+    void tick(const uint8_t *r, uint64_t t)
+    {
+        // TS2_BOTMATCH="tick:code" (test runs): start the macro at that VBlank without the hub
+        static const std::pair<uint64_t, int> testStart = [] { const char *e = std::getenv("TS2_BOTMATCH"); unsigned long long tt = 0; int c = 0;
+            if (e && std::sscanf(e, "%llu:%d", &tt, &c) == 2) return std::make_pair(static_cast<uint64_t>(tt), c); return std::make_pair(uint64_t(0), 0); }();
+        if (!aktiv && testStart.second > 0 && t == testStart.first) starten(t, testStart.second);
+        if (!aktiv && t - letzteAbfrage >= 10) { letzteAbfrage = t; const int code = ::ps2xGsBridgeOption(18, 0); if (code > 0) starten(t, code); }
+        if (!aktiv || !r) return;
+        if (t >= naechster)
+        {
+            halten = "";
+            if (pos >= plan.size()) { aktiv = false; ps2_stubs::clearPadOverrideState(); std::fprintf(stderr, "[Online+] bot match: menus done\n"); return; }
+            Schritt &s = plan[pos];
+            if (std::string(s.taste) == "sel")
+            {
+                if (druecke == 0 && schrittStart == 0) schrittStart = t;
+                const int z = zustand(r, textAdressen(r, s.text), false);
+                if (z == 1) { std::fprintf(stderr, "[Online+] bot match: '%s' selected (%d presses)\n", s.text.c_str(), druecke); ++pos; druecke = 0; schrittStart = 0; naechster = t + 12; }
+                else if (z == 0 && druecke < 24) { halten = "down"; loslassen = t + 6; naechster = t + 26; ++druecke; }
+                else if (t - schrittStart > 420 || druecke >= 24)
+                { std::fprintf(stderr, "[Online+] bot match: '%s' not found - stopped (%zu copies)\n", s.text.c_str(), textAdressen(r, s.text).size()); (void)zustand(r, textAdressen(r, s.text), true); aktiv = false; ps2_stubs::clearPadOverrideState(); return; }
+                else naechster = t + 10;   // list not on screen yet (transition)
+            }
+            else { halten = s.taste; loslassen = t + 6; naechster = t + 6 + s.warten; ++pos; }
+        }
+        uint8_t b2 = 0xFF, b3 = 0xFF;
+        if (t < loslassen && halten[0])
+        {
+            const std::string k = halten;
+            if (k == "up") b2 &= ~(1u << 4); else if (k == "down") b2 &= ~(1u << 6); else if (k == "right") b2 &= ~(1u << 5);
+            else if (k == "x") b3 &= ~(1u << 6); else if (k == "tri") b3 &= ~(1u << 4);
+        }
+        ps2_stubs::setPadOverrideState(static_cast<uint16_t>(b2 | (b3 << 8)), 0x80, 0x80, 0x80, 0x80);
+    }
+}
+
 namespace
 {
     void applyTs2(PS2Runtime &runtime)
     {
-        // Protokoll vollstaendig: ist stdout eine Pipe (Launcher schreibt spielen.log), puffert die C-Laufzeit sonst
-        // blockweise, und bei einem Haenger/Abbruch fehlt das Ende. Zeilenweise reicht (stderr ist ungepuffert).
+        // Complete log: if stdout is a pipe (the launcher writes the play log) the C runtime otherwise buffers
+        // in blocks, and the end is missing after a hang/abort. Line buffering is enough (stderr is unbuffered).
 #ifdef _WIN32
-        std::setvbuf(stdout, nullptr, _IONBF, 0);   // Windows kennt kein Zeilenpuffern (_IOLBF = Blockpuffer)
-        // Windows weckt wartende Threads nur im Takt der Systemuhr (Standard 15,6 ms). Der VBlank-Takt (16,7 ms) und
-        // die Bildsynchronisation warten ueber condition_variable/Sleep -> ohne 1-ms-Aufloesung halbe Bildrate.
+        std::setvbuf(stdout, nullptr, _IONBF, 0);   // Windows has no line buffering (_IOLBF = block buffering)
+        // Windows wakes waiting threads only at the system timer tick (default 15.6 ms). The VBlank pace (16.7 ms) and
+        // the frame synchronisation wait through condition_variable/Sleep -> half the frame rate without 1 ms resolution.
         ::timeBeginPeriod(1);
 #else
         std::setvbuf(stdout, nullptr, _IOLBF, 1 << 14);
 #endif
         configureIso();
-        // TS2_MCROOT=/pfad: eigenes Memory-Card-Verzeichnis (Testlaeufe reproduzierbar, nicht disc/inhalt/mc0 teilen)
+        // TS2_MCROOT=/path: separate memory card directory (reproducible test runs, do not share disc/inhalt/mc0)
         if (const char *mc = std::getenv("TS2_MCROOT"); mc && *mc)
         {
             PS2Runtime::IoPaths p = PS2Runtime::getIoPaths();
@@ -2336,30 +2983,525 @@ namespace
             std::fprintf(stderr, "[TS2] Memory Card: %s\n", mc);
         }
         runtime.registerFunction(0x00488DC0u, sceCdLayerSearchFile_0x488dc0);
+        // Auto-aim off while the mouse aims: 0x2BBBC8 picks the enemy the aim point is pulled to (+0x8B0/+0x8B4 target,
+        // smoothed into +0x8B8/+0x8BC = the real shot direction). With the mouse that felt "magnetic" and the shots did not
+        // go where the centre crosshair was. No target -> the aim point stays at the centre. TS2_AUTOAIM=1 keeps it.
+        {
+            static PS2Runtime::RecompiledFunction s_autoAim = runtime.lookupFunction(0x002BBBC8u);
+            static const bool autoAimEnv = [] { const char *e = std::getenv("TS2_AUTOAIM"); return e && *e == '1'; }();
+            if (s_autoAim && !autoAimEnv)
+                runtime.registerFunction(0x002BBBC8u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    if (g_ts2MausZielt.load(std::memory_order_relaxed))
+                    {
+                        uint32_t pl; std::memcpy(&pl, r + 0x0059DC0Cu, 4); pl &= 0x1FFFFFFu;   // *(gp-0x25E0) = player
+                        if (pl >= 0x100000u && pl < 0x1FFF000u) { const uint32_t z = 0; std::memcpy(r + pl + 0x8C8u, &z, 4); }
+                        SET_GPR_U32(c, 2, 0u); c->pc = GPR_U32(c, 31); return;
+                    }
+                    s_autoAim(r, c, rt);
+                });
+        }
+        // 0x24FFF8 (menu background animation, runs every frame in the menus): wraps animation phases with a float loop
+        // "while (1.0 <= phase) phase -= 1.0". A phase of +inf / >= 2^24 never gets smaller -> the game thread spins
+        // forever. Seen in the Online+ lobby about every second run (regression suite, haenger735-737). Before each call
+        // the object's float words that are not finite or absurdly large are logged once and reset to 0.
+        {
+            static PS2Runtime::RecompiledFunction s_menuAnim = runtime.lookupFunction(0x0024FFF8u);
+            static const bool aus = [] { const char *e = std::getenv("TS2_ANIM_SCHUTZ"); return e && *e == '0'; }();
+            if (s_menuAnim && !aus)
+                runtime.registerFunction(0x0024FFF8u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    const uint32_t o = GPR_U32(c, 4) & 0x1FFFFFFu;
+                    if (o >= 0x100000u && o + 0x200u < 0x2000000u)
+                        for (uint32_t k : {0xE8u, 0x140u, 0x170u, 0x178u})   // phases of the two elements (+0xC0, stride 0x58, +0x28) and the timers
+                        {
+                            float v; std::memcpy(&v, r + o + k, 4);
+                            if (!std::isfinite(v) || std::fabs(v) > 1048576.f)
+                            {
+                                static std::atomic<int> s_n{0};
+                                float t170, t174, t178; std::memcpy(&t170, r + o + 0x170, 4); std::memcpy(&t174, r + o + 0x174, 4); std::memcpy(&t178, r + o + 0x178, 4);
+                                if (s_n.fetch_add(1) < 20)
+                                    std::fprintf(stderr, "[anim-schutz] object 0x%06X phase +0x%03X = %g -> 0 (+170 %g +174 %g +178 %g) ra=0x%08X\n", o, k, v, t170, t174, t178, GPR_U32(c, 31));
+                                const float z = 0.f; std::memcpy(r + o + k, &z, 4);
+                            }
+                        }
+                    // The loop itself yields to the scheduler (checkpoint) and resumes here with pc = 0x2501E0 and the
+                    // phase in f0: a value that subtracting 1.0 cannot shrink (inf, NaN-free huge) is wrapped directly.
+                    if (c->pc == 0x002501E0u && (!std::isfinite(c->f[0]) || c->f[0] >= 8388608.f))
+                    {
+                        static std::atomic<int> s_m{0};
+                        if (s_m.fetch_add(1) < 20)
+                            std::fprintf(stderr, "[anim-schutz] phase loop f0=%g f1=%g object 0x%06X -> 0\n", c->f[0], c->f[1], GPR_U32(c, 7) & 0x1FFFFFFu);
+                        c->f[0] = 0.f;
+                    }
+                    s_menuAnim(r, c, rt);
+                });
+        }
+        // Resume entry of the phase loop (the scheduler continues a function at its checkpoint pc through this table entry)
+        {
+            static PS2Runtime::RecompiledFunction s_resume = runtime.lookupFunction(0x002501E0u);
+            std::fprintf(stderr, "[anim-schutz] resume entry 0x2501E0 %s\n", s_resume ? "found" : "not in the table");
+            if (s_resume)
+                runtime.registerFunction(0x002501E0u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    static std::atomic<int> s_k{0};
+                    if (!std::isfinite(c->f[0]) || c->f[0] >= 8388608.f || s_k.load() < 3)
+                    {
+                        if (s_k.fetch_add(1) < 20)
+                            std::fprintf(stderr, "[anim-schutz] resume f0=%g f1=%g object 0x%06X\n", c->f[0], c->f[1], GPR_U32(c, 7) & 0x1FFFFFFu);
+                        if (!std::isfinite(c->f[0]) || c->f[0] >= 8388608.f) c->f[0] = 0.f;
+                    }
+                    s_resume(r, c, rt);
+                });
+        }
+        // The aim-mode crosshair itself (round bracket crosshair at +0x8B8/+0x8BC, found by skipping candidates, ts2_674):
+        // hidden while the mouse aims with the permanent aim mode, the port's centre crosshair is the only one.
+        // Zooming keeps it (sniper scope).
+        {
+            static PS2Runtime::RecompiledFunction s_kreuz = runtime.lookupFunction(0x00335B90u);
+            if (s_kreuz)
+                runtime.registerFunction(0x00335B90u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    if (g_ts2EigenesZiel.load(std::memory_order_relaxed)) { c->pc = GPR_U32(c, 31); return; }
+                    s_kreuz(r, c, rt);
+                });
+        }
+        // TS2_SKIP_FN=addr,addr (diagnosis): these game functions return at once
+        if (const char *e = std::getenv("TS2_SKIP_FN"))
+        {
+            std::string all(e); size_t p0 = 0;
+            while (p0 < all.size())
+            {
+                const size_t q = all.find(',', p0); const uint32_t a = static_cast<uint32_t>(std::strtoul(all.substr(p0, q == std::string::npos ? std::string::npos : q - p0).c_str(), nullptr, 16));
+                if (a) { runtime.registerFunction(a, [](uint8_t *, R5900Context *c, PS2Runtime *) { c->pc = GPR_U32(c, 31); }); std::fprintf(stderr, "[skip] %08x\n", a); }
+                if (q == std::string::npos) break; p0 = q + 1;
+            }
+        }
+        // Aim-mode HUD (wobbling crosshair at the free-aim point +0x8B8/+0x8BC, player object): skipped while the mouse aims
+        {
+            static PS2Runtime::RecompiledFunction s_zielHud = runtime.lookupFunction(0x002E18E8u);
+            if (s_zielHud)
+                runtime.registerFunction(0x002E18E8u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    static unsigned n = 0, weg = 0; const bool aus = g_ts2EigenesZiel.load(std::memory_order_relaxed);
+                    if (aus) ++weg;
+                    if (++n == 1 || n % 600 == 0) std::fprintf(stderr, "[zielhud] %u calls, %u hidden\n", n, weg);
+                    if (aus) { c->pc = GPR_U32(c, 31); return; }
+                    s_zielHud(r, c, rt);
+                });
+        }
         runtime.registerFunction(0x0044E248u, sceMtapPortOpen_0x44e248);
         runtime.registerFunction(0x0044E2B8u, sceMtapPortClose_0x44e2b8);
         runtime.registerFunction(0x0044E328u, sceMtapGetConnection_0x44e328);
-        g_ps2xGameGParamAddr = 0x0056A250u;   // sceGsResetGraph laeuft als Originalcode und schreibt den Bildmodus dorthin   // libcdvd ohne Server -> ISO9660
+        g_ps2xGameGParamAddr = 0x0056A250u;   // sceGsResetGraph runs as original code and writes the video mode there   // libcdvd without a server -> ISO9660
         startWatchdog(runtime);
 #if defined(__linux__)
-        haenger::start(runtime);   // Haenger-Bericht ins Protokoll (ohne gdb)
+        haenger::start(runtime);   // Hang report into the log (without gdb)
 #endif
         startMemWatch(runtime);      // SOTC_MEMWATCH=0xADDR,...
         startWriteProtect(runtime);  // SOTC_WPROT=0xADDR
         startTestHarness(runtime);
         sotc_prof::start();
-        // Testgeschirr: bis der VBlank-Handler des Spiels bekannt ist, die VSync-Zähler aus eigenem Thread abfragen.
+        // Test harness: until the game's VBlank handler is known, poll the VSync counters from a thread of our own.
         PS2Runtime *rt = &runtime;
         std::thread([rt]() {
             uint64_t last = 0;
             for (;;)
             {
                 const uint64_t t = rt->memory().gs().vsyncTick.load();
-                if (t != last) { last = t; ++g_vblankHits; ts2WidescreenTick(rt->memory().getRDRAM()); ts2InputTick(t); maus::tick(rt->memory().getRDRAM(), t); maus::flug(rt->memory().getRDRAM(), t); harnessOnVBlank(rt); { static const bool vt = std::getenv("SOTC_TRACE_VIF") != nullptr; if (vt && t % 100u == 0u) { std::fprintf(stderr, "[VIF-Statistik] tick=%llu\n", (unsigned long long)t); sotc_vif_trace::dump(); } } sotcRamDumpCheck(rt->memory().getRDRAM(), t); }
+                if (t != last) { last = t; ++g_vblankHits; ts2WidescreenTick(rt->memory().getRDRAM()); ts2InputTick(t); maus::tick(rt->memory().getRDRAM(), t); maus::flug(rt->memory().getRDRAM(), t); harnessOnVBlank(rt); { static const bool vt = std::getenv("SOTC_TRACE_VIF") != nullptr; if (vt && t % 100u == 0u) { std::fprintf(stderr, "[VIF-Statistik] tick=%llu\n", (unsigned long long)t); sotc_vif_trace::dump(); } } sotcRamDumpCheck(rt->memory().getRDRAM(), t); ts2Probe(rt->memory().getRDRAM(), t); { uint16_t pt = 0; uint8_t ax[4]; bool f = false; if (g_skriptPadDa) f = (g_skriptPad & 0x0A00u) != 0; else f = ::ps2xGsBridgePad(pt, ax) && (pt & 0x0A00u) != 0; ts2impact::tick(rt->memory().getRDRAM(), t, f); } ts2botmatch::tick(rt->memory().getRDRAM(), t); ts2feed::tick(rt->memory().getRDRAM(), t); }
                 std::this_thread::sleep_for(std::chrono::microseconds(500));
             }
         }).detach();
-        // Diagnose: wie oft feuern GS-Handler (Bild fertig, INTC 0) und Render-Timeout-Alarm?
+        // ---- Online+ edition: own entry "Online+" in the game's main menu ----
+        // The main menu is built by 0x3F35F0: five items via 0x24C8E0 (create item in menu, 0x23, 0x100), text pointer at
+        // item+0x20, style 0x15/3 at +0x1C/+0x24, width from 0x2533F8 at +0x34, 5 at +0x38, handler at +0x30; then
+        // 0x253498 lays the menu out. We add a sixth item right before that layout call, with the same functions, so it
+        // looks and navigates like the original ones. Its handler (a free slot in the code table) asks the bridge to
+        // open the Online+ page (server browser, stats, settings). Text lives at 0xF0000 (always unused RAM).
+        if (const char *ed = std::getenv("PS2XGS_EDITION"); ed && std::string(ed) == "onlineplus")
+        {
+            static PS2Runtime::RecompiledFunction s_origMenu = runtime.lookupFunction(0x003F35F0u);
+            static PS2Runtime::RecompiledFunction s_origLayout = runtime.lookupFunction(0x00253498u);
+            static PS2Runtime::RecompiledFunction s_neuItem = runtime.lookupFunction(0x0024C8E0u);
+            static PS2Runtime::RecompiledFunction s_breite = runtime.lookupFunction(0x002533F8u);
+            static std::atomic<bool> s_baue{false};
+            // Online+ lobby (see below): descriptor, builder and item handler addresses, texts, build state
+            // (handlers must live inside the generated function table 0x200000..0x499F20: unused padding words after
+            //  "jr ra" in the menu code serve as addresses - never executed as code)
+            constexpr uint32_t kLobbyDesc = 0x000F1000u, kLobbyBau = 0x003E039Cu, kLobbyText = 0x000F0200u;
+            static const uint32_t kLobbyItemAdr[6] = {0x003E04BCu, 0x003E07FCu, 0x003E0A94u, 0x003E0EDCu, 0x003E10D4u, 0x003E15B4u};
+            static const char *kLobbyEintraege[] = {"Quick Match", "Create Lobby", "Server Browser", "Bot Match", "Profile & Ranks", "Back"};
+            constexpr int kLobbyN = 6;
+            static bool s_lobbyBau = false; static std::vector<uint32_t> s_lobbyItems; static uint32_t s_lobbyMenu = 0;
+            // in-game server browser (same technique): 6 server rows + Refresh + Back; rows are refreshed in place
+            static auto opName = []() {
+                std::string name = "Player";
+
+                        {
+                            const char *xdg = std::getenv("XDG_CONFIG_HOME"); const char *home = std::getenv("HOME"); const char *app = std::getenv("APPDATA");
+                            const char *cn = std::getenv("PS2XGS_CFGNAME");
+                            std::string basis = xdg && *xdg ? std::string(xdg) : app && *app ? std::string(app) : std::string(home ? home : ".") + "/.config";
+                            for (const char *datei : {"/settings.ini", "/einstellungen.ini"})
+                            {
+                                std::ifstream in(basis + "/" + (cn && *cn ? cn : "ts2-recomp") + datei);
+                                for (std::string z; std::getline(in, z);) if (z.rfind("online_name=", 0) == 0 && z.size() > 12) { name = z.substr(12, 20); while (!name.empty() && (name.back() == '\r' || name.back() == ' ')) name.pop_back(); }
+                                if (name != "Player") break;
+                            }
+                        }
+                return name; };
+            static int s_lobbyModus = 1;   // 1 = lobby, 2 = server browser (which menu the layout hook builds)
+            constexpr uint32_t kBrowserDesc = 0x000F1020u, kBrowserBau = 0x003E162Cu, kBrowserUpd = 0x003E20DCu, kBrowserText = 0x000F0A00u;
+            static const uint32_t kBrowserItemAdr[8] = {0x003E224Cu, 0x003E227Cu, 0x003E29FCu, 0x003E323Cu, 0x003E385Cu, 0x003E3D5Cu, 0x003E406Cu, 0x003E4134u};
+            constexpr int kBrowserN = 8, kBrowserServer = 6;
+            static uint32_t s_browserItem[8] = {}; static std::vector<std::string> s_browserAdr;
+            static int s_seite = 2;   // which 8-row page is open: 2 = server browser, 3 = profile & ranks
+            constexpr uint32_t kProfilDesc = 0x000F1040u, kProfilBau = 0x003E41D4u;
+            static std::vector<std::string> s_profilZeilen;
+            // fills the browser rows from the bridge's list; returns the row texts
+            static auto browserZeilen = []() {
+                std::vector<std::string> z; s_browserAdr.clear();
+                static char buf[8192]; ::ps2xGsBridgeTextGet(1, buf, sizeof buf);
+                std::string all(buf); size_t p0 = 0;
+                while (p0 < all.size() && z.size() < static_cast<size_t>(kBrowserServer))
+                {
+                    const size_t nl = all.find('\n', p0); const std::string l = all.substr(p0, nl == std::string::npos ? std::string::npos : nl - p0);
+                    p0 = nl == std::string::npos ? all.size() : nl + 1;
+                    std::vector<std::string> f; size_t q = 0;
+                    while (true) { const size_t t2 = l.find('\t', q); f.push_back(l.substr(q, t2 == std::string::npos ? std::string::npos : t2 - q)); if (t2 == std::string::npos) break; q = t2 + 1; }
+                    if (f.size() < 6) continue;
+                    s_browserAdr.push_back(f[0]);
+                    z.push_back(f[1].substr(0, 16) + "  " + f[2] + "/" + f[3] + "  " + f[4] + "ms" + (f[5] == "1" ? "  PW" : ""));
+                }
+                const bool sucht = ::ps2xGsBridgeOption(28, 0) != 0;
+                if (z.empty()) z.push_back(sucht ? "Searching ..." : "No servers found");
+                while (z.size() < static_cast<size_t>(kBrowserServer)) z.push_back(" ");
+                z.push_back("Refresh"); z.push_back("Back");
+                return z; };
+            constexpr uint32_t kText = 0x000F0000u, kHandler = 0x003F392Cu;
+            if (s_origMenu && s_origLayout && s_neuItem && s_breite)
+            {
+                runtime.registerFunction(0x003F35F0u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_baue = true; s_origMenu(r, c, rt); s_baue = false; });
+                runtime.registerFunction(0x00253498u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    if (s_lobbyBau && s_lobbyItems.size() >= 3)
+                    {
+                        const uint32_t menu = GPR_U32(c, 4) & 0x1FFFFFFu;
+                        if (s_lobbyModus == 1) s_lobbyMenu = menu;
+                        const bool browser = s_lobbyModus >= 2;
+                        const std::vector<std::string> bz = s_lobbyModus == 2 ? browserZeilen() : s_lobbyModus == 3 ? s_profilZeilen : std::vector<std::string>{};
+                        const R5900Context save = *c;
+                        auto rufe = [&](PS2Runtime::RecompiledFunction f, uint32_t adr, uint32_t a0, uint32_t a1, uint32_t a2) -> uint32_t {
+                            SET_GPR_U32(c, 4, a0); SET_GPR_U32(c, 5, a1); SET_GPR_U32(c, 6, a2); SET_GPR_U32(c, 31, 0x003E9E28u);
+                            c->pc = adr; f(r, c, rt); return GPR_U32(c, 2); };
+                        auto w32 = [&](uint32_t a, uint32_t v) { std::memcpy(r + (a & 0x1FFFFFCu), &v, 4); };
+                        auto r32 = [&](uint32_t a) { uint32_t v; std::memcpy(&v, r + (a & 0x1FFFFFCu), 4); return v; };
+                        uint32_t tp = kLobbyText + 0x20u;
+                        auto text = [&](const char *t) { const uint32_t a = tp; const size_t n = std::strlen(t) + 1; std::memcpy(r + a, t, n); tp += static_cast<uint32_t>((n + 15) & ~15u); return a; };
+                        const int anzahl = browser ? kBrowserN : kLobbyN;
+                        for (int i = 0; i < anzahl; ++i)
+                        {
+                            uint32_t it = i < 3 ? s_lobbyItems[static_cast<size_t>(i)] : rufe(s_neuItem, 0x0024C8E0u, menu, 0x23u, 0x100u) & 0x1FFFFFFu;
+                            if (!it || it >= 0x1FFF000u) continue;
+                            uint32_t ta;
+                            if (browser) { ta = kBrowserText + static_cast<uint32_t>(i) * 0x40u; const std::string &t = bz[static_cast<size_t>(i)]; std::memcpy(r + ta, t.c_str(), std::min<size_t>(t.size() + 1, 0x3F)); r[ta + 0x3F] = 0; s_browserItem[i] = it; }
+                            else ta = text(kLobbyEintraege[i]);
+                            w32(it + 0x20, ta); w32(it + 0x1C, 0x15u); w32(it + 0x24, 3u);
+                            w32(it + 0x28, (r32(it + 0x28) & ~1u) | 0x100u);   // never greyed out
+                            w32(it + 0x34, rufe(s_breite, 0x002533F8u, it, 0u, 0u)); w32(it + 0x38, 5u); w32(it + 0x30, browser ? kBrowserItemAdr[i] : kLobbyItemAdr[i]);
+                        }
+                        const uint32_t hoehe = r32(menu + 0x14);
+                        w32(menu + 0x20, hoehe); w32(menu + 0x28, hoehe);
+                        *c = save;
+                    }
+                    if (s_baue.exchange(false))
+                    {
+                        const uint32_t menu = GPR_U32(c, 4);
+                        static const char txt[] = "Online+";
+                        std::memcpy(r + kText, txt, sizeof txt);
+                        const R5900Context save = *c;
+                        auto rufe = [&](PS2Runtime::RecompiledFunction f, uint32_t adr, uint32_t a0, uint32_t a1, uint32_t a2) -> uint32_t {
+                            SET_GPR_U32(c, 4, a0); SET_GPR_U32(c, 5, a1); SET_GPR_U32(c, 6, a2); SET_GPR_U32(c, 31, 0x003F3854u);
+                            c->pc = adr; f(r, c, rt); return GPR_U32(c, 2); };
+                        auto w32 = [&](uint32_t a, uint32_t v) { std::memcpy(r + (a & 0x1FFFFFCu), &v, 4); };
+                        const uint32_t item = rufe(s_neuItem, 0x0024C8E0u, menu, 0x23u, 0x100u) & 0x1FFFFFFu;
+                        if (item && item < 0x1FFF000u)
+                        {
+                            w32(item + 0x20, kText); w32(item + 0x1C, 0x15u); w32(item + 0x24, 3u);
+                            const uint32_t w = rufe(s_breite, 0x002533F8u, item, 0u, 0u);
+                            w32(item + 0x34, w); w32(item + 0x38, 5u); w32(item + 0x30, kHandler);
+                            // the builder copied the menu height (+0x14, grows with every item) to +0x20/+0x28 before
+                            // this call - copy it again so the box shows all six rows instead of scrolling
+                            uint32_t hoehe; std::memcpy(&hoehe, r + ((menu + 0x14) & 0x1FFFFFCu), 4);
+                            w32(menu + 0x20, hoehe); w32(menu + 0x28, hoehe);
+                            std::fprintf(stderr, "[Online+] main menu item added (item %08x, width %u)\n", item, w);
+                        }
+                        *c = save;
+                    }
+                    s_origLayout(r, c, rt);
+                });
+                // Online+ goes straight into the game's own network menu (host a game with bots / join one) - the same
+                // screen as Arcade -> Network (its item handler 0x3E9C70 = 0x3D5A98(screen 0x5554F8)). The connection to
+                // the Online+ server runs in the background, so online games show up in the game's own game list.
+                static PS2Runtime::RecompiledFunction s_netzMenue = runtime.lookupFunction(0x003E9C70u);
+                // ---- Online+ lobby: an own screen built with the game's menu engine (looks/behaves like every TS2 menu) ----
+                // A screen is a 6-word descriptor {update, draw, 0, 0, builder, 0}; 0x3D5A98(descriptor) switches to it.
+                // update 0x3E9F40 / draw 0x3E9F08 are the generic ones (menu input, triangle = back). The builder is ours
+                // (registered at a free address) and creates the menu through the game's own functions, exactly like the
+                // Arcade Type builder 0x3E9C90 does.
+                // handlers must live inside the generated function table (0x200000..0x499F20): unused padding words after
+                // "jr ra" in the menu code serve as addresses (never executed as code)
+
+                static PS2Runtime::RecompiledFunction s_screen = runtime.lookupFunction(0x003D5A98u);
+                static PS2Runtime::RecompiledFunction s_zurueck = runtime.lookupFunction(0x003D5A10u);
+                static PS2Runtime::RecompiledFunction s_menuNeu = runtime.lookupFunction(0x0024C718u);
+                static PS2Runtime::RecompiledFunction s_lay2 = runtime.lookupFunction(0x002534B0u);
+                static PS2Runtime::RecompiledFunction s_strcpy = runtime.lookupFunction(0x00490180u);
+                static PS2Runtime::RecompiledFunction s_f24db58 = runtime.lookupFunction(0x0024DB58u);
+                static PS2Runtime::RecompiledFunction s_f2530e0 = runtime.lookupFunction(0x002530E0u);
+                static PS2Runtime::RecompiledFunction s_f24d848 = runtime.lookupFunction(0x0024D848u);
+                static PS2Runtime::RecompiledFunction s_f250620 = runtime.lookupFunction(0x00250620u);
+                static PS2Runtime::RecompiledFunction s_f2507a8 = runtime.lookupFunction(0x002507A8u);
+                static PS2Runtime::RecompiledFunction s_f3d9528 = runtime.lookupFunction(0x003D9528u);
+                
+
+                {
+                    uint8_t *r0 = runtime.memory().getRDRAM();
+                    const uint32_t desc[6] = {0x003E9F40u, 0x003E9F08u, 0u, 0u, kLobbyBau, 0u};
+                    std::memcpy(r0 + kLobbyDesc, desc, sizeof desc);
+                }
+                // The lobby screen reuses the game's own Arcade Type builder 0x3E9C90 (so frame, glow, footer hints and
+                // animation are exactly the game's) and rewrites its menu right before the layout call: the three items get
+                // our texts/handlers, three more are added, the box is widened, the title replaced.
+                static PS2Runtime::RecompiledFunction s_arcadeBau = runtime.lookupFunction(0x003E9C90u);
+                // the box width has to be set before the items exist (they take their position from it)
+                static PS2Runtime::RecompiledFunction s_menuNeuOrig = runtime.lookupFunction(0x0024C718u);
+                runtime.registerFunction(0x0024C718u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    if (s_lobbyBau) SET_GPR_U32(c, 5, s_lobbyModus >= 2 ? 0x170u : 0xF0u);
+                    s_menuNeuOrig(r, c, rt);
+                });
+                runtime.registerFunction(0x0024C8E0u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    s_neuItem(r, c, rt);
+                    if (s_lobbyBau) s_lobbyItems.push_back(GPR_U32(c, 2) & 0x1FFFFFFu);
+                });
+                runtime.registerFunction(kLobbyBau, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    const uint32_t screen = GPR_U32(c, 4) & 0x1FFFFFFu;
+                    s_lobbyItems.clear(); s_lobbyBau = true; s_lobbyModus = 1;
+                    ::ps2xGsBridgeOption(28, 1);   // fetch the server list in the background (Quick Match / browser)
+                    c->pc = 0x003E9C90u; s_arcadeBau(r, c, rt);
+                    s_lobbyBau = false;
+                    // ---- right panel: profile (name, level/rank, XP, kills) as a second, non-selectable menu ----
+                    {
+                        const R5900Context save = *c;
+                        auto rufe = [&](PS2Runtime::RecompiledFunction f, uint32_t adr, uint32_t a0, uint32_t a1, uint32_t a2) -> uint32_t {
+                            SET_GPR_U32(c, 4, a0); SET_GPR_U32(c, 5, a1); SET_GPR_U32(c, 6, a2); SET_GPR_U32(c, 31, 0x003E9E28u);
+                            c->pc = adr; f(r, c, rt); return GPR_U32(c, 2); };
+                        auto w32 = [&](uint32_t a, uint32_t v) { std::memcpy(r + (a & 0x1FFFFFCu), &v, 4); };
+                        auto r32 = [&](uint32_t a) { uint32_t v; std::memcpy(&v, r + (a & 0x1FFFFFCu), 4); return v; };
+                        auto wf = [&](uint32_t a, float v) { std::memcpy(r + (a & 0x1FFFFFCu), &v, 4); };
+                        auto rf2 = [&](uint32_t a) { float v; std::memcpy(&v, r + (a & 0x1FFFFFCu), 4); return v; };
+                        uint32_t tp = kLobbyText + 0x400u;
+                        auto text = [&](const std::string &t) { const uint32_t a = tp; std::memcpy(r + a, t.c_str(), t.size() + 1); tp += static_cast<uint32_t>((t.size() + 16) & ~15u); return a; };
+                        // nickname from the settings (online_name), otherwise "Player"
+                        const std::string name = opName();
+                        static const char *kRang[] = {"Recruit", "Private", "Corporal", "Sergeant", "Lieutenant", "Captain", "Major", "Colonel", "Commander", "General", "Legend"};
+                        const int lv = ::ps2xGsBridgeOption(24, 1), xp = ::ps2xGsBridgeOption(25, 0), kills = ::ps2xGsBridgeOption(26, 0), naechst = ::ps2xGsBridgeOption(27, 500);
+                        const std::string zeilen[] = {name, kRang[std::clamp(lv / 5, 0, 10)], "Level " + std::to_string(lv),
+                                                      "XP " + std::to_string(xp), "Kills " + std::to_string(kills)};
+                        (void)naechst;
+                        const uint32_t m1 = s_lobbyMenu;
+                        const uint32_t m2 = rufe(s_menuNeuOrig, 0x0024C718u, screen, 0xD0u, 0u) & 0x1FFFFFFu;
+                        if (m2 && m2 < 0x1FFF000u)
+                        {
+                            for (const auto &z : zeilen)
+                            {
+                                const uint32_t it = rufe(s_neuItem, 0x0024C8E0u, m2, 0x23u, 0x100u) & 0x1FFFFFFu;
+                                if (!it || it >= 0x1FFF000u) continue;
+                                w32(it + 0x20, text(z)); w32(it + 0x1C, 0x15u); w32(it + 0x24, 3u);
+                                w32(it + 0x34, rufe(s_breite, 0x002533F8u, it, 0u, 0u)); w32(it + 0x38, 5u); w32(it + 0x30, 0u);
+                                w32(it + 0x28, r32(it + 0x28) | 1u);   // not selectable
+                            }
+                            w32(m2 + 0x2C, 0x1Eu); w32(m2 + 0x30, 0x1Au); w32(m2 + 0x24, 0u);
+                            w32(m2 + 0x28, r32(m2 + 0x14)); w32(m2 + 0x20, r32(m2 + 0x14));
+                            wf(m2 + 0x18, static_cast<float>(static_cast<int32_t>(rufe(s_origLayout, 0x00253498u, m2, 0u, 0u))));
+                            wf(m2 + 0x1C, static_cast<float>(static_cast<int32_t>(rufe(s_lay2, 0x002534B0u, m2, 0u, 0u))));
+                            // side by side: lobby menu left, profile right (same top)
+                            if (m1)
+                            {
+                                const float b1 = static_cast<float>(r32(m1 + 0x10)), b2 = static_cast<float>(r32(m2 + 0x10));
+                                const float gesamt = b1 + 16.0f + b2, x0 = 320.0f - gesamt * 0.5f - 24.0f;   // a little left: the right edge of the picture clips
+                                std::fprintf(stderr, "[Online+] lobby panels: menu1 x %.0f y %.0f, menu2 x %.0f y %.0f\n", rf2(m1 + 0x18), rf2(m1 + 0x1C), rf2(m2 + 0x18), rf2(m2 + 0x1C));
+                                wf(m1 + 0x18, x0); wf(m2 + 0x18, x0 + b1 + 16.0f); wf(m2 + 0x1C, rf2(m1 + 0x1C));
+                            }
+                            w32(m2 + 0x188, 2u); w32(m2 + 0x184, r32(screen + 0x830) + 0xA);
+                            rufe(s_f24db58, 0x0024DB58u, m2, 0u, 0u);
+                            rufe(s_f2530e0, 0x002530E0u, m2, 0u, 0u);
+                            rufe(s_f2507a8, 0x002507A8u, m2, 0u, 0u);
+                        }
+                        *c = save;
+                    }
+                    const char titel[] = "Online+ Lobby";
+                    std::memcpy(r + kLobbyText, titel, sizeof titel);
+                    uint32_t tp = kLobbyText; std::memcpy(r + ((screen + 0x828) & 0x1FFFFFCu), &tp, 4);
+                    std::fprintf(stderr, "[Online+] lobby screen built (%zu items)\n", s_lobbyItems.size());
+                });
+                // item handlers: 0 quick match / 1 create lobby -> the game's network menu for now; 5 back
+                // (function pointers without captures: one small lambda per item)
+                static void (*s_lobbyItem)(int, uint8_t *, R5900Context *, PS2Runtime *) = [](int i, uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    std::fprintf(stderr, "[Online+] lobby item %d\n", i);
+                    if (i == 0)
+                    {
+                        // Quick Match: no server chosen yet -> the best answering one from the list (most players, lowest ping)
+                        std::lock_guard<std::mutex> lk(g_opServerM);
+                        char buf[512]; ::ps2xGsBridgeTextGet(2, buf, sizeof buf);
+                        if (g_opServerWahl.empty() && !buf[0])
+                        {
+                            static char liste[8192]; ::ps2xGsBridgeTextGet(1, liste, sizeof liste);
+                            const std::string l(liste); const size_t t = l.find('\t');
+                            if (t != std::string::npos) { g_opServerWahl = l.substr(0, t); ::ps2xGsBridgeText(4, g_opServerWahl.c_str()); std::fprintf(stderr, "[Online+] quick match: server %s\n", g_opServerWahl.c_str()); }
+                        }
+                    }
+                    // Bot Match: the game's own Arcade "Custom" setup (bots, map, rules) - offline against bots
+                    if (i == 3) { static PS2Runtime::RecompiledFunction s_custom = rt->lookupFunction(0x003E9C40u); if (s_custom) { c->pc = 0x003E9C40u; s_custom(r, c, rt); return; } }
+                    if (i == 4 && s_screen) { SET_GPR_U32(c, 4, kProfilDesc); c->pc = 0x003D5A98u; s_screen(r, c, rt); return; }
+                    if (i == 2 && s_screen) { SET_GPR_U32(c, 4, kBrowserDesc); c->pc = 0x003D5A98u; s_screen(r, c, rt); return; }
+                    if ((i == 0 || i == 1) && s_netzMenue) { c->pc = 0x003E9C70u; s_netzMenue(r, c, rt); return; }
+                    if (i == 5 && s_zurueck) { c->pc = 0x003D5A10u; s_zurueck(r, c, rt); return; }
+                    SET_GPR_U32(c, 2, 0u); c->pc = GPR_U32(c, 31);
+                };
+                runtime.registerFunction(kLobbyItemAdr[0], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_lobbyItem(0, r, c, rt); });
+                runtime.registerFunction(kLobbyItemAdr[1], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_lobbyItem(1, r, c, rt); });
+                runtime.registerFunction(kLobbyItemAdr[2], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_lobbyItem(2, r, c, rt); });
+                runtime.registerFunction(kLobbyItemAdr[3], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_lobbyItem(3, r, c, rt); });
+                runtime.registerFunction(kLobbyItemAdr[4], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_lobbyItem(4, r, c, rt); });
+                runtime.registerFunction(kLobbyItemAdr[5], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_lobbyItem(5, r, c, rt); });
+                // ---- in-game server browser screen ----
+                {
+                    uint8_t *r0 = runtime.memory().getRDRAM();
+                    const uint32_t desc[6] = {kBrowserUpd, 0x003E9F08u, 0u, 0u, kBrowserBau, 0u};
+                    std::memcpy(r0 + kBrowserDesc, desc, sizeof desc);
+                }
+                static PS2Runtime::RecompiledFunction s_updGen = runtime.lookupFunction(0x003E9F40u);
+                runtime.registerFunction(kBrowserBau, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    const uint32_t screen = GPR_U32(c, 4) & 0x1FFFFFFu;
+                    ::ps2xGsBridgeOption(28, 1);
+                    s_lobbyItems.clear(); s_lobbyBau = true; s_lobbyModus = 2; s_seite = 2;
+                    c->pc = 0x003E9C90u; s_arcadeBau(r, c, rt);
+                    s_lobbyBau = false; s_lobbyModus = 1;
+                    const char titel[] = "Server Browser";
+                    std::memcpy(r + kLobbyText + 0x10, titel, sizeof titel);
+                    uint32_t tp = kLobbyText + 0x10; std::memcpy(r + ((screen + 0x828) & 0x1FFFFFCu), &tp, 4);
+                    std::fprintf(stderr, "[Online+] server browser built (%zu servers)\n", s_browserAdr.size());
+                });
+                {
+                    uint8_t *r0 = runtime.memory().getRDRAM();
+                    const uint32_t desc[6] = {kBrowserUpd, 0x003E9F08u, 0u, 0u, kProfilBau, 0u};
+                    std::memcpy(r0 + kProfilDesc, desc, sizeof desc);
+                }
+                // ---- Profile & Ranks screen: name, rank, level, XP to the next level, kills, next rank ----
+                runtime.registerFunction(kProfilBau, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    const uint32_t screen = GPR_U32(c, 4) & 0x1FFFFFFu;
+                    static const char *kRang[] = {"Recruit", "Private", "Corporal", "Sergeant", "Lieutenant", "Captain", "Major", "Colonel", "Commander", "General", "Legend"};
+                    const int lv = ::ps2xGsBridgeOption(24, 1), xp = ::ps2xGsBridgeOption(25, 0), kills = ::ps2xGsBridgeOption(26, 0), naechst = ::ps2xGsBridgeOption(27, 500);
+                    const int rg = std::clamp(lv / 5, 0, 10);
+                    s_profilZeilen = {opName(), "Rank: " + std::string(kRang[rg]), "Level " + std::to_string(lv),
+                                      "XP " + std::to_string(xp) + " / " + std::to_string(naechst), "Kills " + std::to_string(kills),
+                                      rg < 10 ? "Next rank: " + std::string(kRang[rg + 1]) + " (Lv " + std::to_string((rg + 1) * 5) + ")" : std::string("Top rank reached"),
+                                      " ", "Back"};
+                    s_lobbyItems.clear(); s_lobbyBau = true; s_lobbyModus = 3; s_seite = 3;
+                    c->pc = 0x003E9C90u; s_arcadeBau(r, c, rt);
+                    s_lobbyBau = false; s_lobbyModus = 1;
+                    // info rows are not selectable: only "Back" (last row)
+                    for (int i = 0; i < kBrowserN - 1; ++i) { const uint32_t it = s_browserItem[i]; if (it && it < 0x1FFF000u) { uint32_t f; std::memcpy(&f, r + it + 0x28, 4); f |= 1u; std::memcpy(r + it + 0x28, &f, 4); } }
+                    const char titel[] = "Profile & Ranks";
+                    std::memcpy(r + kBrowserText + 0x300u, titel, sizeof titel);
+                    uint32_t tp = kBrowserText + 0x300u; std::memcpy(r + ((screen + 0x828) & 0x1FFFFFCu), &tp, 4);
+                    std::fprintf(stderr, "[Online+] profile screen built (level %d)\n", lv);
+                });
+                // update: the game's generic menu update, plus refreshing the rows twice a second while the list changes
+                runtime.registerFunction(kBrowserUpd, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    const R5900Context save = *c;
+                    static int n = 0;
+                    if (s_seite == 2 && ++n % 30 == 0 && s_breite)
+                    {
+                        const std::vector<std::string> bz = browserZeilen();
+                        for (int i = 0; i < kBrowserServer; ++i)
+                        {
+                            const uint32_t it = s_browserItem[i]; if (!it || it >= 0x1FFF000u) continue;
+                            const uint32_t ta = kBrowserText + static_cast<uint32_t>(i) * 0x40u; const std::string &t = bz[static_cast<size_t>(i)];
+                            if (std::strncmp(reinterpret_cast<const char *>(r + ta), t.c_str(), 0x3F) == 0) continue;
+                            std::memcpy(r + ta, t.c_str(), std::min<size_t>(t.size() + 1, 0x3F)); r[ta + 0x3F] = 0;
+                            SET_GPR_U32(c, 4, it); SET_GPR_U32(c, 31, kBrowserUpd); c->pc = 0x002533F8u; s_breite(r, c, rt);
+                            const uint32_t w = GPR_U32(c, 2); std::memcpy(r + ((it + 0x34) & 0x1FFFFFCu), &w, 4);
+                            *c = save;
+                        }
+                    }
+                    c->pc = 0x003E9F40u; s_updGen(r, c, rt);
+                });
+                static void (*s_browserItemFn)(int, uint8_t *, R5900Context *, PS2Runtime *) = [](int i, uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    if (s_seite == 3) { if (i == kBrowserN - 1 && s_zurueck) { c->pc = 0x003D5A10u; s_zurueck(r, c, rt); return; } }
+                    else if (i < kBrowserServer && i < static_cast<int>(s_browserAdr.size()))
+                    {
+                        { std::lock_guard<std::mutex> lk(g_opServerM); g_opServerWahl = s_browserAdr[static_cast<size_t>(i)]; }
+                        ::ps2xGsBridgeText(4, s_browserAdr[static_cast<size_t>(i)].c_str());
+                        std::fprintf(stderr, "[Online+] server chosen: %s\n", s_browserAdr[static_cast<size_t>(i)].c_str());
+                        if (s_netzMenue) { c->pc = 0x003E9C70u; s_netzMenue(r, c, rt); return; }
+                    }
+                    else if (i == kBrowserN - 2) ::ps2xGsBridgeOption(28, 1);   // Refresh
+                    else if (i == kBrowserN - 1 && s_zurueck) { c->pc = 0x003D5A10u; s_zurueck(r, c, rt); return; }
+                    SET_GPR_U32(c, 2, 0u); c->pc = GPR_U32(c, 31);
+                };
+                runtime.registerFunction(kBrowserItemAdr[0], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(0, r, c, rt); });
+                runtime.registerFunction(kBrowserItemAdr[1], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(1, r, c, rt); });
+                runtime.registerFunction(kBrowserItemAdr[2], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(2, r, c, rt); });
+                runtime.registerFunction(kBrowserItemAdr[3], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(3, r, c, rt); });
+                runtime.registerFunction(kBrowserItemAdr[4], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(4, r, c, rt); });
+                runtime.registerFunction(kBrowserItemAdr[5], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(5, r, c, rt); });
+                runtime.registerFunction(kBrowserItemAdr[6], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(6, r, c, rt); });
+                runtime.registerFunction(kBrowserItemAdr[7], [](uint8_t *r, R5900Context *c, PS2Runtime *rt) { s_browserItemFn(7, r, c, rt); });
+                runtime.registerFunction(kHandler, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    std::fprintf(stderr, "[Online+] main menu item selected -> lobby screen\n");
+                    ::ps2xGsBridgeOption(17, 1);
+                    if (s_screen) { SET_GPR_U32(c, 4, kLobbyDesc); c->pc = 0x003D5A98u; s_screen(r, c, rt); return; }
+                    SET_GPR_U32(c, 2, 0u);
+                    c->pc = GPR_U32(c, 31);
+                });
+                // Flush the Online+ message queue from the game thread: 0x367B60 (number of players) is asked many times per
+                // frame while a match runs. After the original call the queued texts go to screen 0 through 0x32A9B0.
+                static PS2Runtime::RecompiledFunction s_anzahl = runtime.lookupFunction(0x00367B60u);
+                static PS2Runtime::RecompiledFunction s_melden = runtime.lookupFunction(0x0032A9B0u);
+                if (s_anzahl && s_melden)
+                    runtime.registerFunction(0x00367B60u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                        s_anzahl(r, c, rt);
+                        static bool drin = false;
+                        if (drin) return;
+                        // TS2_MELDETEST="tick:type:text;..." (tests): push texts at VBlank ticks
+                        static std::vector<std::tuple<uint64_t, int, std::string>> test = [] {
+                            std::vector<std::tuple<uint64_t, int, std::string>> v; const char *e = std::getenv("TS2_MELDETEST"); if (!e) return v;
+                            std::string all(e); size_t p = 0;
+                            while (p < all.size()) { size_t q2 = all.find(';', p); std::string it = all.substr(p, q2 == std::string::npos ? std::string::npos : q2 - p);
+                                unsigned long long tk = 0; int ty = 0; const size_t c1 = it.find(':'), c2 = it.find(':', c1 + 1);
+                                if (c1 != std::string::npos && c2 != std::string::npos) { tk = std::strtoull(it.c_str(), nullptr, 10); ty = std::atoi(it.c_str() + c1 + 1); v.emplace_back(tk, ty, it.substr(c2 + 1)); }
+                                if (q2 == std::string::npos) break; p = q2 + 1; }
+                            return v; }();
+                        if (!test.empty())
+                        {
+                            const uint64_t tk = rt->memory().gs().vsyncTick.load();
+                            for (auto it = test.begin(); it != test.end();) { if (std::get<0>(*it) <= tk) { ts2melde::push(std::get<2>(*it), std::get<1>(*it)); it = test.erase(it); } else ++it; }
+                        }
+                        std::string t; int typ = 3;
+                        if (!ts2melde::pop(t, typ)) return;
+                        drin = true;
+                        constexpr uint32_t kPuffer = 0x000F0100u;   // free RAM (like the menu text at 0xF0000)
+                        if (t.size() > 100) t.resize(100);
+                        std::memcpy(r + kPuffer, t.c_str(), t.size() + 1);
+                        const R5900Context save = *c;
+                        SET_GPR_U32(c, 4, 0u); SET_GPR_U32(c, 5, static_cast<uint32_t>(std::clamp(typ, 1, 6))); SET_GPR_U32(c, 6, kPuffer);
+                        float null = 0.0f; std::memcpy(&c->f[12], &null, 4);
+                        SET_GPR_U32(c, 31, 0x00367B60u); c->pc = 0x0032A9B0u;
+                        s_melden(r, c, rt);
+                        *c = save;
+                        drin = false;
+                        static const bool lg = std::getenv("TS2_IMPACT_LOG") != nullptr;
+                        if (lg) std::fprintf(stderr, "[melde] type %d: %s\n", typ, t.c_str());
+                    });
+            }
+        }
+        // Diagnosis: how often do the GS handler (frame done, INTC 0) and the render timeout alarm fire?
         static PS2Runtime::RecompiledFunction s_origGs = runtime.lookupFunction(0x0020267Cu);
         static PS2Runtime::RecompiledFunction s_origAlarm = runtime.lookupFunction(0x00202150u);
         static std::atomic<uint64_t> s_gsHits{0}, s_alarmHits{0};
@@ -2369,19 +3511,19 @@ namespace
             runtime.registerFunction(0x00202150u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
                 const uint64_t n = ++s_alarmHits;
                 if (n <= 5 || n % 100 == 0)
-                    std::fprintf(stderr, "[TS2] Render-Timeout-Alarm #%llu bei vsync %llu (GS-Handler bisher %llu)\n", (unsigned long long)n,
+                    std::fprintf(stderr, "[TS2] render timeout alarm #%llu at vsync %llu (GS handler so far %llu)\n", (unsigned long long)n,
                                  (unsigned long long)rt->memory().gs().vsyncTick.load(), (unsigned long long)s_gsHits.load());
                 s_origAlarm(r, c, rt); });
-        // TS2_FPUTEST=1: uebersetzte libm-Funktionen des Spiels mit Grenzwerten aufrufen (PS2-FPU: kein Inf/NaN, x/0 = +-Fmax)
+        // TS2_FPUTEST=1: call the game's translated libm functions with edge values (PS2 FPU: no Inf/NaN, x/0 = +-Fmax)
         if (std::getenv("TS2_FPUTEST"))
         {
             struct T { const char *name; uint32_t addr; } fns[] = {{"acosf", 0x00484870u}, {"sinf", 0x00483DA8u}, {"cosf", 0x00483CA8u}};
             const uint32_t ins[] = {0xC1233333u /*-10.2*/, 0x3F800001u /*1.0000001*/, 0x3F800000u, 0x7F7FFFFFu /*+Fmax*/, 0xFF7FFFFFu,
-                                    0x7F800000u /*Inf-Muster*/, 0x7FC00000u /*NaN-Muster*/, 0x4B800000u /*2^24*/, 0x40490FDBu /*pi*/};
+                                    0x7F800000u /*Inf pattern*/, 0x7FC00000u /*NaN pattern*/, 0x4B800000u /*2^24*/, 0x40490FDBu /*pi*/};
             for (const auto &fn : fns)
             {
                 auto f = runtime.lookupFunction(fn.addr);
-                if (!f) { std::fprintf(stderr, "[FPUTEST] %s fehlt\n", fn.name); continue; }
+                if (!f) { std::fprintf(stderr, "[FPUTEST] %s missing\n", fn.name); continue; }
                 for (uint32_t in : ins)
                 {
                     R5900Context c{};
@@ -2401,22 +3543,22 @@ namespace
 PS2_REGISTER_GAME_OVERRIDE("TimeSplitters 2 (NTSC-U)", "SLUS_203.14", 0x00200008u, 0u, applyTs2)
 
 // =====================================================================================================================
-// Online-Mehrspieler (virtuelles LAN ueber einen TS2-Server, siehe src/server/ts2_server.cpp)
+// Online multiplayer (virtual LAN through a TS2 server, see src/server/ts2_server.cpp)
 //
-// TS2 hat einen LAN-Modus fuer den PS2-Netzwerkadapter. Kette im Original:
-//   Boot: DEV9.IRX (Ergebnis 0 = Adapter da) -> Netzwerk-Menue -> INET/NETCNF/EZNETCNF laden -> Netzwerk-Konfiguration
-//   von der Memory Card (ezNetCnf) -> INETCTL/SMAP/MSIFRPC/LIBNETB -> Verbindung (ezNetCtl) -> spieleigene Socket-
-//   Schicht (0x479178 Open, 0x479378 SendTo, ...) auf libnet (Sony INET ueber SIF-RPC + Ringpuffer im IOP).
-// Ersetzt wird:
-//   * das Modul-Laden (0x44B000/0x44B020): DEV9 meldet "Adapter da", die Netzwerkmodule gelten als geladen
-//   * ezNetCnf/ezNetCtl: eine Konfiguration "TS2 Online", Verbindung sofort "verbunden"
-//   * das Backend der Socket-Schicht (0x479F90.., 16 Einstiege): statt libnet ein Tunnel zum TS2-Server.
-//     Jeder Spieler bekommt dort eine virtuelle IP 10.13.x.y; Broadcasts (Spielsuche) gehen an alle auf dem Server.
-// Spiel-Typen der Socket-Schicht: 0 TCP verbinden, 1 UDP, 2 TCP warten (Gegenstelle verbindet), 3 ICMP (Ping).
-// Fehlercodes des Backends: 0 ok, 1 Fehler, 2 Parameter, 5 nicht initialisiert, 0xD Verbindung beendet.
+// TS2 has a LAN mode for the PS2 network adapter. The chain in the original:
+//   Boot: DEV9.IRX (result 0 = adapter present) -> network menu -> load INET/NETCNF/EZNETCNF -> network configuration
+//   from the memory card (ezNetCnf) -> INETCTL/SMAP/MSIFRPC/LIBNETB -> connection (ezNetCtl) -> the game's own socket
+//   layer (0x479178 Open, 0x479378 SendTo, ...) on top of libnet (Sony INET through SIF RPC + ring buffers on the IOP).
+// Replaced:
+//   * module loading (0x44B000/0x44B020): DEV9 reports "adapter present", the network modules count as loaded
+//   * ezNetCnf/ezNetCtl: one configuration "TS2 Online", connection "connected" right away
+//   * the backend of the socket layer (0x479F90.., 16 entry points): a tunnel to the TS2 server instead of libnet.
+//     Every player gets a virtual IP 10.13.x.y there; broadcasts (game search) go to everyone on the server.
+// Socket types of the game layer: 0 TCP connect, 1 UDP, 2 TCP wait (the peer connects), 3 ICMP (ping).
+// Backend error codes: 0 ok, 1 error, 2 parameter, 5 not initialised, 0xD connection closed.
 //
-// Einschalten: TS2_ONLINE_SERVER=host[:port] (Standardport 27713), TS2_ONLINE_NAME, TS2_ONLINE_PASSWORT
-// oder ~/.config/ts2-native/online.ini (server=, name=, passwort=). TS2_NETLOG=1: jeden Aufruf protokollieren.
+// Enable: TS2_ONLINE_SERVER=host[:port] (default port 27713), TS2_ONLINE_NAME, TS2_ONLINE_PASSWORT
+// or ~/.config/ts2-native/online.ini (server=, name=, passwort=). TS2_NETLOG=1: log every call.
 // =====================================================================================================================
 #include <condition_variable>
 #include <deque>
@@ -2440,6 +3582,16 @@ namespace ts2netz
 #elif defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
+// Laptops with two graphics chips: Nvidia and AMD drivers read these two symbols from the program file and then run the
+// game on the fast card instead of the power-saving one (without them Windows picked the Intel chip - laptop test,
+// GTX 1050: "Intel(R) HD Graphics 630"). They have to be exported from the .exe itself, a DLL does not count.
+#ifdef _WIN32
+extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
 #define TS2_NETZ_SOCKETS 1
 namespace ts2netz
 {
@@ -2452,9 +3604,9 @@ namespace ts2netz
 #else
 #define TS2_NETZ_SOCKETS 0
 #endif
-void sub_0044ADD8_0x44add8(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime); // Stub sceSifLoadModule (generiert)
-void ps2xGsBridgeOnlineBrowser();                   // gs_frontend.cpp: Serverbrowser im Spielmenue oeffnen
-void ps2xGsBridgeOnlineStatus(const char *text);    // gs_frontend.cpp: Verbindungsstatus im Serverbrowser
+void sub_0044ADD8_0x44add8(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime); // Stub sceSifLoadModule (generated)
+void ps2xGsBridgeOnlineBrowser();                   // gs_frontend.cpp: open the server browser in the game menu
+void ps2xGsBridgeOnlineStatus(const char *text);    // gs_frontend.cpp: connection status in the server browser
 
 namespace ts2netz
 {
@@ -2464,7 +3616,7 @@ namespace ts2netz
     enum : uint8_t
     {
         M_HELLO = 1, M_WELCOME = 2, M_REJECT = 3, M_DGRAM = 10, M_SCONNECT = 20, M_SINCOMING = 21, M_SACCEPT = 22,
-        M_SRESULT = 23, M_SDATA = 24, M_SCLOSE = 25, M_PING = 30, M_KEEPALIVE = 40, M_INFO = 41,
+        M_SRESULT = 23, M_SDATA = 24, M_SCLOSE = 25, M_PING = 30, M_KEEPALIVE = 40, M_INFO = 41, M_OPSTAT = 50, M_OPPROFIL = 51,
     };
 
     struct Konfig
@@ -2483,7 +3635,7 @@ namespace ts2netz
         return s.substr(i);
     }
 
-    // Einstellungsdatei des Spielmenues (ESC/F1 -> Online): <XDG_CONFIG_HOME|~/.config>/<PS2XGS_CFGNAME>/einstellungen.ini
+    // Settings file of the game menu (ESC/F1 -> Online): <XDG_CONFIG_HOME|~/.config>/<PS2XGS_CFGNAME>/einstellungen.ini
     inline std::string iniPfad()
     {
         if (const char *c = std::getenv("PS2XGS_CFG"); c && *c) return c;
@@ -2492,6 +3644,28 @@ namespace ts2netz
         const char *name = std::getenv("PS2XGS_CFGNAME");
         const std::string basis = xdg && *xdg ? std::string(xdg) : std::string(home ? home : ".") + "/.config";
         return basis + "/" + (name && *name ? name : "ts2-recomp") + "/einstellungen.ini";
+    }
+
+    // Online+ profile: a random id + secret key, created once and kept in onlineplus_profil.ini next to the settings
+    // (the launcher's update backups include it). The server keeps level/XP per id, so the rank stays with the player
+    // on every server and computer; nobody else can write to it without the key. No personal data is involved.
+    std::string profilDatei() { std::string p = iniPfad(); const size_t e = p.find_last_of("/\\"); return (e == std::string::npos ? std::string(".") : p.substr(0, e)) + "/onlineplus_profil.ini"; }
+    bool profil(std::string &id, std::string &schluessel)
+    {
+        std::ifstream in(profilDatei());
+        for (std::string z; std::getline(in, z);)
+        {
+            if (z.rfind("id=", 0) == 0) id = trim(z.substr(3));
+            else if (z.rfind("schluessel=", 0) == 0) schluessel = trim(z.substr(11));
+        }
+        auto ok = [](const std::string &h) { return h.size() == 32 && h.find_first_not_of("0123456789abcdef") == std::string::npos; };
+        if (ok(id) && ok(schluessel)) return true;
+        std::random_device rd;
+        auto hex = [&] { std::string h; for (int i = 0; i < 4; ++i) { char b[9]; std::snprintf(b, sizeof b, "%08x", rd()); h += b; } return h; };
+        id = hex(); schluessel = hex();
+        std::ofstream out(profilDatei());
+        out << "# Online+ profile (keep this file: it holds your rank on the Online+ servers)\nid=" << id << "\nschluessel=" << schluessel << "\n";
+        return static_cast<bool>(out);
     }
 
     Konfig lesen()
@@ -2510,10 +3684,12 @@ namespace ts2netz
             else if (key == "online_passwort") pw = val;
         }
 #endif
+        { std::lock_guard<std::mutex> lk(g_opServerM); if (!g_opServerWahl.empty()) server = g_opServerWahl; }   // Online+ in-game browser
         if (const char *e = std::getenv("TS2_ONLINE_SERVER")) server = e;
         if (const char *e = std::getenv("TS2_ONLINE_NAME")) name = e;
         if (const char *e = std::getenv("TS2_ONLINE_PASSWORT")) pw = e;
-        if (name.empty()) { const char *u = std::getenv("USER"); name = u && *u ? u : "Spieler"; }
+        // never the system user name (it would be sent to a public server): a neutral default instead
+        if (name.empty()) { std::random_device rd; name = "Player" + std::to_string(1000 + rd() % 9000); }
         server = trim(server);
         if (!server.empty())
         {
@@ -2544,7 +3720,7 @@ namespace ts2netz
         return k;
     }
 
-    // Netzwerkadapter melden: immer (Online-Modus waehlbar), ausser TS2_ONLINE=0 oder ohne Socket-Unterstuetzung
+    // Report the network adapter: always (online mode selectable), except with TS2_ONLINE=0 or without socket support
     inline bool adapterAn()
     {
         static const bool an = [] { const char *e = std::getenv("TS2_ONLINE"); return TS2_NETZ_SOCKETS && !(e && *e == '0'); }();
@@ -2578,9 +3754,9 @@ namespace ts2netz
         int typ = 1;
         uint16_t lport = 0;
         std::deque<Datagramm> rx;        // UDP
-        uint32_t sid = 0, cid = 0;       // TCP-Strom
-        int zustand = 0;                 // 0 wartet, 1 verbindet, 2 offen, 3 beendet/abgelehnt
-        std::string srx;                 // TCP-Empfangspuffer
+        uint32_t sid = 0, cid = 0;       // TCP stream
+        int zustand = 0;                 // 0 waiting, 1 connecting, 2 open, 3 closed/refused
+        std::string srx;                 // TCP receive buffer
         uint32_t peerVip = 0;
         uint16_t peerPort = 0;
         std::deque<PingAntwort> prx;     // ICMP
@@ -2592,7 +3768,7 @@ namespace ts2netz
     public:
         std::mutex m;
         std::condition_variable cv;
-        int zustand = 0; // 0 aus, 1 verbindet, 2 online, 3 Fehler
+        int zustand = 0; // 0 off, 1 connecting, 2 online, 3 error
         std::string fehler, servername, motd;
         uint32_t vip = 0, token = 0;
         int spieler = 0;
@@ -2601,7 +3777,7 @@ namespace ts2netz
         uint16_t naechsterPort = 50000;
         uint32_t naechsteCid = 1;
 
-        // Start (idempotent); wartet bis online oder Fehler, hoechstens ms
+        // Start (idempotent); waits until online or error, at most ms
         bool online(int ms)
         {
             std::unique_lock<std::mutex> l(m);
@@ -2616,7 +3792,7 @@ namespace ts2netz
             return zustand == 2;
         }
 
-        // Verbindung zum Server trennen (z. B. anderer Server gewaehlt); Spiel-Sockets werden verworfen
+        // Disconnect from the server (e.g. another server was chosen); game sockets are dropped
         void beenden()
         {
             {
@@ -2631,7 +3807,7 @@ namespace ts2netz
             trennen = false;
             socks.clear();
             vip = 0;
-            std::fprintf(stderr, "[ONLINE] Verbindung zum Server getrennt\n");
+            std::fprintf(stderr, "[ONLINE] disconnected from the server\n");
         }
 
         void senden(uint8_t typ, const std::string &nutz)
@@ -2647,7 +3823,7 @@ namespace ts2netz
 
         void datagramm(uint16_t srcport, uint32_t dstvip, uint16_t dstport, const uint8_t *d, size_t n)
         {
-            if (dstvip == vip) // an sich selbst
+            if (dstvip == vip) // to itself
             {
                 std::lock_guard<std::mutex> l(m);
                 zustellen(vip, srcport, dstport, d, n);
@@ -2666,7 +3842,7 @@ namespace ts2netz
             senden(M_DGRAM, p);
         }
 
-        // m muss gehalten sein
+        // m must be held
         void zustellen(uint32_t srcvip, uint16_t srcport, uint16_t dstport, const uint8_t *d, size_t n)
         {
             for (auto &kv : socks)
@@ -2683,7 +3859,7 @@ namespace ts2netz
 
     private:
         std::thread thread;
-        int tcp = -1, udp = -1, weck = -1; // weck: UDP-Socket an 127.0.0.1, weckt den Netzwerk-Thread (statt pipe, auch Windows)
+        int tcp = -1, udp = -1, weck = -1; // weck: UDP socket on 127.0.0.1 that wakes the network thread (instead of a pipe, also on Windows)
         sockaddr_in weckAdr{};
         sockaddr_storage srv{};
         socklen_t srvLen = 0;
@@ -2697,7 +3873,7 @@ namespace ts2netz
         void scheitern(const std::string &grund)
         {
             std::lock_guard<std::mutex> l(m);
-            if (zustand != 3) { std::fprintf(stderr, "[ONLINE] Verbindung: %s\n", grund.c_str()); ::ps2xGsBridgeOnlineStatus(("Nicht verbunden: " + grund).c_str()); }
+            if (zustand != 3) { std::fprintf(stderr, "[ONLINE] connection: %s\n", grund.c_str()); ::ps2xGsBridgeOnlineStatus(("Not connected: " + grund).c_str()); }
             fehler = grund;
             zustand = 3;
             for (auto &kv : socks) if (kv.second.typ == 0 || kv.second.typ == 2) if (kv.second.zustand < 3 && kv.second.zustand > 0) kv.second.zustand = 3;
@@ -2706,13 +3882,13 @@ namespace ts2netz
 
         bool verbinden()
         {
-            if (!netzStart()) { scheitern("Netzwerk (Winsock) nicht verfuegbar"); return false; }
+            if (!netzStart()) { scheitern("Network (Winsock) not available"); return false; }
             const Konfig &k = konfig();
             addrinfo hint{}, *res = nullptr;
             hint.ai_family = AF_UNSPEC;
             hint.ai_socktype = SOCK_STREAM;
             const std::string port = std::to_string(k.port);
-            if (getaddrinfo(k.host.c_str(), port.c_str(), &hint, &res) != 0 || !res) { scheitern("Server \"" + k.host + "\" nicht gefunden"); return false; }
+            if (getaddrinfo(k.host.c_str(), port.c_str(), &hint, &res) != 0 || !res) { scheitern("Server \"" + k.host + "\" not found"); return false; }
             for (addrinfo *a = res; a; a = a->ai_next)
             {
                 const int fd = int(::socket(a->ai_family, SOCK_STREAM, 0));
@@ -2732,7 +3908,7 @@ namespace ts2netz
                 netzSchliessen(fd);
             }
             freeaddrinfo(res);
-            if (tcp < 0) { scheitern("Server " + k.host + ":" + port + " antwortet nicht"); return false; }
+            if (tcp < 0) { scheitern("Server " + k.host + ":" + port + " does not answer"); return false; }
             int ja = 1;
             setsockopt(tcp, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char *>(&ja), sizeof ja);
             udp = int(::socket(srv.ss_family, SOCK_DGRAM, 0));
@@ -2755,9 +3931,19 @@ namespace ts2netz
                     motd = rest.find('\0') != std::string::npos ? rest.substr(rest.find('\0') + 1) : "";
                 }
                 zustand = 2;
-                std::fprintf(stderr, "[ONLINE] verbunden mit \"%s\" als %s%s%s\n", servername.c_str(), ipText(vip).c_str(),
+                {
+                    std::string id, sl;
+                    if (profil(id, sl))
+                    {
+                        std::string pr;
+                        auto bytes = [&](const std::string &h) { for (size_t i = 0; i + 1 < h.size(); i += 2) pr.push_back(char(std::stoi(h.substr(i, 2), nullptr, 16))); };
+                        bytes(id); bytes(sl);
+                        l.unlock(); senden(M_OPPROFIL, pr); l.lock();
+                    }
+                }
+                std::fprintf(stderr, "[ONLINE] connected to \"%s\" as %s%s%s\n", servername.c_str(), ipText(vip).c_str(),
                              motd.empty() ? "" : " - ", motd.c_str());
-                ::ps2xGsBridgeOnlineStatus(("Verbunden mit \"" + servername + "\"" + (motd.empty() ? "" : " - " + motd)).c_str());
+                ::ps2xGsBridgeOnlineStatus(("Connected to \"" + servername + "\"" + (motd.empty() ? "" : " - " + motd)).c_str());
                 cv.notify_all();
                 break;
             case M_REJECT:
@@ -2766,6 +3952,15 @@ namespace ts2netz
                 break;
             case M_INFO:
                 if (n >= 4) spieler = int(get32(p));
+                break;
+            case M_OPPROFIL:
+                // server copy of the profile: xp (2x u32), kills, hits -> the game shows the higher of local and server values
+                if (n >= 16)
+                {
+                    const uint64_t xp = uint64_t(get32(p)) | (uint64_t(get32(p + 4)) << 32);
+                    const std::string t = std::to_string(xp) + "\t" + std::to_string(get32(p + 8)) + "\t" + std::to_string(get32(p + 12));
+                    ::ps2xGsBridgeText(3, t.c_str());
+                }
                 break;
             case M_DGRAM:
                 if (n >= 8) zustellen(get32(p), get16(p + 4), get16(p + 6), p + 8, n - 8);
@@ -2791,7 +3986,7 @@ namespace ts2netz
                 put32(r, sid);
                 r.push_back(ok ? 1 : 0);
                 senden(M_SACCEPT, r);
-                if (konfig().log) std::fprintf(stderr, "[ONLINE] eingehend von %s:%u an Port %u -> %s\n", ipText(src).c_str(), sport, dport, ok ? "angenommen" : "abgelehnt");
+                if (konfig().log) std::fprintf(stderr, "[ONLINE] incoming from %s:%u to port %u -> %s\n", ipText(src).c_str(), sport, dport, ok ? "angenommen" : "abgelehnt");
                 break;
             }
             case M_SRESULT:
@@ -2829,7 +4024,7 @@ namespace ts2netz
                 if (n < 11) break;
                 const uint32_t von = get32(p);
                 const uint16_t id = get16(p + 4);
-                if (!p[10]) // Anfrage -> sofort beantworten
+                if (!p[10]) // query -> answer right away
                 {
                     l.unlock();
                     std::string r;
@@ -2857,7 +4052,7 @@ namespace ts2netz
                 if (n < 0) return;
                 if (n == 4 && std::memcmp(b, "T2OK", 4) == 0)
                 {
-                    if (!udpOk.exchange(true)) std::fprintf(stderr, "[ONLINE] UDP-Kanal aktiv\n");
+                    if (!udpOk.exchange(true)) std::fprintf(stderr, "[ONLINE] UDP channel active\n");
                     continue;
                 }
                 if (n < 8) continue;
@@ -2890,6 +4085,7 @@ namespace ts2netz
             }
             auto letzteReg = std::chrono::steady_clock::now() - std::chrono::seconds(10);
             auto letzterKeep = std::chrono::steady_clock::now();
+            g_opTrefferOffen = 0; g_opKillsOffen = 0;   // only what happens while connected counts on the server
             for (;;)
             {
                 const auto jetzt = std::chrono::steady_clock::now();
@@ -2900,7 +4096,13 @@ namespace ts2netz
                     put32(r, token); put32(r, vip); put16(r, 0); put32(r, 0); put16(r, 0);
                     (void)::sendto(udp, r.data(), 12, 0, reinterpret_cast<sockaddr *>(&srv), srvLen);
                 }
-                if (jetzt - letzterKeep > std::chrono::seconds(5)) { letzterKeep = jetzt; senden(M_KEEPALIVE, ""); }
+                if (jetzt - letzterKeep > std::chrono::seconds(5))
+                {
+                    letzterKeep = jetzt; senden(M_KEEPALIVE, "");
+                    // Online+: report hits/kills to the server (servers without Online+ ignore the message)
+                    const uint32_t h = g_opTrefferOffen.exchange(0), k = g_opKillsOffen.exchange(0);
+                    if (h || k) { std::string st; put32(st, h); put32(st, k); senden(M_OPSTAT, st); }
+                }
                 bool schreiben;
                 { std::lock_guard<std::mutex> l(ausM); schreiben = !aus.empty(); }
                 using fd_t = decltype(pollfd::fd);
@@ -2909,18 +4111,18 @@ namespace ts2netz
                 { std::lock_guard<std::mutex> l(m); if (trennen) break; }
                 if (weck >= 0 && (p[2].revents & POLLIN)) { char d[64]; while (::recv(weck, d, sizeof d, 0) > 0) {} }
                 if (p[1].revents & POLLIN) udpLesen();
-                if (p[0].revents & (POLLERR | POLLHUP)) { scheitern("Verbindung zum Server verloren"); break; }
+                if (p[0].revents & (POLLERR | POLLHUP)) { scheitern("Lost connection to the server"); break; }
                 if (p[0].revents & POLLIN)
                 {
                     char b[16384];
                     const int n = int(::recv(tcp, b, sizeof b, 0));
-                    if (n <= 0) { scheitern(zustand == 2 ? "Verbindung zum Server verloren" : "Server hat die Verbindung beendet"); break; }
+                    if (n <= 0) { scheitern(zustand == 2 ? "Lost connection to the server" : "Server closed the connection"); break; }
                     ein.append(b, size_t(n));
                     size_t pos = 0;
                     while (ein.size() - pos >= 5)
                     {
                         const uint32_t len = get32(reinterpret_cast<const uint8_t *>(ein.data() + pos));
-                        if (len == 0 || len > (1u << 20)) { scheitern("ungueltige Daten vom Server"); pos = ein.size(); break; }
+                        if (len == 0 || len > (1u << 20)) { scheitern("invalid data from the server"); pos = ein.size(); break; }
                         if (ein.size() - pos < 4 + len) break;
                         const uint8_t *msg = reinterpret_cast<const uint8_t *>(ein.data() + pos + 4);
                         nachricht(msg[0], msg + 1, len - 1);
@@ -2952,12 +4154,12 @@ namespace ts2netz
 
     Tunnel &tunnel()
     {
-        static Tunnel *t = new Tunnel(); // bewusst nie zerstoert (Thread laeuft bis Prozessende)
+        static Tunnel *t = new Tunnel(); // never destroyed on purpose (the thread runs until the process ends)
         return *t;
     }
 #endif
 
-    // ---- Helfer fuer Gastspeicher ----
+    // ---- Helpers for guest memory ----
     inline std::string gStr(uint8_t *rdram, uint32_t a, size_t max = 255)
     {
         std::string s;
@@ -2998,16 +4200,16 @@ namespace ts2netz
         if (adapterAn() && (dev9 || istNetzModul(pfad)))
         {
             static int naechsteId = 0x60;
-            if (ergebnis) g32(rdram, ergebnis, 0); // Modul "laeuft resident"
+            if (ergebnis) g32(rdram, ergebnis, 0); // module "stays resident"
             std::fprintf(stderr, "[ONLINE] Modul %s -> nachgebildet\n", pfad.c_str());
             ret(ctx, naechsteId++);
             leave(ctx);
             return;
         }
-        SET_GPR_U32(ctx, 8, 0); // t0 = 0 wie im Original
+        SET_GPR_U32(ctx, 8, 0); // t0 = 0 as in the original
         if (!mitErgebnis) SET_GPR_U32(ctx, 7, 0);
-        sub_0044ADD8_0x44add8(rdram, ctx, rt); // setzt pc = ra, v0 = Modul-ID
-        // Startergebnis: die Laufzeit schreibt es nicht. DEV9 ohne Online = kein Adapter (wie bisher praktisch auch).
+        sub_0044ADD8_0x44add8(rdram, ctx, rt); // sets pc = ra, v0 = module ID
+        // Start result: the runtime does not write it. DEV9 without online = no adapter (as before in practice).
         if (ergebnis) g32(rdram, ergebnis, dev9 ? 1u : 0u);
     }
     void ts2_LoadModule(uint8_t *rdram, R5900Context *ctx, PS2Runtime *rt) { ladeModul(rdram, ctx, rt, false); }
@@ -3029,15 +4231,15 @@ namespace ts2netz
         const uint32_t list = arg(ctx, 5);
         if (!adapterAn() || !list) { ret(ctx, 0); leave(ctx); return; }
         for (uint32_t i = 0; i < 0x30 + 0x68; i += 4) g32(rdram, list + i, 0);
-        g32(rdram, list + 0, 1); // Anzahl
-        g32(rdram, list + 4, 1); // Vorgabe (1-basiert)
+        g32(rdram, list + 0, 1); // count
+        g32(rdram, list + 4, 1); // default (1-based)
         const uint32_t e = list + 0x30;
         g32(rdram, e + 0, 1);
         gStrSchreiben(rdram, e + 0x04, "TS2 Online");
         gStrSchreiben(rdram, e + 0x28, "TS2 Online");
         gStrSchreiben(rdram, e + 0x48, "Server");
         std::fprintf(stderr, "[ONLINE] Netzwerk-Konfiguration \"TS2 Online\" bereitgestellt\n");
-        if (!std::getenv("TS2_ONLINE_SERVER")) ::ps2xGsBridgeOnlineBrowser(); // Serverbrowser zeigen (Spiel wartet im Menue)
+        if (!std::getenv("TS2_ONLINE_SERVER")) ::ps2xGsBridgeOnlineBrowser(); // show the server browser (the game waits in the menu)
         ret(ctx, 1);
         leave(ctx);
     }
@@ -3054,13 +4256,13 @@ namespace ts2netz
             const uint32_t st = arg(ctx, 4);
             g32(rdram, st + 0, 0);
             g32(rdram, st + 4, 0);
-            g32(rdram, st + 8, adapterAn() ? 1u : 0u); // 1 = verbunden
+            g32(rdram, st + 8, adapterAn() ? 1u : 0u); // 1 = connected
         }
         ret(ctx, 0);
         leave(ctx);
     }
 
-    // ---- Backend der Socket-Schicht ----
+    // ---- Backend of the socket layer ----
     void backend(uint8_t *rdram, R5900Context *ctx, PS2Runtime *)
     {
         const uint32_t pc = ctx->pc;
@@ -3083,18 +4285,18 @@ namespace ts2netz
                     anders = neu.host != konfig().host || neu.port != konfig().port || neu.name != konfig().name || neu.passwort != konfig().passwort;
                     online = T.zustand == 1 || T.zustand == 2;
                 }
-                if (anders && online) T.beenden(); // anderer Server gewaehlt: neu verbinden
+                if (anders && online) T.beenden(); // another server chosen: reconnect
                 if (anders || !online) konfig() = neu;
             }
             if (!konfig().aktiv)
             {
-                std::fprintf(stderr, "[ONLINE] kein Server eingetragen (Spielmenue ESC/F1 -> Online)\n");
-                ::ps2xGsBridgeOnlineStatus("Kein Server gewaehlt - im Reiter Online einen Server verbinden");
+                std::fprintf(stderr, "[ONLINE] no server set (game menu ESC/F1 -> Online)\n");
+                ::ps2xGsBridgeOnlineStatus("No server selected - connect to one in the Online tab");
                 r = 1;
                 break;
             }
             std::fprintf(stderr, "[ONLINE] Server %s Port %u, Name \"%s\"\n", konfig().host.c_str(), konfig().port, konfig().name.c_str());
-            if (std::getenv("TS2_NETHIST") && !g_ps2xStateHist.exchange(true)) // Diagnose: Aufrufe der Netzwerk-Spielschicht zaehlen
+            if (std::getenv("TS2_NETHIST") && !g_ps2xStateHist.exchange(true)) // Diagnosis: count calls of the game's network layer
                 std::thread([] {
                     std::map<uint32_t, uint64_t> vorher;
                     for (;;)
@@ -3185,7 +4387,7 @@ namespace ts2netz
             if (!s || !a1 || !a3) { r = 2; break; }
             g16(rdram, a3, 0);
             if (s->zustand == 3) { r = 0xD; break; }
-            if (s->zustand != 2) { r = 0; break; } // noch nicht verbunden: nichts gesendet
+            if (s->zustand != 2) { r = 0; break; } // not connected yet: nothing sent
             const uint32_t sid = s->sid;
             l.unlock();
             std::string p;
@@ -3219,7 +4421,7 @@ namespace ts2netz
             if (log && z++ < 200) std::fprintf(stderr, "[ONLINE] SendTo %u -> %s:%u (%u Bytes)\n", lport, host.c_str(), uint16_t(a2), n);
             break;
         }
-        case 0x47A598u: // PingSenden(h, u8 *ok, const char *host, u16 id)
+        case 0x47A598u: // PingSend(h, u8 *ok, const char *host, u16 id)
         {
             g8(rdram, a1, 0);
             uint32_t ziel = 0;
@@ -3269,7 +4471,7 @@ namespace ts2netz
             if (log && z++ < 200) std::fprintf(stderr, "[ONLINE] RecvFrom %s:%u (%u Bytes)\n", ipText(d.vip).c_str(), d.port, n);
             break;
         }
-        case 0x47A810u: // PingEmpfangen(h, u8 *got, char *host, u16 *id)
+        case 0x47A810u: // PingReceive(h, u8 *got, char *host, u16 *id)
         {
             std::lock_guard<std::mutex> l(T.m);
             Sock *s = handle(a0);
@@ -3284,7 +4486,7 @@ namespace ts2netz
             g16(rdram, a3, p.id);
             break;
         }
-        case 0x47A8E0u: // Verfuegbar(h, u16 *out)
+        case 0x47A8E0u: // Available(h, u16 *out)
         {
             std::lock_guard<std::mutex> l(T.m);
             Sock *s = handle(a0);
@@ -3294,7 +4496,7 @@ namespace ts2netz
             r = (n == 0 && s->zustand == 3) ? 0xD : 0;
             break;
         }
-        case 0x47A978u: // EigeneIP(char *out)
+        case 0x47A978u: // OwnIP(char *out)
             if (!a0) { r = 2; break; }
             gStrSchreiben(rdram, a0, ipText(T.vip));
             r = 0;
@@ -3304,7 +4506,7 @@ namespace ts2netz
             gStrSchreiben(rdram, a0, ipText(kBroadcast));
             r = 0;
             break;
-        case 0x47AA08u: // Aufloesen(const char *name, char *out)
+        case 0x47AA08u: // Resolve(const char *name, char *out)
         {
             uint32_t ip = 0;
             if (!a0 || !a1) { r = 2; break; }
@@ -3314,7 +4516,7 @@ namespace ts2netz
             break;
         }
         case 0x479F90u: // Thunk -> 0x47AAB8
-        case 0x47AAB8u: // Gegenstelle(h, char *out)
+        case 0x47AAB8u: // Peer(h, char *out)
         {
             std::lock_guard<std::mutex> l(T.m);
             Sock *s = handle(a0);
@@ -3324,7 +4526,7 @@ namespace ts2netz
             break;
         }
         case 0x479FA8u: // Thunk -> 0x47AB68
-        case 0x47AB68u: // Abfragen
+        case 0x47AB68u: // Query
             r = 0;
             break;
         default:

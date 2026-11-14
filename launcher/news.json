@@ -1,5 +1,26 @@
 [
   {
+    "date": "2026-11-14T12:00:00Z",
+    "title": "Version 1.1.0 is out - patch notes",
+    "tag": "Release",
+    "body": "New launcher with automatic updates and news, fog, snow, smoke and debris like the original, a picture that fits any screen, rebuilt mouse aiming. If you are on 1.0.x, download 1.1 once by hand - after that the launcher updates the game for you.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-14-patch-notes-1-1-0.md"
+  },
+  {
+    "date": "2026-11-14T12:00:00Z",
+    "title": "Devlog - the road to 1.1",
+    "tag": "Devlog",
+    "body": "What happened between 1.0.1 and 1.1. A wrong sine in the VU1, a new launcher, a Windows test lab, mouse aiming, Online+, and the things we got wrong on the way.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-14-devlog-road-to-1-1.md"
+  },
+  {
+    "date": "2026-11-14T12:00:00Z",
+    "title": "Bug fixes and updates - 1.1 is on the way",
+    "tag": "Update",
+    "body": "Everything since 1.0.1 in one list. The German launcher on Windows, the black bars and the grey smoke wall are fixed, and there is a new launcher, mouse aiming, Online+, texture packs and more. Sorry for the German!",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-14-bug-fixes-and-updates.md"
+  },
+  {
     "date": "2026-11-13T12:00:00Z",
     "title": "What's new in 1.1, and what's still in testing",
     "tag": "Dev log",

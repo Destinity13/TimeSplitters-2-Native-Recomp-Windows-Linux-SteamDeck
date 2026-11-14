@@ -12,7 +12,7 @@ namespace sotc_vif_trace
 {
     std::atomic<uint64_t> g_op[128];
     std::atomic<uint64_t> g_calls{0}, g_bytes{0};
-    // UNPACK-Statistik je Format (vn<<2|vl): Vektoren im schnellen / allgemeinen Pfad, Gruende fuer den allgemeinen
+    // UNPACK statistics per format (vn<<2|vl): vectors in the fast / general path, reasons for the general one
     std::atomic<uint64_t> g_unpFastVec[16], g_unpSlowVec[16], g_unpSlowMask{0}, g_unpSlowMode{0}, g_unpSlowCycle{0}, g_unpSlowV45{0};
     bool enabled()
     {
@@ -21,7 +21,7 @@ namespace sotc_vif_trace
     }
     void dump()
     {
-        std::fprintf(stderr, "[VIF1-UNPACK] langsam wegen Maske=%llu Modus=%llu CL!=WL=%llu V4-5=%llu; Vektoren schnell/langsam je Format:",
+        std::fprintf(stderr, "[VIF1-UNPACK] slow because of mask=%llu mode=%llu CL!=WL=%llu V4-5=%llu; vectors fast/slow per format:",
                      (unsigned long long)g_unpSlowMask.load(), (unsigned long long)g_unpSlowMode.load(), (unsigned long long)g_unpSlowCycle.load(), (unsigned long long)g_unpSlowV45.load());
         static const char *kFmt[16] = {"S-32","S-16","S-8","?","V2-32","V2-16","V2-8","?","V3-32","V3-16","V3-8","?","V4-32","V4-16","V4-8","V4-5"};
         for (int i = 0; i < 16; ++i)
@@ -331,9 +331,9 @@ void PS2Memory::processVIF1Data(uint32_t srcPhys, uint32_t sizeBytes)
 
 namespace { std::vector<uint8_t> g_vif1Carry; }
 
-// UNPACK ohne Maske (Format V2/V3/V4/S, 8/16/32 Bit): Skipping/Filling-Schreibweise (CL != WL) und MODE 1/2
-// (Offset/Differenz mit dem Row-Register) spezialisiert je Format. Bitgleich zur allgemeinen Schleife in
-// processVIF1Data (Felder jenseits der Komponenten behalten den alten Speicherwert und bekommen bei MODE 1/2
+// UNPACK without a mask (format V2/V3/V4/S, 8/16/32 bits): skipping/filling write mode (CL != WL) and MODE 1/2
+// (offset/difference with the row register) specialised per format. Bit-identical to the general loop in
+// processVIF1Data (fields beyond the components keep the old memory value and get, with MODE 1/2,
 // ebenfalls Row addiert; Fuellzyklen ohne Quelle schreiben Row).
 namespace
 {
@@ -403,7 +403,7 @@ namespace
     }
 
     using Vif1UnpackFn = void (*)(uint8_t *, const uint8_t *, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, bool, uint32_t, uint32_t *);
-    // Index (vn << 2) | vl; vl == 3 (V4-5) nicht hier
+    // index (vn << 2) | vl; vl == 3 (V4-5) not here
     const Vif1UnpackFn kVif1UnpackNoMask[16] = {
         vif1UnpackNoMask<0, 1>, vif1UnpackNoMask<1, 1>, vif1UnpackNoMask<2, 1>, nullptr,
         vif1UnpackNoMask<0, 2>, vif1UnpackNoMask<1, 2>, vif1UnpackNoMask<2, 2>, nullptr,
@@ -445,7 +445,7 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
         auto carryRest = [&]() { g_vif1Carry.assign(data + cmdStart, data + sizeBytes); };
 
         uint8_t opcode = (cmd >> 24) & 0x7F;
-        {   // ps2x (TS2): PS2X_VIFPOS=von,bis,minGroesse -> jeden VIF-Befehl im Fenster ausgeben (große Blöcke)
+        {   // ps2x (TS2): PS2X_VIFPOS=from,to,minSize -> print every VIF command in the window (large blocks)
             static const struct { uint32_t a, b, m; bool on; } vp = [] {
                 const char *e = std::getenv("PS2X_VIFPOS"); unsigned a = 0, b = 0, m = 0;
                 const bool on = e && std::sscanf(e, "%u,%u,%u", &a, &b, &m) == 3; return decltype(vp){a, b, m, on}; }();
@@ -542,7 +542,7 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
         }
         else if (opcode == VIF_FLUSHE || opcode == VIF_FLUSH || opcode == VIF_FLUSHA)
         {
-            ps2xVu1Fence(); // wartet wie die echte VIF auf das Ende des VU1-Programms
+            ps2xVu1Fence(); // waits for the end of the VU1 program like the real VIF
             continue;
         }
         else if (opcode == VIF_MSCAL || opcode == VIF_MSCALF)
@@ -620,7 +620,7 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
         }
         else if (opcode == VIF_MPG)
         {
-            ps2xVu1Fence(); // Mikroprogramm erst ersetzen, wenn das laufende fertig ist
+            ps2xVu1Fence(); // only replace the micro program once the running one is done
             uint32_t destAddr = (uint32_t)imm * 8u;
             const uint32_t instructionCount = (num == 0u) ? 256u : static_cast<uint32_t>(num);
             const uint32_t mpgBytes = instructionCount * 8u;
@@ -671,9 +671,9 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
             // A GIF IMAGE transfer can span several VIF DIRECT commands: the GIFtag arrives in one
             // DIRECT, the pixel data in the following ones. Real VIF only forwards data via DIRECT,
             // so continue the pending IMAGE here instead of eating raw words after the tag.
-            // Mit PCSX2-GS fuehrt dessen GIF-Parser den PATH2-Zustand selbst: Folgedaten roh weitergeben.
-            // Kuenstlicher IMAGE-Tag fuer unseren GS; die PCSX2-Bruecke bekommt die Daten ohne ihn (bridgeStripTag),
-            // weil PCSX2s GIF-Parser den PATH2-Zustand selbst fuehrt.
+            // With the PCSX2 GS its GIF parser keeps the PATH2 state itself: pass follow-up data on raw.
+            // Artificial IMAGE tag for our GS; the PCSX2 bridge gets the data without it (bridgeStripTag)
+            // because PCSX2's GIF parser keeps the PATH2 state itself.
             if (directQw > 0 && m_vif1PendingPath2ImageQwc != 0u)
             {
                 const uint32_t chunkQw = std::min<uint32_t>(m_vif1PendingPath2ImageQwc, directQw);
@@ -785,8 +785,8 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                 carryRest();
                 return;
             }
-            // Schneller Weg (wie PCSX2s vorab erzeugte Unpack-Routinen) fuer den Normalfall: keine Maske, MODE 0,
-            // CL == WL (fortlaufend schreiben). Gleiches Ergebnis wie die allgemeine Schleife darunter.
+            // Fast path (like PCSX2's pre-generated unpack routines) for the normal case: no mask, MODE 0,
+            // CL == WL (write consecutively). Same result as the general loop below.
             if (sotc_vif_trace::enabled())
             {
                 const bool fast = !maskEnable && (vif1_regs.mode & 3u) == 0u && cl == wl && vl != 3u;
@@ -842,8 +842,8 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                     break;
                 continue;
             }
-            // Spezialisierte Routinen fuer UNPACK ohne Maske (CL != WL und/oder MODE 1/2), siehe vif1UnpackNoMask
-            // PS2X_VIF_CHECK=1: Spezialroutine auf einer Kopie rechnen, dann die allgemeine Schleife, danach vergleichen
+            // Specialised routines for UNPACK without a mask (CL != WL and/or MODE 1/2), see vif1UnpackNoMask
+            // PS2X_VIF_CHECK=1: compute the special routine on a copy, then the general loop, then compare
             static const bool vifCheck = std::getenv("PS2X_VIF_CHECK") != nullptr;
             static thread_local uint8_t chkMem[PS2_VU1_DATA_SIZE];
             static thread_local uint32_t chkRow[4];
@@ -1069,7 +1069,7 @@ void PS2Memory::processVIF1Data(const uint8_t *data, uint32_t sizeBytes)
                 const bool bad = std::memcmp(chkMem, m_vu1Data, PS2_VU1_DATA_SIZE) != 0 || std::memcmp(chkRow, vif1_regs.row, sizeof(chkRow)) != 0;
                 const uint64_t n = s_n.fetch_add(1) + 1, nb = bad ? s_bad.fetch_add(1) + 1 : s_bad.load();
                 if (bad && nb <= 5)
-                    std::fprintf(stderr, "[VIF-CHECK] Abweichung: Format vn=%u vl=%u cl=%u wl=%u mode=%u num=%u\n", vn, vl, cl, wl, vif1_regs.mode & 3u, writeVectorCount);
+                    std::fprintf(stderr, "[VIF-CHECK] difference: format vn=%u vl=%u cl=%u wl=%u mode=%u num=%u\n", vn, vl, cl, wl, vif1_regs.mode & 3u, writeVectorCount);
                 if ((n & 0xFFFFFu) == 0u)
                     std::fprintf(stderr, "[VIF-CHECK] %llu UNPACKs geprueft, %llu Abweichungen\n", (unsigned long long)n, (unsigned long long)nb);
             }

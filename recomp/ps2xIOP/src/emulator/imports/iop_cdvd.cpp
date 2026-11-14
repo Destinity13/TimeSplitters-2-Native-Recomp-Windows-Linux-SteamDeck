@@ -604,8 +604,8 @@ namespace ps2x::iop::detail
             return &nodes[current];
         }
 
-        // ISO9660-Suche direkt im Disc-Image: liefert die echten LSNs (sceCdRead liest bei gesetztem Image aus dem
-        // Image). Die virtuelle ISO aus dem entpackten Ordner vergibt eigene LSNs; gemischt mit dem Image las der IOP
+        // ISO9660 search directly in the disc image: returns the real LSNs (with an image set, sceCdRead reads from the
+        // image). The virtual ISO built from the extracted folder assigns its own LSNs; mixed with the image the IOP read
         // (STREAM.IRX: Musik/Sprache/Zwischensequenzen) falsche Sektoren -> Stille bzw. Zufallsgeraeusche.
         bool imageLookup(const std::string &guestPath, uint32_t &lsn, uint32_t &size, std::string &leaf)
         {

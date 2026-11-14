@@ -31,7 +31,7 @@ bool PSPadBackend::readState(int port, int /*slot*/, uint8_t *data, size_t size)
         return false;
     if (port > 0)
     {
-        // ps2x (Splitscreen): Port 2.. = weitere Gamepads aus der PCSX2-Bruecke; ohne Geraet kein Zustand
+        // ps2x (split screen): port 2.. = further gamepads from the PCSX2 bridge; no state without a device
         extern bool ps2xGsBridgePadN(int player, uint16_t &pressed, uint8_t axes[4]);
         uint16_t pressed = 0; uint8_t ax[4];
         if (!ps2xGsBridgePadN(port, pressed, ax)) return false;
@@ -50,7 +50,7 @@ bool PSPadBackend::readState(int port, int /*slot*/, uint8_t *data, size_t size)
     data[3] = 0xFF;
     data[4] = data[5] = data[6] = data[7] = kPadStickCenter;
 
-    // Mit dem PCSX2-GS: Eingabe aus dessen Spielfenster + Gamepad (SDL3), ein Fenster fuer alles
+    // With the PCSX2 GS: input from its game window + gamepad (SDL3), one window for everything
     {
         extern bool ps2xGsBridgePad(uint16_t &pressed, uint8_t axes[4]);
         uint16_t pressed = 0;

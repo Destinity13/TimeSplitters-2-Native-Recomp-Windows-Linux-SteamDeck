@@ -6,7 +6,7 @@
 #include "runtime/gs/ps2_gs_psmct16.h"
 #include "runtime/ee_scheduler.h"
 
-// Adresse der sceGsGParam-Struktur des Spiels, wenn libgraph als Originalcode laeuft (0 = HLE-Zustand g_gparam).
+// Address of the game's sceGsGParam structure when libgraph runs as original code (0 = HLE state g_gparam).
 uint32_t g_ps2xGameGParamAddr = 0u;
 
 namespace ps2_stubs
@@ -807,8 +807,8 @@ namespace ps2_stubs
             g_gparam.ffmode = static_cast<uint8_t>(ffmode & 0x1);
             writeGsGParamToScratch(runtime);
             {
-                // Echtes libgraph ruft hier den Systemaufruf SetGsCrt (interlace, omode, ffmode). Ohne diesen
-                // Aufruf bemerkt PS2X_VBLANK_AUTO den 60-Hz-Wechsel aus dem SotC-Optionsmenue nie (blieb 50 Hz).
+                // The real libgraph calls the SetGsCrt system call here (interlace, omode, ffmode). Without this
+                // call PS2X_VBLANK_AUTO never notices the 60 Hz switch from the SotC options menu (stayed at 50 Hz).
                 const __m128i a0 = ctx->r[4], a1 = ctx->r[5], a2 = ctx->r[6];
                 ctx->r[4] = _mm_set_epi64x(0, static_cast<int64_t>(interlace & 0x1u));
                 ctx->r[5] = _mm_set_epi64x(0, static_cast<int64_t>(omode & 0xFFu));
@@ -1294,8 +1294,8 @@ namespace ps2_stubs
 
     void sceGsSyncV(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
     {
-        // Laeuft sceGsResetGraph als Originalcode (TS2), steht der Bildmodus nicht in g_gparam, sondern in der
-        // sceGsGParam-Struktur des Spiels (Adresse vom Spiel-Override, ::g_ps2xGameGParamAddr; +0 = interlace).
+        // If sceGsResetGraph runs as original code (TS2), the video mode is not in g_gparam but in the game's
+        // sceGsGParam structure (address from the game override, ::g_ps2xGameGParamAddr; +0 = interlace).
         uint32_t interlace = g_gparam.interlace;
         if (::g_ps2xGameGParamAddr != 0u)
         {

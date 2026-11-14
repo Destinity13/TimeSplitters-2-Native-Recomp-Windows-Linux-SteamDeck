@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TimeSplitters 2 · Native Recomp</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bgimg"></div>
+<div class="app">
+  <header class="titlebar">
+    <nav class="nav" id="nav">
+      <button data-view="home" class="on" data-t="nav.play"></button>
+      <button data-view="online" data-t="nav.online"></button>
+      <button data-view="news" data-t="nav.news"></button>
+      <button data-view="settings" data-t="nav.settings"></button>
+    </nav>
+    <div class="drag" data-tauri-drag-region></div>
+    <div class="srvstat" id="srvStat" data-go="online"></div>
+    <button class="lang" id="langBtn">DE</button>
+    <button class="wbtn" id="wMin"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 6h10" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <button class="wbtn close" id="wClose"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.2"/></svg></button>
+  </header>
+
+  <main>
+    <section class="view on" id="v-home"><div class="stage">
+      <div class="left">
+        <div class="logo"><span class="a">TimeSplitters<i>2</i></span><span class="b">Native Recomp</span></div>
+        <div class="feed" id="feed"></div>
+      </div>
+      <div class="dock">
+        <div class="prog-area">
+          <div class="head" id="pgHead"></div>
+          <div class="row" id="pgRow1"></div>
+          <div class="pbar thin" id="pgStepBar"><i></i></div>
+          <div class="row" id="pgRow2"></div>
+          <div class="pbar" id="pgBar"><i></i></div>
+          <div class="quick" id="quick"></div>
+        </div>
+        <div class="playbox">
+          <div class="edsw" id="edSwitch"></div>
+          <button class="play" id="playBtn"><b id="playLabel"></b><small id="playSub"></small></button>
+          <div class="ver" id="sbVer"></div>
+        </div>
+      </div>
+    </div></section>
+
+    <section class="view" id="v-online"><div class="wrap">
+      <h1 class="page" data-t="on.title"></h1>
+      <p class="sub" data-t="on.sub"></p>
+      <div class="online">
+        <div>
+          <div class="toolbar">
+            <input class="inp grow" id="srvSearch" data-ph="on.search">
+            <div class="filt" id="srvFilt">
+              <button data-f="free" data-t="on.f.free"></button>
+              <button data-f="open" data-t="on.f.open"></button>
+              <button data-f="fav" data-t="on.f.fav"></button>
+            </div>
+            <button class="btn" id="srvRefresh" data-t="on.refresh"></button>
+          </div>
+          <table class="srv">
+            <thead><tr><th style="width:34px"></th><th data-s="name" data-t="on.c.name"></th><th data-s="players" data-t="on.c.players"></th><th data-s="ping" data-t="on.c.ping"></th></tr></thead>
+            <tbody id="srvBody"></tbody>
+          </table>
+          <div class="toolbar" style="margin-top:12px">
+            <input class="inp grow" id="srvDirect" data-ph="on.direct">
+            <button class="btn" id="srvAdd" data-t="on.add"></button>
+          </div>
+        </div>
+        <div style="display:grid;gap:16px">
+          <div class="panel">
+            <h3 data-t="on.you"></h3>
+            <input class="inp" id="playerName" maxlength="15" data-ph="on.name">
+          </div>
+          <div class="panel det" id="srvDet"></div>
+          <div class="panel">
+            <h3 data-t="on.host"></h3>
+            <div class="hostbox">
+              <input class="inp" id="hName" data-ph="on.h.name">
+              <div class="two"><input class="inp" id="hPw" data-ph="on.h.pw"><input class="inp" id="hMax" value="16" inputmode="numeric"></div>
+              <button class="btn" id="hBtn"></button>
+              <p class="note" id="hNote" data-t="on.h.note"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></section>
+
+    <section class="view" id="v-news"><div class="wrap">
+      <h1 class="page" data-t="news.title"></h1>
+      <p class="sub" data-t="news.sub"></p>
+      <div class="news" id="newsList"></div>
+    </div></section>
+
+    <section class="view" id="v-settings"><div class="wrap">
+      <h1 class="page" data-t="set.title"></h1>
+      <p class="sub" data-t="set.sub"></p>
+      <div class="tabs" id="setTabs"></div>
+      <div id="setBody"></div>
+      <div class="savebar"><span class="msg" id="saveMsg"></span><button class="btn ghost" id="setReset" data-t="set.reset"></button><button class="btn hot" id="setSave" data-t="set.save"></button></div>
+    </div></section>
+  </main>
+</div>
+
+<div class="overlay" id="setup"><div class="panel dialog" id="setupBox"></div></div>
+<div class="overlay" id="pwDlg">
+  <div class="panel dialog" style="width:min(380px,92vw)">
+    <h3 data-t="on.pwTitle"></h3>
+    <input class="inp" id="pwInp" type="password">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="btn ghost" id="pwCancel" data-t="cancel"></button><button class="btn hot" id="pwOk" data-t="on.join"></button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -2,16 +2,12 @@
 
 # Known issues
 
-An honest list, as of 11 November 2026 (release 1.0.1).
+An honest list, as of 14 November 2026 (release 1.1.0).
 
 ## Not a bug
 
 - **Siberia on Easy:** there is no "Restore power" objective and the dam elevators stay without power. The
   original game does the same; the objective exists on Normal and Hard only.
-- **Siberia: the snow haze looks busier than on a PS2 at high resolutions.** Measured against PCSX2 (software
-  renderer as the reference): the game logic, the wind and the haze speed match the original. At 3× and above the
-  haze texture is rendered much sharper than on the console, so its movement stands out more. A "softer haze"
-  option for high resolutions is planned for an update.
 - **Free camera (F7) cannot gain height.** The game recomputes the eye height from the floor under the player
   every frame; writing the position (and its copies at `0x784708`, `0x7E82B0`) is not enough. The write-watch tool
   did not catch the writer on this build yet. Horizontal movement and pitch work.
@@ -25,6 +21,24 @@ An honest list, as of 11 November 2026 (release 1.0.1).
 
 ## Open
 
+- **Mouse aiming: switching back to the sniper rifle** can bring the scope up once for a moment. The port only
+  learns from the rising scope that the weapon is a scope weapon. The weapon slot is found in the player object
+  (`+0xD48`); the fix is planned for the next patch.
+- **Online+ (experimental edition):** the scoreboard does not always count your own kills, and bot matches can
+  stutter. Not reproduced in the scripted bot match yet (59.94 FPS there); needs a log from a real match
+  (`TS2_IMPACT_LOG=1`).
+- **HUD may move towards the centre for a moment while damage arcs are drawn** (16:9). Since 1.1.0 wide effects that
+  reach beyond the screen no longer count as a menu; seen working in a deathmatch frame, but not yet confirmed with
+  the arcs on screen in the same frame.
+- **Impact smoke at very close range** can show a faint straight edge of the sprite.
+- **Explosions and the fountain water** have not been compared one by one with PCSX2 yet. Smoke, debris, sparks and
+  snow have.
+- **Windows:** tested on one laptop (Windows 11, GTX 1050 + Intel HD 630) and by one tester, plus the CI runners.
+  AMD and Intel graphics are untested. The "fall back to the Windows default graphics card" path has never had to
+  run in a test.
+- **Automatic updates** are tested with real packages (old installation, real update files), but the download from a
+  real GitHub release runs for the first time with the update after 1.1.0. Steam Deck Game Mode and Linux without
+  WebKitGTK start without the launcher and do not update by themselves.
 - **Some Arcade setup menus** (3D character preview) run at 49–56 FPS; main menus and gameplay run at 59.9 FPS.
 - **Sound:** three bugs in the real-time sound path fixed (`pc069`–`pc073`, see FINDINGS); being verified by
   playing. `TS2_MITSCHNITT=1` records the sound (`ton.wav`) and a screenshot every 30 s for checking.
@@ -44,6 +58,21 @@ An honest list, as of 11 November 2026 (release 1.0.1).
 
 ## Fixed (kept for the record)
 
+- **Windows laptops with two graphics chips ran the game on the slow one** (1.1.0): the game exports the Nvidia/AMD
+  high-performance hints and the bridge picks the high-performance DXGI adapter (logged in `bridge.log`). Test laptop:
+  14–30 FPS at 4× before, 58 FPS on average after (a new graphics driver was installed in between).
+- **Launcher switches could not be turned on or off** (1.1.0, before release): the launcher wrote `true`/`false`, the
+  game reads `1`/`0`.
+- **Accurate mouse aim only after pressing the zoom key once; S47 stayed zoomed** (1.1.0): the held aim mode gets a
+  fresh press when it starts, and the view scale (`+0x914`) is held at its normal value while no zoom key is pressed.
+- **Siberia: pulsing white snow haze, impact smoke as a hard grey patch, oversized debris** (1.1.0): one cause,
+  four entries of the VU1 opcode map in the EFU group were on the wrong index (ESIN, EATAN, ERSQRT, EEXP). The
+  game's particle program got a wrong sine for the sprite rotation. Checked against PCSX2's opcode table (130
+  entries) and against the original running in PCSX2. The earlier entry here ("the haze only looks busier at high
+  resolutions") was wrong.
+- **Particles in 16:9** (1.1.0): snow, sparks, debris and smoke were pulled towards the centre by the HUD rule, and
+  smoke on screen made the HUD jump inward.
+- **Windows launcher always German, setup asking for the disc although it was given** (1.1.0).
 - **Windows: black window / "VM not ready" on real PCs** (1.0.1): the graphics hand-over file pointed to `C:\tmp`,
   which does not exist on Windows; it is in the system temp folder now. Setup without OpenGL (VMs, Remote Desktop)
   works too. Windows starts with Direct3D 11 (Vulkan as fallback). See [WINDOWS_PORT](WINDOWS_PORT.md).
@@ -80,6 +109,6 @@ An honest list, as of 11 November 2026 (release 1.0.1).
 | `pc038` | bonus trailer stopped after half a second | half of `libmpeg` was HLE, the other half (not named by the analyzer) ran as original code and read fields the HLE never set (`sceMpegIsEnd`); the 9 missing functions were identified in the code and added as HLE |
 | `pc039` | no widescreen in the NTSC-U menus | PCSX2 community patch `SLUS-20314_12532F1C.pnach` (No.47): 8 aspect constants in `.lit4` (0x3f955555 → 0x3fc71c71), written every VSync like PCSX2; renderer 16:9 |
 | `pc041` | every pad port read player 1's input, port 2 always "connected" | input per port, presence from the actual device; "2 Players" and Story co-op work |
-| `pc045` | split-screen 30–40 FPS | VU1 stage 5 with `FCSET` and `EATAN`→`MFP` support for TS2: 59.9 FPS, pixel-identical |
+| `pc045` | split-screen 30–40 FPS | VU1 stage 5 with `FCSET` and `ESIN`→`MFP` support for TS2: 59.9 FPS, pixel-identical |
 | `pc050` | HUD and menus stretched in 16:9 | 2D graphics (fixed texture coordinates on PATH1) put back into 4:3 proportions; full-screen backgrounds and screen-copy strips excluded |
 | `pc051` | two camera projections with a hard-coded 4:3 ratio | instruction patch at recompile time: the divisor 3.0 is read from a free data word, 3.0 (4:3, bit-identical) or 2.25 (16:9) |

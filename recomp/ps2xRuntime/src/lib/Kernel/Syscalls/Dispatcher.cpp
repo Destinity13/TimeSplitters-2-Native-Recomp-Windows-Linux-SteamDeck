@@ -75,8 +75,8 @@ namespace ps2_syscalls
         case 0xFC:
             SetAlarm(rdram, ctx, runtime);
             return true;
-        // Alarm-Patch (Kernel-Tabelleneinträge 0xFC..0xFF): Sony-libkernel (z. B. TimeSplitters 2) und ps2sdk
-        // nummerieren verschieden, das Vorzeichen trennt sie eindeutig:
+        // Alarm patch (kernel table entries 0xFC..0xFF): Sony libkernel (e.g. TimeSplitters 2) and ps2sdk
+        // number them differently; the sign tells them apart unambiguously:
         //   Sony:   SetAlarm 0xFC, ReleaseAlarm 0xFD, iSetAlarm -0xFE, iReleaseAlarm -0xFF
         //   ps2sdk: SetAlarm 0xFC, ReleaseAlarm 0xFE, iSetAlarm -0xFD, iReleaseAlarm -0xFF
         case 0x19:

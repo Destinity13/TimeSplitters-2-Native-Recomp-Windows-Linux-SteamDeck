@@ -19,7 +19,7 @@ uint32_t ps2xEeCallCycles() noexcept;
 
 R5900Context *g_ps2xCurCtx = nullptr;
 std::atomic<uint32_t> g_ps2xVblankUs{0};
-std::atomic<uint32_t> g_ps2xHblankHz{15734}; // NTSC-Vorgabe, SetGsCrt stellt PAL auf 15625
+std::atomic<uint32_t> g_ps2xHblankHz{15734}; // NTSC default, SetGsCrt sets PAL to 15625
 namespace
 {
     constexpr int KE_OK = 0;
@@ -42,8 +42,8 @@ namespace
     constexpr uint32_t WEF_OR = 0x01u;
     constexpr uint32_t WEF_CLEAR = 0x10u;
     constexpr uint32_t WEF_CLEAR_ALL = 0x20u;
-    // PS2X_VBLANK_HZ=50 (PAL) / 60 (NTSC, Standard): Bildwiederholrate des emulierten VBlank.
-    // PAL-Titel wie SotC SCES-53326 laufen auf echter Hardware/PCSX2 mit 50 Hz.
+    // PS2X_VBLANK_HZ=50 (PAL) / 60 (NTSC, default): refresh rate of the emulated VBlank.
+    // PAL titles like SotC SCES-53326 run at 50 Hz on real hardware/PCSX2.
     inline uint32_t vblankPeriodUs()
     {
         static const uint32_t us = [] {
@@ -51,7 +51,7 @@ namespace
             const double hz = (e && *e) ? std::atof(e) : 0.0;
             return (hz >= 20.0 && hz <= 240.0) ? static_cast<uint32_t>(1000000.0 / hz + 0.5) : 16667u;
         }();
-        // PS2X_VBLANK_AUTO=1: das Spiel waehlt per SetGsCrt (PAL 50 Hz / NTSC 60 Hz, z. B. SotC-Optionsmenue)
+        // PS2X_VBLANK_AUTO=1: the game chooses through SetGsCrt (PAL 50 Hz / NTSC 60 Hz, e.g. the SotC options menu)
         const uint32_t dyn = g_ps2xVblankUs.load(std::memory_order_relaxed);
         return dyn ? dyn : us;
     }
@@ -251,7 +251,7 @@ void EeScheduler::run()
         }
 
         publishDebugContext(context);
-        g_ps2xCurCtx = &context; // fuer Diagnose-Haken (Gast-PC bei Gleitkomma-Sonderfaellen)
+        g_ps2xCurCtx = &context; // for diagnostic hooks (guest PC on floating-point special cases)
 
         if (context.pc == 0u)
         {
@@ -271,8 +271,14 @@ void EeScheduler::run()
                 }
                 continue;
             }
-            std::fprintf(stderr, "[EE] Thread %d endet (pc=0): ra=0x%08X sp=0x%08X v0=0x%08X a0=0x%08X\n", running->id,
-                         getRegU32(&context, 31), getRegU32(&context, 29), getRegU32(&context, 2), getRegU32(&context, 4));
+            {
+                // Thread -1 (callback/interrupt context) ends like this many times per second in normal play: it filled the
+                // play.log (~12000 lines per session) and cost log I/O. Real threads are always logged, -1 only at first.
+                static std::atomic<unsigned> s_minusEins{0};
+                if (running->id >= 0 || s_minusEins.fetch_add(1, std::memory_order_relaxed) < 3u)
+                    std::fprintf(stderr, "[EE] thread %d ends (pc=0): ra=0x%08X sp=0x%08X v0=0x%08X a0=0x%08X\n", running->id,
+                                 getRegU32(&context, 31), getRegU32(&context, 29), getRegU32(&context, 2), getRegU32(&context, 4));
+            }
             if (std::getenv("PS2X_CALLRING"))
             {
                 const uint32_t end = g_ps2xCallRingPos.load();
@@ -342,8 +348,8 @@ void EeScheduler::run()
         {
             m_insideInterrupt = !running->invocations.empty() && running->invocations.back().kind == GuestInvocationKind::Interrupt;
             m_guestExecuting.store(true, std::memory_order_release);
-            // Rueckkehr per longjmp (Thread-Wechsel) oder normal: beides hier gleich behandeln. Frueher wurde hier
-            // "zur Vereinheitlichung" eine Ausnahme geworfen - das kostete bei jedem Wechsel den teuren Unwinder.
+            // Return through longjmp (thread switch) or normally: treat both the same here. Previously an exception
+            // was thrown here "for uniformity" - that cost the expensive unwinder on every switch.
             (void)callGuest(function, context);
             m_guestExecuting.store(false, std::memory_order_release);
             m_insideInterrupt = false;
@@ -440,7 +446,7 @@ void EeScheduler::accountCycles(uint32_t cycles) noexcept
 {
     const uint64_t elapsed = std::max<uint64_t>(1u, cycles);
     m_eeCycle += elapsed;
-    // EE-Zeitgeber und IOP gebuendelt nachziehen statt bei jedem Grundblock (IOP-Scheduler-Durchlauf je Aufruf war teuer).
+    // Catch up EE timers and IOP in batches instead of at every basic block (an IOP scheduler pass per call was expensive).
     // Hoechstens PS2X_EE_BATCH EE-Takte (Standard 128, ~0,4 us PS2-Zeit) Verzug.
     static const uint64_t batch = [] { const char *e = std::getenv("PS2X_EE_BATCH"); return e && *e ? std::strtoull(e, nullptr, 10) : 128ull; }();
     m_batchCycles += elapsed;
@@ -528,7 +534,7 @@ int EeScheduler::deleteThread(int id, uint32_t &ownedStack)
         ownedStack = it->second.stack;
     }
     m_threads.erase(it);
-    // Rueckruf-Stapel des geloeschten Threads freigeben (sonst wachsen sie bei jedem Neustart weiter in Spieldaten)
+    // Free the callback stacks of the deleted thread (otherwise they keep growing into game data on every restart)
     for (auto st = m_invocationStackTops.begin(); st != m_invocationStackTops.end();)
     {
         if (static_cast<int>(st->first >> 32u) == id)
@@ -1341,26 +1347,26 @@ int EeScheduler::setIrqHandlerEnabled(bool dmac, int id, bool enabled)
     return KE_OK;
 }
 
-// ps2x (TS2): DMAC-Kanäle, die fertig wurden, während ihr Interrupt maskiert war. Auf echter Hardware bleibt das
-// CIS-Bit in D_STAT stehen und löst aus, sobald EnableDmac die Maske setzt (TS2 startet einen GS-Download und ruft
-// erst danach EnableDmac(1)). Ein Schreiben von 1 nach D_STAT (Quittung) löscht den Merker (ps2_memory.cpp).
+// ps2x (TS2): DMAC channels that finished while their interrupt was masked. On real hardware the
+// CIS bit in D_STAT stays set and fires as soon as EnableDmac sets the mask (TS2 starts a GS download and only
+// calls EnableDmac(1) afterwards). Writing 1 to D_STAT (acknowledge) clears the marker (ps2_memory.cpp).
 std::atomic<uint32_t> g_ps2xDmacPending{0};
-std::atomic<bool> g_ps2xVif1DownloadPending{false};   // GS-Download läuft (ps2_memory.cpp), fertig beim nächsten VBlank-Ereignis
+std::atomic<bool> g_ps2xVif1DownloadPending{false};   // GS download in progress (ps2_memory.cpp), done at the next VBlank event
 
 
 
-// ps2x (TS2): verzögerte Fertigmeldung eines VIF1-GS-Downloads (siehe ps2_memory.cpp)
-std::atomic<void *> g_ps2xVif1DownloadTicket{nullptr};   // asynchroner GS-Download (ps2_memory.cpp), hier abwarten
+// ps2x (TS2): delayed done notification of a VIF1 GS download (see ps2_memory.cpp)
+std::atomic<void *> g_ps2xVif1DownloadTicket{nullptr};   // asynchronous GS download (ps2_memory.cpp), wait for it here
 void ps2xGsBridgeReadFifoWait(void *ticket);
 static void ps2xFinishVif1Download(PS2Runtime &rt, EeScheduler &ee)
 {
     if (!g_ps2xVif1DownloadPending.exchange(false)) return;
     if (void *t = g_ps2xVif1DownloadTicket.exchange(nullptr))
-        ps2xGsBridgeReadFifoWait(t);   // Daten muessen im EE-RAM sein, bevor der Kanal fertig meldet
+        ps2xGsBridgeReadFifoWait(t);   // the data must be in EE RAM before the channel reports done
     {
         static const bool s_dl = std::getenv("PS2X_DLLOG") != nullptr;
         static int n = 0;
-        if (s_dl && ++n % 30 == 0) std::fprintf(stderr, "[ps2x] VIF1-Download fertig #%d anhaengig=0x%X\n", n, g_ps2xDmacPending.load());
+        if (s_dl && ++n % 30 == 0) std::fprintf(stderr, "[ps2x] VIF1 download done #%d pending=0x%X\n", n, g_ps2xDmacPending.load());
     }
     rt.memory().completeDmacChannel(0x10009000u, 1u);
     for (uint32_t c : rt.memory().consumeCompletedDmacCauses()) ee.dispatchIrq(true, c);
@@ -1395,7 +1401,7 @@ void EeScheduler::dispatchIrq(bool dmac, uint32_t cause)
     if (cause < 32u && (mask & (1u << cause)) == 0u)
     {
         if (dmac && cause < 10u)
-            g_ps2xDmacPending.fetch_or(1u << cause);   // merken, bis EnableDmac oder Quittung (siehe oben)
+            g_ps2xDmacPending.fetch_or(1u << cause);   // remember until EnableDmac or acknowledge (see above)
         return;
     }
     const auto &handlers = dmac ? m_dmacHandlers : m_intcHandlers;
@@ -2032,7 +2038,7 @@ void EeScheduler::processDueDeadlines()
         {
             if (scheduled.event.type == EeEventType::VBlankStart)
             {
-                // Nach Pause (Menue) oder grossem Ruckler nicht im Zeitraffer aufholen: Takt neu ansetzen
+                // After a pause (menu) or a big hitch do not catch up in fast-forward: restart the pacing
                 auto base = scheduled.hostDeadline;
                 const auto nowHost = std::chrono::steady_clock::now();
                 if (m_pacingRebase || nowHost - base > std::chrono::milliseconds(250))
@@ -2075,7 +2081,7 @@ void EeScheduler::processEvent(const EeEvent &event)
         }
         m_runtime.memory().gs().csr.fetch_or(0x8ull, std::memory_order_acq_rel); // CSR.VSINT
         {
-            // Spiel-Bildrate messen (PS2X_FPSLOG): Zaehler der Spielschleife (IOS-Scheduler, 0x1DC9EC) je 250 VBlanks
+            // Measure the game frame rate (PS2X_FPSLOG): counter of the game loop (IOS scheduler, 0x1DC9EC) per 250 VBlanks
             static const bool fpsLog = std::getenv("PS2X_FPSLOG") != nullptr;
             static uint32_t s_vs = 0, s_last = 0, s_drawn = 0;
             extern std::atomic<uint64_t> g_ps2xPath1Packets;
@@ -2088,7 +2094,7 @@ void EeScheduler::processEvent(const EeEvent &event)
             }
             if (fpsLog && m_rdram && ++s_vs == 250u)
             {
-                std::fprintf(stderr, "[Gezeichnet] %u von 250 VBlanks\n", s_drawn);
+                std::fprintf(stderr, "[drawn] %u of 250 VBlanks\n", s_drawn);
                 s_drawn = 0;
                 uint32_t cnt = 0; std::memcpy(&cnt, m_rdram + 0x1DC9ECu, 4);
                 uint32_t ivs = 0; std::memcpy(&ivs, m_rdram + 0x1DC9E4u, 4);
@@ -2098,7 +2104,7 @@ void EeScheduler::processEvent(const EeEvent &event)
         }
         { extern void ps2xMtvuFrameFence(); ps2xMtvuFrameFence(); }
         {
-            // Spielmenue offen: Spiel anhalten (Ton, Logik, Grafik), bis es geschlossen wird
+            // Game menu open: pause the game (sound, logic, graphics) until it is closed
             extern bool ps2xGsBridgeMenuOpen();
             if (ps2xGsBridgeMenuOpen())
             {
@@ -2117,7 +2123,7 @@ void EeScheduler::processEvent(const EeEvent &event)
                 for (int i = 0; i < 8; ++i) std::fprintf(stderr, " %llu", (unsigned long long)g_eeThrowCount[i].load());
                 std::fprintf(stderr, "\n");
             }
-        } // MTVU: Bild erst abschliessen, wenn VU1 fertig ist
+        } // MTVU: only finish the frame once VU1 is done
         { extern void ps2xGsBridgeVsync(GSRegisters &); extern bool ps2xGsBridgeActive();
           if (ps2xGsBridgeActive()) ps2xGsBridgeVsync(m_runtime.memory().gs()); }
         writeGuestU32(m_vsyncFlagAddress, 1u);

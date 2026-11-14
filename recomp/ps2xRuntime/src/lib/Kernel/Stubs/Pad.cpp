@@ -11,7 +11,7 @@ int ps2xPadPlayer(int port, int slot);
 
 namespace
 {
-    // PS2X_PADLOG: jede (Funktion, Port, Ergebnis)-Kombination einmal ausgeben
+    // PS2X_PADLOG: print every (function, port, result) combination once
     void ps2xPadLogOnce(const char *fn, uint32_t port, uint32_t slot, int64_t result)
     {
         static const bool on = std::getenv("PS2X_PADLOG") != nullptr;
@@ -36,7 +36,7 @@ namespace ps2_stubs
         constexpr int32_t kPadStateExecCmd = 5;
         constexpr int32_t kPadStateStable = 6;
         constexpr size_t kPadPortCount = 2;
-        constexpr size_t kPadSlotCount = 4;   // Multitap: Port 1 mit 4 Steckplaetzen (3-4 Spieler)
+        constexpr size_t kPadSlotCount = 4;   // Multitap: port 1 with 4 slots (3-4 players)
 
         constexpr uint16_t kPadBtnSelect = 1u << 0;
         constexpr uint16_t kPadBtnL3 = 1u << 1;
@@ -86,7 +86,7 @@ namespace ps2_stubs
         std::mutex g_padStateMutex;
         bool g_padOverrideEnabled = false;
         PadInputState g_padOverrideState{};
-        // ps2x (Splitscreen): eigener Skript-Override fuer Port 2; der Override oben gilt nur noch fuer Port 1
+        // ps2x (split screen): separate script override for port 2; the override above now only applies to port 1
         bool g_padOverride2Enabled = false;
         PadInputState g_padOverride2State{};
         PadPortState g_padPorts[kPadPortCount * kPadSlotCount]{};
@@ -287,7 +287,7 @@ namespace ps2_stubs
             data[13] = pressureValue(state, portState, kPadBtnCircle);
             data[14] = pressureValue(state, portState, kPadBtnCross);
             data[15] = pressureValue(state, portState, kPadBtnSquare);
-            // DualShock-2-Reihenfolge wie PCSX2 (PadDualshock2.cpp): L1, R1, L2, R2
+            // DualShock 2 order as in PCSX2 (PadDualshock2.cpp): L1, R1, L2, R2
             data[16] = pressureValue(state, portState, kPadBtnL1);
             data[17] = pressureValue(state, portState, kPadBtnR1);
             data[18] = pressureValue(state, portState, kPadBtnL2);
@@ -491,7 +491,7 @@ namespace ps2_stubs
     {
         (void)rdram;
         (void)runtime;
-        // Multitap an Port 1 (3./4. Gamepad vorhanden oder TS2_MULTITAP=1): 4 Steckplaetze
+        // Multitap on port 1 (3rd/4th gamepad present or TS2_MULTITAP=1): 4 slots
         setReturnS32(ctx, (getRegU32(ctx, 4) == 0u && ::ps2xPadPlayer(0, 1) >= 0) ? 4 : 1);
     }
 
@@ -913,7 +913,7 @@ namespace ps2_stubs
     }
 }
 
-// ps2x (Splitscreen): Skript-Eingabe fuer Port 2 (TS2_INPUT2) und Anwesenheit je Port.
+// ps2x (split screen): scripted input for port 2 (TS2_INPUT2) and presence per port.
 void ps2xSetPadOverridePort2(uint16_t buttons, uint8_t lx, uint8_t ly, uint8_t rx, uint8_t ry)
 {
     std::lock_guard<std::mutex> lock(ps2_stubs::g_padOverrideMutex);
@@ -945,7 +945,7 @@ void ps2xSetPadOverridePlayer(int player, uint16_t buttons, uint8_t lx, uint8_t 
     auto &st = ps2_stubs::g_padOverrideX[player - 2];
     st.buttons = buttons; st.lx = lx; st.ly = ly; st.rx = rx; st.ry = ry;
 }
-// Multitap aktiv, wenn ein 3. Gamepad angeschlossen ist (oder TS2_MULTITAP=1 / Skript fuer Spieler 3)
+// Multitap active when a 3rd gamepad is connected (or TS2_MULTITAP=1 / a script for player 3)
 bool ps2xMultitapActive()
 {
     static const bool force = [] { const char *e = std::getenv("TS2_MULTITAP"); return e && *e == '1'; }();
@@ -959,7 +959,7 @@ bool ps2xMultitapActive()
     uint16_t p; uint8_t a[4];
     return ps2xGsBridgePadN(2, p, a);
 }
-// (Port, Steckplatz) -> Spieler: mit Multitap Port 1 Steckplatz 0..3 = Spieler 1..4, sonst Port 1/2 = Spieler 1/2
+// (port, slot) -> player: with multitap port 1 slot 0..3 = players 1..4, otherwise port 1/2 = players 1/2
 int ps2xPadPlayer(int port, int slot)
 {
     if (ps2xMultitapActive())

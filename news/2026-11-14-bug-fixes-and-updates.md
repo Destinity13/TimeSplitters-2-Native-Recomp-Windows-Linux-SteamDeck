@@ -3,6 +3,7 @@ title: Bug fixes and updates - 1.1 is on the way
 date: 2026-11-14
 tag: Update
 image: img/smoke-before-after.jpg
+order: 1
 summary: Everything since 1.0.1 in one list. The German launcher on Windows, the black bars and the grey smoke wall are fixed, and there is a new launcher, mouse aiming, Online+, texture packs and more. Sorry for the German!
 ---
 
@@ -10,7 +11,9 @@ summary: Everything since 1.0.1 in one list. The German launcher on Windows, the
 
 Thanks to everyone who reported problems here and on Reddit. And sorry for the German! The launcher on Windows ignored the language you picked, and a few texts and file names were German too. That is fixed: everything is in English now, German is only a menu language you can choose.
 
-This post lists everything that changed since 1.0.1. The update goes up as soon as the last round of testing is through, above all on Windows.
+**Update: 1.1.0 is released.** The final list is in the [patch notes](2026-11-14-patch-notes-1-1-0.md). This post is kept as it was written before the release.
+
+This post lists everything that changed since 1.0.1.
 
 ✅ done and tested · 🧪 done, final test on Windows still running
 

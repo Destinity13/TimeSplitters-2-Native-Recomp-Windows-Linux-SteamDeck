@@ -412,9 +412,9 @@ namespace ps2x::iop::detail
             {
                 if (!step(cpu))
                     break;
-                // SPU2 auch waehrend eines laufenden Aufrufs (RPC-Server, Callback) weiterlaufen lassen: libsd wartet
-                // dort aktiv auf das DMA-Ende (sceSdVoiceTransStatus). Ohne das kam das Ende nie an, der naechste
-                // sceSdVoiceTrans fand den Kanal belegt und die Soundbank-Teile gingen verloren (keine Schussgeraeusche).
+                // Keep the SPU2 running during an ongoing call too (RPC server, callback): libsd actively waits there
+                // for the end of the DMA (sceSdVoiceTransStatus). Without this the end never arrived, the next
+                // sceSdVoiceTrans found the channel busy and the sound bank parts were lost (no gunshot sounds).
                 if (((totalInstructions - start) & 127u) == 0u)
                     serviceSpu();
                 if (!servicingDmaInterrupts && !pendingDmaInterrupts.empty())
@@ -567,8 +567,8 @@ namespace ps2x::iop::detail
             servicingGuestCallbacks = false;
         }
 
-        // ps2x: echter SPU2 - regelmaessig Ton mischen lassen und seine Interrupts an den IOP geben
-        static constexpr uint64_t kSpuSliceCycles = 768u; // ~ 1 Ausgabe-Sample (48 kHz) bei 36,864 MHz
+        // ps2x: real SPU2 - let it mix sound regularly and pass its interrupts to the IOP
+        static constexpr uint64_t kSpuSliceCycles = 768u; // ~ 1 output sample (48 kHz) at 36.864 MHz
         uint64_t lastSpuAsync = 0;
         bool servicingSpu = false;
         void serviceSpu()
@@ -744,7 +744,7 @@ namespace ps2x::iop::detail
         IopLoadcore loadcore;
         std::map<int, Module> modules;
         std::map<int, uint64_t> pendingDmaInterrupts;
-        uint64_t nextDmaDue = UINT64_MAX; // frühester Abschluss in pendingDmaInterrupts (Cache)
+        uint64_t nextDmaDue = UINT64_MAX; // earliest completion in pendingDmaInterrupts (cache)
         std::multimap<uint64_t, ScheduledGuestCallback> pendingGuestCallbacks;
         uint32_t nextModuleId = 1;
         uint32_t moduleCursor = kModuleLoadBase;

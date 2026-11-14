@@ -7,7 +7,7 @@
 **The PS2 classic, recompiled into a real PC game — no emulator. Windows, Linux and Steam Deck.<br>
 60 FPS, true 16:9, up to 4K, mouse and keyboard, split-screen, and the online multiplayer the PS2 version never got.**
 
-[![Download](https://img.shields.io/github/v/release/Destinity13/TimeSplitters-2-Native-Linux-Recomp?style=for-the-badge&label=download&color=2ea44f)](https://github.com/Destinity13/TimeSplitters-2-Native-Linux-Recomp/releases/latest)
+[![Download](https://img.shields.io/github/v/release/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck?style=for-the-badge&label=download&color=2ea44f)](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=for-the-badge&logo=windows&logoColor=white)](#windows)
 [![Linux](https://img.shields.io/badge/Linux-any%20distro-fcc624?style=for-the-badge&logo=linux&logoColor=black)](#linux)
 [![Steam Deck](https://img.shields.io/badge/Steam%20Deck-plays-1a9fff?style=for-the-badge&logo=steamdeck&logoColor=white)](#steam-deck)
@@ -21,10 +21,10 @@
 [![AI-assisted](https://img.shields.io/badge/AI--assisted-Claude-d97757)](#ai-disclosure)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-[News](news/README.md) · [Play it](#play-it-in-3-minutes) · [Online](#online-multiplayer) · [What makes it different](#what-makes-it-different) · [Gallery](#gallery) · [Before / after](#before--after) · [FAQ](#faq) · [Status](#status) · [How it works](#how-it-works) · [Docs](#documentation)
+[News](news/README.md) · [Play it](#play-it-in-3-minutes) · [Online](#online-multiplayer) · [What makes it different](#what-makes-it-different) · [1.0.1 vs 1.1](#101-vs-11) · [Gallery](#gallery) · [Before / after](#before--after) · [FAQ](#faq) · [Status](#status) · [How it works](#how-it-works) · [Docs](#documentation)
 
-<img src="docs/screenshots/intros.gif" width="100%" alt="Level intros of Chicago, Aztec and the Siberia opening, rendered by the port at 2x internal resolution in 16:9">
-<sub>Level intros (Chicago, Aztec, the Siberia opening) straight from the port: 16:9, 2× internal resolution, no ghosting. Captured from an automated run, every 4th frame.</sub>
+<img src="docs/screenshots/compare_11_dam.gif" width="100%" alt="Siberia dam flyover, release 1.0.1 on the left and 1.1 on the right, with a moving divider">
+<sub>Release 1.0.1 (left) against 1.1 (right), same frames of the Siberia intro. The white haze is gone. Both sides captured from the port, nothing retouched.</sub>
 
 </div>
 
@@ -33,23 +33,29 @@
 
 <table>
 <tr>
-<td width="50%" valign="top"><a href="news/2026-11-14-bug-fixes-and-updates.md"><img src="news/img/smoke-before-after.jpg" width="100%" alt=""></a><br><sub>2026-11-14 · Update</sub><br><b><a href="news/2026-11-14-bug-fixes-and-updates.md">Bug fixes and updates - 1.1 is on the way</a></b><br><sub>Everything since 1.0.1 in one list. The German launcher on Windows, the black bars and the grey smoke wall are fixed, and there is a new launcher, mouse aiming, Online+, texture packs and more. Sorry for the German!</sub></td>
-<td width="50%" valign="top"><a href="news/2026-11-13-whats-new-1-1.md"><img src="news/img/story-siberia.jpg" width="100%" alt=""></a><br><sub>2026-11-13 · Dev log</sub><br><b><a href="news/2026-11-13-whats-new-1-1.md">What's new in 1.1, and what's still in testing</a></b><br><sub>A new launcher with automatic updates, proper 16:9 menus and HUD, mouse aiming, a clearer sniper scope and online play. Here's what's done and what's still being tested.</sub></td>
+<td width="50%" valign="top"><a href="news/2026-11-14-patch-notes-1-1-0.md"><img src="news/img/compare-11-dam.jpg" width="100%" alt=""></a><br><sub>2026-11-14 · Release</sub><br><b><a href="news/2026-11-14-patch-notes-1-1-0.md">Version 1.1.0 is out - patch notes</a></b><br><sub>New launcher with automatic updates and news, fog, snow, smoke and debris like the original, a picture that fits any screen, rebuilt mouse aiming. If you are on 1.0.x, download 1.1 once by hand - after that the launcher updates the game for you.</sub></td>
+<td width="50%" valign="top"><a href="news/2026-11-14-devlog-road-to-1-1.md"><img src="news/img/compare-11-snow.jpg" width="100%" alt=""></a><br><sub>2026-11-14 · Devlog</sub><br><b><a href="news/2026-11-14-devlog-road-to-1-1.md">Devlog - the road to 1.1</a></b><br><sub>What happened between 1.0.1 and 1.1. A wrong sine in the VU1, a new launcher, a Windows test lab, mouse aiming, Online+, and the things we got wrong on the way.</sub></td>
 </tr>
 </table>
 
 <sub>All posts, patch notes and what's coming next: <a href="news/README.md">news</a></sub>
 <!-- news:end -->
 
-> [!TIP]
-> **🪟 1.0.1: TimeSplitters 2 now runs natively on Windows 10 / 11.** Same idea as on Linux: download, extract,
-> pick your disc image – nothing to install. Direct3D 11, 60 FPS, the first story level played through on a real PC
-> without a single error. It took three fixes nobody could see under Wine ([the story](docs/WINDOWS_PORT.md)).
-> Also new: the **HUD sits at the 16:9 edges** and the **sniper scope** finally fits widescreen.
+> [!IMPORTANT]
+> **Version 1.1 is out. Please use this version.** If you are still on 1.0.x, download 1.1 once by hand.
+> 1.1 comes with a new launcher. From now on it checks for new versions when you start it, downloads only the files
+> that changed, backs up your saves first and shows the project news. So after this one download everyone stays on
+> the same version without doing anything.
 >
-> Still in since 1.0: **online multiplayer** with an in-game server browser ([how it works](docs/ONLINE.md)),
-> **mouse and keyboard** ([open points](docs/MOUSE.md)), a settings menu in the game's own style (English / Deutsch),
-> **F8 video recording** and an **F7 free camera** for screenshots.
+> Coming from 1.0.x: extract 1.1 into a **new** folder and set it up once with your disc. To keep your saves, copy
+> `app/build/spielstand` from the old folder to `savedata` in the new one.
+
+> [!TIP]
+> **New in 1.1:** the launcher with automatic updates and news · fog, snow, smoke and debris match the original now
+> (a bug in the vector unit code, [the story](news/2026-11-14-devlog-road-to-1-1.md)) · the picture fits 16:9, 16:10,
+> 21:9 and 32:9 · menus and HUD in 16:9 · mouse aiming rebuilt · modern gamepad aiming, unlock everything and
+> texture packs as options · laptops with two graphics chips use the fast one · everything in English by default.
+> [Patch notes](news/2026-11-14-patch-notes-1-1-0.md)
 
 <table>
 <tr>
@@ -67,9 +73,10 @@
 
 ## Play it in 3 minutes
 
-Download the package for your system from [**Releases**](https://github.com/Destinity13/TimeSplitters-2-Native-Linux-Recomp/releases/latest),
+Download the package for your system from [**Releases**](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/releases/latest),
 extract it, start the launcher and pick **your** disc image. The launcher checks the disc, extracts it and builds the
-game once with a progress bar (about 3 minutes on a desktop PC). Then press **Play**.
+game once with a progress bar (about 3 minutes on a desktop PC, longer on a laptop). Then press **Start Game**.
+After that the launcher keeps the game up to date by itself.
 
 Nothing to install: each package brings its own compiler and prebuilt libraries, and only the code generated from
 your disc is compiled on your PC.
@@ -91,7 +98,7 @@ your disc is compiled on your PC.
 2. Run **`./TS2-Recomp.sh`**
 3. Pick your ISO, wait, **Play**
 
-<sub>Needs only `python3`; runs on any current distribution.</sub>
+<sub>Needs only `python3`; runs on any current distribution. The graphical launcher uses WebKitGTK; without it the script falls back to simple dialogs (no automatic updates there).</sub>
 
 </td><td valign="top">
 
@@ -99,7 +106,7 @@ your disc is compiled on your PC.
 2. Add **`TS2-SteamDeck.sh`** to Steam
 3. Play in **Game Mode**
 
-<sub>Deck detected automatically, tuned for a steady 60 FPS. [Step by step](docs/STEAM_DECK.md)</sub>
+<sub>Deck detected automatically, tuned for a steady 60 FPS. Updates: start the launcher in Desktop Mode now and then. [Step by step](docs/STEAM_DECK.md)</sub>
 
 </td></tr>
 </table>
@@ -134,6 +141,12 @@ and up to 16 players.
 
 Roadmap and technical details: [ONLINE](docs/ONLINE.md)
 
+> [!NOTE]
+> **Online+** is a separate, optional edition you pick in the launcher: its own lobby in the game's menus, bot match,
+> ranks, hit markers, killfeed and scoreboard. It is a side experiment to see how far the game can be changed with
+> its own menus, messages and HUD. It has no goal, it still has bugs, and the classic game and its multiplayer stay
+> untouched and stay the default.
+
 ## What makes it different
 
 |  |  |
@@ -151,11 +164,12 @@ Roadmap and technical details: [ONLINE](docs/ONLINE.md)
 <tr><td valign="top" width="50%">
 
 **Picture**
-- Real 16:9 (Hor+), HUD at the screen edges, menus kept in 4:3 proportion
-- Internal resolution 1×–8×, anisotropic filtering, FXAA, AMD CAS
+- Real 16:9 (Hor+), also 16:10, 21:9 and 32:9; menus and HUD use the wide picture
+- Internal resolution 1×–8× or "Auto" (steps down on slower cards), anisotropic filtering, FXAA, AMD CAS
+- Sniper scope: Original, Clear or Extra clear
 - Original frame blending ("ghosting" when turning) switchable, **off by default**
 - Cutscenes without letterbox bars (switchable)
-- PCSX2 texture packs from `texturpakete/`
+- PCSX2 texture packs from `texture_packs/` (none included)
 
 </td><td valign="top" width="50%">
 
@@ -164,17 +178,42 @@ Roadmap and technical details: [ONLINE](docs/ONLINE.md)
 - Split-screen for 2 players; a third gamepad turns on the multitap
 - Online play with server browser, up to 16 players
 - Modern gamepads (SDL3), rumble, pressure buttons
-- Mouse look with the original aim-mode crosshair, free key/mouse binding in the menu *(new, [not finished](docs/MOUSE.md))*
+- Mouse aiming with a fixed crosshair, free key/mouse binding in the menu ([details](docs/MOUSE.md))
+- Optional: modern gamepad aiming, unlock everything (your own progress stays untouched)
+- Launcher with setup, settings, news and automatic updates
 - In-game settings menu, memory card saves, built-in hang report
 
 </td></tr>
 </table>
 
+## 1.0.1 vs 1.1
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/compare_11_snow.jpg" width="100%" alt="Snow in the Siberia intro: 1.0.1 left, 1.1 right"></td>
+<td width="50%"><img src="docs/screenshots/compare_11_smoke.gif" width="100%" alt="Impact smoke on a wall at half speed: 1.0.1 left, 1.1 right, with a moving divider"></td>
+</tr>
+<tr>
+<td><sub>Snow and particles sit where they belong again.</sub></td>
+<td><sub>Impact smoke at half speed. The grey patch is gone, it is a soft puff like on the PS2.</sub></td>
+</tr>
+</table>
+<sub>Left is release 1.0.1, right is 1.1, same input replay. The cause was a wrong sine in our vector unit code, found by
+comparing with PCSX2. Details in the <a href="news/2026-11-14-devlog-road-to-1-1.md">devlog</a>.</sub>
+
+<table>
+<tr>
+<td width="50%"><img src="news/img/launcher-home.jpg" width="100%" alt="The 1.1 launcher: start page with news, edition switch and Start Game"></td>
+<td width="50%"><img src="news/img/launcher-options.jpg" width="100%" alt="The 1.1 launcher: controls page with modern gamepad aiming and Unlock everything"></td>
+</tr>
+</table>
+<sub>The new launcher: news and updates on the start page, every setting in one place.</sub>
+
 ## Gallery
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/clip_siberia.gif" width="100%" alt="Siberia gameplay recorded with F8"></td>
+<td width="50%"><img src="docs/screenshots/cutscene_11_intro.gif" width="100%" alt="Story intro cutscene in 1.1, rendered live by the game in 16:9"></td>
 <td width="50%"><img src="docs/screenshots/clip_aztec.gif" width="100%" alt="Aztec Ruins level intro"></td>
 </tr>
 <tr>
@@ -194,14 +233,14 @@ Roadmap and technical details: [ONLINE](docs/ONLINE.md)
 <td><img src="docs/screenshots/gallery_character.jpg" alt="Character select at 16:9"></td>
 </tr>
 </table>
-<sub>All pictures straight from the port on the author's own disc: no AI upscaling, no texture pack. The two clips were
-recorded with the built-in F8 capture.</sub>
+<sub>All pictures straight from the port on the author's own disc: no AI upscaling, no texture pack. The clips are
+captured from the running game.</sub>
 
 ## Before / after
 
 <img src="docs/screenshots/compare_resolution.gif" width="100%" alt="The same frame at the PS2's output resolution and at 4x internal resolution, with a moving divider">
 
-**[▶ Open the interactive slider](https://destinity13.github.io/TimeSplitters-2-Native-Linux-Recomp/compare/)** – drag between
+**[▶ Open the interactive slider](https://destinity13.github.io/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/compare/)** – drag between
 the PS2 picture and the port, for resolution and for 4:3 vs 16:9.
 
 <img src="docs/screenshots/compare_widescreen.jpg" width="100%" alt="Same frame of the same input replay: original 4:3 (left) vs real 16:9 (right)">
@@ -229,13 +268,14 @@ the port's renderer on the author's own disc, no AI upscaling, no texture pack.<
 | | |
 |---|---|
 | ✅ **Already there** | title, profiles, Story (all 10 levels load and play, Siberia played through), Story co-op, Arcade League, Challenge, MapMaker, options, bonus trailer, memory card, sound |
+| 🆕 **New in 1.1** | **launcher with automatic updates and news** · particle effects fixed (fog, snow, smoke, debris) · any aspect ratio · 16:9 menus and HUD · mouse aiming rebuilt · modern gamepad aiming · unlock everything · texture packs · fast graphics card on laptops · English by default · Online+ as an optional experiment |
 | 🆕 **New in 1.0.1** | **Windows release** · HUD at the 16:9 edges · sniper scope correct in 16:9 · co-op split screen fixed in 16:9 · no PCSX2 messages at start |
 | 🆕 **New in 1.0** | online multiplayer with in-game server browser · `ts2-server` in the package · mouse and keyboard play · TS2-style settings menu (EN/DE) · F8 video recording · F7 free camera |
 | 🟡 **Being tested** | mouse play beyond Siberia/Arcade ([open points](docs/MOUSE.md)), Story levels 2–10 by hand (automated runs are clean), Arcade Custom, 3–4 players via multitap, online over the internet |
-| 🛠 **Coming in updates** | softer snow haze at high resolutions · mouse polish (aim-mode walking speed, vehicles) · dedicated server that runs matches without a hosting player |
+| 🛠 **Coming in updates** | sniper scope when switching weapons with mouse aiming · auto-aim switch for the original controls · field-of-view option · Online+ scoreboard and bot match stutter · dedicated server that runs matches without a hosting player |
 
 Every build: [CHANGELOG](docs/CHANGELOG.md) · open issues: [KNOWN_ISSUES](docs/KNOWN_ISSUES.md) · found a bug?
-[Open an issue](https://github.com/Destinity13/TimeSplitters-2-Native-Linux-Recomp/issues) and attach `build/spielen.log` (on Windows also `build\bridge.log`).
+[Open an issue](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/issues) and attach `app/build/play.log` and `app/build/bridge.log`.
 
 **Which TimeSplitters 2 port is this?** As far as we know the only active recompilation of the **PS2** version,
 checked frame by frame against PCSX2. [split2-recomp](https://github.com/phobos665/split2-recomp) recompiles the
@@ -249,8 +289,10 @@ checked frame by frame against PCSX2. [split2-recomp](https://github.com/phobos6
 3. **Fixes go into the recompiler or the runtime, not into the game.** The game's own code stays as it came off the
    disc; every finding is written down ([FINDINGS](docs/FINDINGS.md)), from FPU rounding to a frozen COP0 counter
    that kept the network code silent.
-4. **Every build is numbered and tested** (`pc001` … `pc143`): 60 FPS check, all ten story levels, split-screen,
-   package setup as a fresh user on Linux, the whole Windows chain under Wine, CI jobs on real Windows and play-tests on a real Windows PC.
+4. **Every build is numbered and tested** (`pc001` … `pc228`): a test suite replays story, sniper, deathmatch and
+   online scenes before every package; package setup as a fresh user on Linux; CI builds on GitHub; a Windows laptop
+   that picks up every new package by itself, sets it up from the disc, plays a scripted run and sends logs and
+   screenshots back; and play-tests on a real Windows PC by Lowkas.
 5. **Tools were built along the way:** input record/replay, RAM-diff search (that is how the camera and player
    position for mouse look were found), write watches with native backtraces, a hang reporter, frame capture.
 
@@ -284,6 +326,7 @@ sound (SPU2) come from PCSX2, through a small bridge library. The PS2 network ad
 | [MOUSE](docs/MOUSE.md) | mouse and keyboard play: how it is done, what is still open |
 | [STEAM_DECK](docs/STEAM_DECK.md) | setup and Game Mode on the Deck |
 | [WINDOWS_PORT](docs/WINDOWS_PORT.md) | how the Windows build works and how it was tested |
+| [Launcher](launcher/README.md) | the launcher: source, how updates work |
 | [BUILDING](docs/BUILDING.md) | how the game is built on your PC, all settings |
 | [CHANGELOG](docs/CHANGELOG.md) | every build and release |
 | [FINDINGS](docs/FINDINGS.md) | every bug found against the reference and how it was fixed |

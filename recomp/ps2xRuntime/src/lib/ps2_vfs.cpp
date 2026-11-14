@@ -51,7 +51,7 @@ namespace
 
         int64_t seek(int64_t offset, int whence) override
         {
-            // 64 Bit auch unter Windows (dort ist long 32 Bit; Dateien ueber 2 GB)
+            // 64 bits on Windows too (long is 32 bits there; files over 2 GB)
 #ifdef _WIN32
             if (!m_file || ::_fseeki64(m_file, offset, whence) != 0)
                 return -1;

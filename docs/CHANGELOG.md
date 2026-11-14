@@ -5,6 +5,17 @@
 Every runtime build gets a number (`pcNNN`). Only builds that changed something visible are listed; the bug details
 are in [FINDINGS](FINDINGS.md) and [KNOWN_ISSUES](KNOWN_ISSUES.md).
 
+## 14 November 2026 — 1.1.0
+
+| Build | What changed | Result |
+|---|---|---|
+| `pc226`–`pc228` | **mouse aiming:** the permanent aim mode gets a press edge when it starts (level start, respawn, weapon change), the view scale stays at its normal value without a zoom key (S47 no longer zoomed in); **HUD:** wide effects that reach beyond the screen are not taken for a menu; Windows: the game exports the high-performance GPU hints | regression 5/5 on each build; Windows laptop: story run on the GTX 1050 |
+| `pc225` | **VU1 opcode map of the EFU group corrected:** ESQRT `0x78`, ERSQRT `0x79`, ERCPR `0x7A`, WAITP `0x7B`, ESIN `0x7C`, EATAN `0x7D`, EEXP `0x7E` (four were on the wrong index), latencies to match; division by zero in the EFU reciprocal and EATAN follows the hardware. The game's sprite program (rotation by sin of the particle angle) was affected | impact smoke is a soft puff, debris has its size, the white haze in Siberia no longer pulses (brightness spread over 6 frames at 6×: 9–16 → 1.1); story diff against PCSX2 4.1 → 2.2; all 130 opcode entries compared with PCSX2 |
+| runtime | **particles in 16:9:** depth-tested textured packets (snow, sparks, debris, smoke) are no longer treated as HUD; effects on screen no longer move the HUD | Siberia tunnel and outdoors, 16:9 |
+| bridge | "Auto" internal resolution is the default and its frame rate guard also steps down on PCs that never reach 60 FPS; Windows picks the high-performance graphics adapter and logs it; raw mouse input on Linux; zoom key no longer skips a level; English default for menu and log messages | Linux and Windows CI; laptop: 58 FPS at 4× on the GTX 1050 (was 14–30 on the Intel chip) |
+| launcher + packages | new launcher (setup, settings, news, updates; source in `launcher/`); switches write `1`/`0`; edition switch always on the start page; update download without a time limit; `WebView2Loader.dll` shipped; long-path prefix removed for the Windows setup; start falls back to the Windows default graphics card if the fast one fails; Windows: language follows the choice, `-Setup`/`-Play` work again (a byte-order mark behind the file header broke the parameters); saves in `savedata/` at the top level, old saves are moved once; `.bat` opens the launcher | Linux: fresh setup from the package, both editions start; Windows 11 laptop (GTX 1050): setup without dialog, story run through Direct3D 11 |
+| tools | Windows test lab (`tools/winlab`): the Linux PC hands packages to a Windows machine in the LAN, which sets up, plays a scripted route and sends logs and screenshots back | used for the 1.1.0 Windows run |
+
 ## 11 November 2026 — 1.0.1
 
 | Build | What changed | Result |
@@ -81,7 +92,7 @@ are in [FINDINGS](FINDINGS.md) and [KNOWN_ISSUES](KNOWN_ISSUES.md).
 | `pc041` | pad logging per port | "2 Players" on the title screen, split profile screen, **Story co-op** |
 | `pc042` | VU1 translation stage 4 | bit-identical, not faster (co-op 30–40 FPS) |
 | `pc043` | VU1 stage 5 with `FCSET` (first attempt) | co-op 59.9 FPS, but lighting differences |
-| `pc045` | stage 5: `FCSET` as clip-ring entry, EFU result (`EATAN`→`MFP`) published at the right cycle | **co-op 59.9 FPS, pixel-identical** |
+| `pc045` | stage 5: `FCSET` as clip-ring entry, EFU result (`ESIN`→`MFP`) published at the right cycle | **co-op 59.9 FPS, pixel-identical** |
 | `pc046` | diagnostics only: `PS2X_VU1_DIFF` reports register and value of the first difference | |
 | `pc047` | `TS2_WS_EXTRA`: test the 7 aspect constants the community patch leaves alone | none of them affects HUD or weapons |
 | `pc048` | `PS2X_GIFSTAT`: which GIF path carries which primitives | HUD comes through VU1 (PATH1) as 2D sprites with fixed texture coordinates |

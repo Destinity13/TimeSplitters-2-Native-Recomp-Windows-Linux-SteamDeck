@@ -458,7 +458,7 @@ namespace ps2_syscalls
         }
 
         {
-            // PS2X_RPCLOG=1: jeden sceSifCallRpc mit beiden ABI-Lesarten protokollieren (Vergleich, falsche ABI-Wahl erkennen)
+            // PS2X_RPCLOG=1: log every sceSifCallRpc with both ABI readings (comparison, spot a wrong ABI choice)
             static const bool rlog = std::getenv("PS2X_RPCLOG") != nullptr;
             static std::atomic<uint32_t> rn{0};
             if (rlog && rn.fetch_add(1) < 4000u)
@@ -477,7 +477,7 @@ namespace ps2_syscalls
             static const uint32_t watch = [] { const char *e = std::getenv("PS2X_RPC_WATCH"); return e ? static_cast<uint32_t>(std::strtoul(e, nullptr, 0)) : 0u; }();
             const auto in = [&](uint32_t base, uint32_t len) { return watch >= (base & 0x1FFFFFFu) && watch < (base & 0x1FFFFFFu) + len; };
             if (watch && (in(clientPtr, 0x40u) || in(receiveBuffer, receiveSize) || in(receiveBufferRegisters, receiveSizeRegisters) || in(receiveBufferStack, receiveSizeStack)))
-                std::fprintf(stderr, "[RPC] Treffer 0x%08X: client=0x%08X sid=0x%X fn=%u mode=%u send=0x%08X abi=%s reg(ss=0x%X rb=0x%08X rs=0x%X) stk(ss=0x%X rb=0x%08X rs=0x%X) ra=0x%08X\n",
+                std::fprintf(stderr, "[RPC] hit 0x%08X: client=0x%08X sid=0x%X fn=%u mode=%u send=0x%08X abi=%s reg(ss=0x%X rb=0x%08X rs=0x%X) stk(ss=0x%X rb=0x%08X rs=0x%X) ra=0x%08X\n",
                              watch, clientPtr, sidHint, rpcNum, mode, sendBuf, useRegisterConvention ? "Reg" : "Stack",
                              sendSizeRegisters, receiveBufferRegisters, receiveSizeRegisters, sendSizeStack, receiveBufferStack, receiveSizeStack, getRegU32(ctx, 31));
         }
@@ -641,7 +641,7 @@ namespace ps2_syscalls
                 }
             }
             {
-                // PS2X_SDRLOG: sceSdRemote (SDRDRV) mit Argumenten und Rueckgabe protokollieren
+                // PS2X_SDRLOG: log sceSdRemote (SDRDRV) with arguments and return value
                 static const bool sdr = std::getenv("PS2X_SDRLOG") != nullptr;
                 static std::atomic<uint32_t> sn{0};
                 if (sdr && sidHint == 0x80000701u && sn.fetch_add(1) < 3000u)

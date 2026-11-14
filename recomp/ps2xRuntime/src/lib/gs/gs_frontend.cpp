@@ -5,7 +5,7 @@
 #include "runtime/gs/gs_cpu_backend.h"
 #include "runtime/gs/gs_threaded_backend.h"
 #if defined(_WIN32)
-// Windows-Port: libps2xgs.dll per LoadLibrary statt dlopen
+// Windows port: libps2xgs.dll through LoadLibrary instead of dlopen
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -13,7 +13,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#undef EXCEPTION_BREAKPOINT // kollidiert mit PS2Exception in ps2_runtime.h
+#undef EXCEPTION_BREAKPOINT // clashes with PS2Exception in ps2_runtime.h
 #include <cstdio>
 #define RTLD_NOW 0
 #define RTLD_LOCAL 0
@@ -21,7 +21,7 @@
 #define RTLD_NOLOAD 0
 static void *dlopen(const char *f, int) { return reinterpret_cast<void *>(LoadLibraryA(f)); }
 static void *dlsym(void *h, const char *n) { return reinterpret_cast<void *>(GetProcAddress(static_cast<HMODULE>(h), n)); }
-static const char *dlerror() { static char b[64]; std::snprintf(b, sizeof(b), "LoadLibrary-Fehler %lu", static_cast<unsigned long>(GetLastError())); return b; }
+static const char *dlerror() { static char b[64]; std::snprintf(b, sizeof(b), "LoadLibrary error %lu", static_cast<unsigned long>(GetLastError())); return b; }
 #else
 #include <dlfcn.h>
 #endif
@@ -42,10 +42,10 @@ static const char *dlerror() { static char b[64]; std::snprintf(b, sizeof(b), "L
 #include <iostream>
 #include <sstream>
 
-// GS-Ereignis (SIGNAL/FINISH gesetzt): den EE-Scheduler sofort wecken, damit er den GS-Interrupt (INTC 0) gleich
-// ausloest wie echte Hardware - sonst wurde er erst beim naechsten Scheduler-Ereignis (VBlank) geprueft, und ein Spiel,
-// das auf den Interrupt wartet (TS2: SIGNAL am Bildende), verlor je Bild einen VBlank (30 statt 60 fps).
-// ExternalWake mit Typ 0xFFFFFFFF passt zu keinem wartenden Thread, loest aber processPendingEvents/pollGsInterrupt aus.
+// GS event (SIGNAL/FINISH set): wake the EE scheduler right away so that it raises the GS interrupt (INTC 0) at once
+// like real hardware - otherwise it was only checked at the next scheduler event (VBlank), and a game
+// waiting for the interrupt (TS2: SIGNAL at the end of the frame) lost one VBlank per frame (30 instead of 60 fps).
+// ExternalWake with type 0xFFFFFFFF matches no waiting thread but triggers processPendingEvents/pollGsInterrupt.
 extern PS2Runtime *g_ps2xMtvuRuntime;
 static void ps2xWakeForGsEvent()
 {
@@ -151,7 +151,7 @@ namespace
 
 namespace
 {
-    // PS2X_MTGS=1: Rasterizer in eigenem Thread (GSThreadedBackend), sonst synchron wie bisher.
+    // PS2X_MTGS=1: rasterizer in its own thread (GSThreadedBackend), otherwise synchronous as before.
     std::unique_ptr<GSRasterBackend> makeGsBackend()
     {
         const char *e = std::getenv("PS2X_MTGS");
@@ -164,8 +164,8 @@ namespace
 
 // ---------------------------------------------------------------------------------------------------------
 // PCSX2-GS-Bruecke (PS2X_PCSX2_GS=/pfad/libps2xgs.so): Der nativ uebersetzte Spielcode bleibt unveraendert,
-// nur die GS-Befehlspakete gehen zusaetzlich an den Grafikchip von PCSX2 (Vulkan/OpenGL, Hochskalierung).
-// Unser eigener Rasterizer zeichnet dann nicht mehr (spart CPU), Transfers/VRAM fuer Ruecklesen bleiben.
+// only the GS command packets additionally go to PCSX2's graphics chip (Vulkan/OpenGL, upscaling).
+// Our own rasterizer then no longer draws (saves CPU); transfers/VRAM for readback remain.
 // ---------------------------------------------------------------------------------------------------------
 extern thread_local int g_ps2xCurrentGifPath;
 extern thread_local bool g_ps2xBridgeStripTag;
@@ -186,6 +186,7 @@ namespace ps2xbridge
     using MenuFn = int (*)();
     MenuFn s_menu = nullptr;
     MenuFn s_wideMode = nullptr;
+    MenuFn s_aspectMilli = nullptr;
     MenuFn s_turbo = nullptr;
     using WideFn = void (*)(int);
     WideFn s_gameWide = nullptr;
@@ -195,6 +196,10 @@ namespace ps2xbridge
     OnlineFn s_onlineBrowser = nullptr;
     using StatusFn = void (*)(const char *);
     StatusFn s_onlineStatus = nullptr;
+    using TextFn = void (*)(int, const char *);
+    TextFn s_text = nullptr;   // ps2xgs_text: generic text events for the overlay (Online+ killfeed, scoreboard)
+    using TextGetFn = int (*)(int, char *, int);
+    TextGetFn s_textGet = nullptr;   // ps2xgs_text_get: text from the bridge (Online+ server list)
     using FlushFn = void (*)();
     using ReadFifoFn = void (*)(unsigned char *, unsigned int);
     ReadFifoFn s_readFifo = nullptr;
@@ -220,7 +225,7 @@ namespace ps2xbridge
         const char *lib = std::getenv("PS2X_PCSX2_GS");
         if (!lib || !*lib) return false;
         void *h = dlopen(lib, RTLD_NOW | RTLD_LOCAL);
-        if (!h) { std::fprintf(stderr, "[ps2xgs] dlopen fehlgeschlagen: %s\n", dlerror()); return false; }
+        if (!h) { std::fprintf(stderr, "[ps2xgs] dlopen failed: %s\n", dlerror()); return false; }
         s_start = reinterpret_cast<StartFn>(dlsym(h, "ps2xgs_start"));
         s_transfer = reinterpret_cast<TransferFn>(dlsym(h, "ps2xgs_transfer"));
         s_vsync = reinterpret_cast<VsyncFn>(dlsym(h, "ps2xgs_vsync"));
@@ -230,11 +235,14 @@ namespace ps2xbridge
         s_rumble = reinterpret_cast<RumbleFn>(dlsym(h, "ps2xgs_rumble"));
         s_menu = reinterpret_cast<MenuFn>(dlsym(h, "ps2xgs_menu_open"));
         s_wideMode = reinterpret_cast<MenuFn>(dlsym(h, "ps2xgs_wide_mode"));
+        s_aspectMilli = reinterpret_cast<MenuFn>(dlsym(h, "ps2xgs_aspect_milli"));   // newer bridges only (ultrawide)
         s_turbo = reinterpret_cast<MenuFn>(dlsym(h, "ps2xgs_turbo"));
         s_gameWide = reinterpret_cast<WideFn>(dlsym(h, "ps2xgs_game_wide"));
         s_option = reinterpret_cast<OptFn>(dlsym(h, "ps2xgs_option"));
         s_onlineBrowser = reinterpret_cast<OnlineFn>(dlsym(h, "ps2xgs_online_browser"));
         s_onlineStatus = reinterpret_cast<StatusFn>(dlsym(h, "ps2xgs_online_status"));
+        s_text = reinterpret_cast<TextFn>(dlsym(h, "ps2xgs_text"));
+        s_textGet = reinterpret_cast<TextGetFn>(dlsym(h, "ps2xgs_text_get"));
         s_flush = reinterpret_cast<FlushFn>(dlsym(h, "ps2xgs_flush"));
         s_readFifo = reinterpret_cast<ReadFifoFn>(dlsym(h, "ps2xgs_read_fifo"));
         s_padN = reinterpret_cast<PadNFn>(dlsym(h, "ps2xgs_pad_n"));
@@ -242,30 +250,30 @@ namespace ps2xbridge
         s_captureEnd = reinterpret_cast<CaptureEndFn>(dlsym(h, "ps2xgs_capture_end"));
         s_readFifoAsync = reinterpret_cast<ReadFifoAsyncFn>(dlsym(h, "ps2xgs_read_fifo_async"));
         s_readFifoWait = reinterpret_cast<ReadFifoWaitFn>(dlsym(h, "ps2xgs_read_fifo_wait"));
-        if (!s_start || !s_transfer || !s_vsync) { std::fprintf(stderr, "[ps2xgs] Symbole fehlen\n"); return false; }
+        if (!s_start || !s_transfer || !s_vsync) { std::fprintf(stderr, "[ps2xgs] symbols missing\n"); return false; }
         const char *e;
         const int renderer = (e = std::getenv("PS2X_PCSX2_RENDERER")) ? std::atoi(e) : 14;   // 14 = Vulkan
         const float upscale = (e = std::getenv("PS2X_PCSX2_UPSCALE")) ? static_cast<float>(std::atof(e)) : 3.0f;
         const int wide = (e = std::getenv("PS2X_PCSX2_WIDESCREEN")) ? std::atoi(e) : 0;
         const char *live = std::getenv("PS2X_PCSX2_LIVEFILE");
-        // Standard: Temp-Ordner des Systems (unter Windows gibt es kein /tmp -> "C:\\tmp" fehlt, die Datei liess sich nicht
-        // anlegen und PCSX2 brach den VM-Start ab: "VM nach 10 s nicht bereit")
+        // Default: the system temp directory (Windows has no /tmp -> "C:\\tmp" is missing, the file could not be
+        // created and PCSX2 aborted the VM start: "VM nach 10 s nicht bereit")
         static std::string livePath = live ? live : [] {
             std::error_code ec;
             const std::filesystem::path t = std::filesystem::temp_directory_path(ec);
             return (ec ? std::filesystem::path(".") : t) / "ps2x_live.gs";
         }().string();
-        std::fprintf(stderr, "[ps2xgs] Live-Datei: %s\n", livePath.c_str());
+        std::fprintf(stderr, "[ps2xgs] live file: %s\n", livePath.c_str());
         if (FILE *f = std::fopen(livePath.c_str(), "ab")) std::fclose(f);   // Datei muss existieren (VMManager)
         if (!s_start(livePath.c_str(), renderer, upscale, wide))
         {
-            std::fprintf(stderr, "[ps2xgs] Start fehlgeschlagen (Renderer %d)\n", renderer);
-            // PS2XGS_VM_PFLICHT=1: der Launcher versucht dann einen anderen Renderer (Exit-Code 3) statt des eingebauten GS
+            std::fprintf(stderr, "[ps2xgs] start failed (renderer %d)\n", renderer);
+            // PS2XGS_VM_PFLICHT=1: the launcher then tries another renderer (exit code 3) instead of the built-in GS
             if (const char *pf = std::getenv("PS2XGS_VM_PFLICHT"); pf && *pf == '1')
             {
                 std::fflush(nullptr);
 #ifdef _WIN32
-                // nicht ueber ExitProcess: der atexit-Haken der Bridge-DLL beendet sonst mit Code 0
+                // not through ExitProcess: the atexit hook of the bridge DLL would otherwise exit with code 0
                 TerminateProcess(GetCurrentProcess(), 3);
 #endif
                 std::_Exit(3);
@@ -273,7 +281,7 @@ namespace ps2xbridge
             return false;
         }
         s_active = true;
-        // Ton: echten SPU2-Chip (PCSX2) an den IOP haengen; PS2X_SPU2=0 schaltet zurueck
+        // Sound: attach the real SPU2 chip (PCSX2) to the IOP; PS2X_SPU2=0 switches back
         if (const char *sp = std::getenv("PS2X_SPU2"); !(sp && *sp == '0'))
         {
             auto &b = ps2x::iop::g_spuBridge;
@@ -285,19 +293,19 @@ namespace ps2xbridge
             if (!(b.write && b.read && b.dma && b.async && b.takeIrqs))
                 b = ps2x::iop::SpuBridge{};
             else
-                std::fprintf(stderr, "[ps2xgs] SPU2 (Ton) aktiv\n");
+                std::fprintf(stderr, "[ps2xgs] SPU2 (sound) active\n");
         }
         if (!std::getenv("PS2X_PCSX2_ALSO_SW"))
             g_ps2xOwnRasterOff.store(true, std::memory_order_relaxed);
-        std::fprintf(stderr, "[ps2xgs] PCSX2-GS aktiv (Renderer %d, Skalierung %.1fx)\n", renderer, upscale);
+        std::fprintf(stderr, "[ps2xgs] PCSX2 GS active (renderer %d, scale %.1fx)\n", renderer, upscale);
         return true;
     }
 }
 
 bool ps2xGsBridgeActive() { return ps2xbridge::init(); }
 
-// X11 muss vor dem ersten Xlib-Aufruf (raylib/GLFW-Fenster) thread-sicher gemacht werden, weil PCSX2s Fenster
-// in einem eigenen Thread läuft. Daher als Konstruktor beim Programmstart, nur wenn die Brücke gewünscht ist.
+// X11 must be made thread-safe before the first Xlib call (raylib/GLFW window) because PCSX2's window
+// runs in its own thread. So as a constructor at program start, only if the bridge is wanted.
 __attribute__((constructor)) static void ps2xEarlyXInitThreads()
 {
     const char *lib = std::getenv("PS2X_PCSX2_GS");
@@ -307,22 +315,37 @@ __attribute__((constructor)) static void ps2xEarlyXInitThreads()
             fn();
 }
 extern std::atomic<unsigned> g_ps2xPadZusatz;
-// Eingabe aus dem PCSX2-Spielfenster (Tastatur) + SDL3-Gamepad. false = Brücke ohne Eingabe -> alter Weg (raylib).
+extern std::atomic<unsigned> g_ps2xPadMaske;
+extern std::atomic<unsigned> g_ps2xPadRoh;
+extern std::atomic<unsigned> g_ps2xPadRStickAus;
+extern std::atomic<unsigned> g_ps2xPadAchsenRoh;
+// Input from the PCSX2 game window (keyboard) + SDL3 gamepad. false = bridge without input -> old path (raylib).
 bool ps2xGsBridgePad(uint16_t &pressed, uint8_t axes[4])
 {
-    // Nicht ps2xbridge::init() aufrufen: die Pad-Abfrage darf die Brücke nicht vorzeitig starten.
+    // Do not call ps2xbridge::init(): the pad query must not start the bridge prematurely.
     if (!ps2xbridge::s_active || !ps2xbridge::s_pad) return false;
     unsigned short p = 0;
     if (!ps2xbridge::s_pad(&p, axes)) return false;
-    // Mauszielen (TS2): Zielmodus-Taste halten, solange gespielt wird -> Original-Fadenkreuz (ts2_override setzt das Bit)
+    // Mouse aiming (TS2): hold the aim mode button while playing -> original crosshair (ts2_override sets the bit)
+    g_ps2xPadRoh.store(p, std::memory_order_relaxed);
+    // axes as the player moved them (lx, ly, rx, ry); modern gamepad aiming (TS2) turns the view itself and takes the
+    // right stick away from the game
+    g_ps2xPadAchsenRoh.store(static_cast<unsigned>(axes[0]) | (static_cast<unsigned>(axes[1]) << 8) | (static_cast<unsigned>(axes[2]) << 16) | (static_cast<unsigned>(axes[3]) << 24), std::memory_order_relaxed);
+    if (g_ps2xPadRStickAus.load(std::memory_order_relaxed)) axes[2] = axes[3] = 0x80;
     p |= static_cast<unsigned short>(g_ps2xPadZusatz.load(std::memory_order_relaxed));
+    // released for a few VBlanks so the game sees a fresh press (sniper scope opens only on an L2 edge)
+    p &= static_cast<unsigned short>(~g_ps2xPadMaske.load(std::memory_order_relaxed));
     pressed = p;
     return true;
 }
-std::atomic<unsigned> g_ps2xPadZusatz{0};   // vom Spiel-Override zusaetzlich gedrueckte PS2-Tasten (Spieler 1)
-// Mauszielen: seit dem letzten Aufruf gesammelte relative Mausbewegung (nur wenn das Spielfenster die Maus fängt).
-// Rückgabe: 0 = Maus nicht gefangen (Menü offen, Fenster ohne Fokus, Mauszielen aus), sonst 1.
-// Laufende Videoaufnahme (F8 / PS2XGS_CAPTURE) vor dem Beenden abschliessen
+std::atomic<unsigned> g_ps2xPadZusatz{0};   // PS2 buttons additionally pressed by the game override (player 1)
+std::atomic<unsigned> g_ps2xPadMaske{0};    // PS2 buttons the override forces released (player 1), after Zusatz
+std::atomic<unsigned> g_ps2xPadRStickAus{0};        // 1 = the game gets a centred right stick (player 1)
+std::atomic<unsigned> g_ps2xPadAchsenRoh{0x80808080u}; // player 1 axes as moved (lx | ly<<8 | rx<<16 | ry<<24)
+std::atomic<unsigned> g_ps2xPadRoh{0};      // player 1 buttons as the player pressed them (without Zusatz/Maske)
+// Mouse aiming: relative mouse movement collected since the last call (only while the game window captures the mouse).
+// Returns: 0 = mouse not captured (menu open, window without focus, mouse aiming off), otherwise 1.
+// Finish a running video recording (F8 / PS2XGS_CAPTURE) before exiting
 void ps2xGsBridgeCaptureEnd()
 {
     if (ps2xbridge::s_active && ps2xbridge::s_captureEnd) ps2xbridge::s_captureEnd();
@@ -343,18 +366,23 @@ int ps2xGsBridgeWideMode()
 {
     return (ps2xbridge::init() && ps2xbridge::s_wideMode) ? ps2xbridge::s_wideMode() : 0;
 }
+// Ultrawide: window width/height x 1000 when the player chose "any window shape", otherwise 0 (also with older bridges)
+int ps2xGsBridgeAspectMilli()
+{
+    return (ps2xbridge::s_active && ps2xbridge::s_aspectMilli) ? ps2xbridge::s_aspectMilli() : 0;
+}
 void ps2xGsBridgeGameWide(int wide)
 {
     if (ps2xbridge::s_active && ps2xbridge::s_gameWide)
         ps2xbridge::s_gameWide(wide);
 }
-// Gebuendelte Grafikpakete dieses Threads an PCSX2 abgeben (Reihenfolge zwischen EE- und VU1-Thread)
+// Hand this thread's batched graphics packets to PCSX2 (ordering between EE and VU1 thread)
 void ps2xGsBridgeFlush()
 {
     if (ps2xbridge::s_active && ps2xbridge::s_flush)
         ps2xbridge::s_flush();
 }
-// GS-Download (VIF1 -> Speicher, BUSDIR=1): qwc Quadwords aus dem PCSX2-GS lesen (MTGS::InitAndReadFIFO)
+// GS download (VIF1 -> memory, BUSDIR=1): read qwc quadwords from the PCSX2 GS (MTGS::InitAndReadFIFO)
 bool ps2xGsBridgeReadFifo(uint8_t *dst, uint32_t qwc)
 {
     if (!ps2xbridge::s_active || !ps2xbridge::s_readFifo) return false;
@@ -362,7 +390,7 @@ bool ps2xGsBridgeReadFifo(uint8_t *dst, uint32_t qwc)
     ps2xbridge::s_readFifo(dst, qwc);
     return true;
 }
-// Eingabe Spieler 2..4 (weitere Gamepads, Splitscreen); false = kein Geraet
+// Input for players 2..4 (further gamepads, split screen); false = no device
 bool ps2xGsBridgePadN(int player, uint16_t &pressed, uint8_t axes[4])
 {
     if (!ps2xbridge::init() || !ps2xbridge::s_padN) return false;
@@ -371,8 +399,8 @@ bool ps2xGsBridgePadN(int player, uint16_t &pressed, uint8_t axes[4])
     pressed = p;
     return true;
 }
-// Asynchroner GS-Download: Auftrag abschicken, EE rechnet weiter; Ergebnis erst beim Abschluss (VBlank) abwarten.
-// PS2X_DL_SYNC=1 erzwingt den alten synchronen Weg. Rueckgabe nullptr = nicht verfuegbar.
+// Asynchronous GS download: send the job, the EE carries on; wait for the result only at completion (VBlank).
+// PS2X_DL_SYNC=1 forces the old synchronous path. Returns nullptr = not available.
 void *ps2xGsBridgeReadFifoAsync(uint8_t *dst, uint32_t qwc)
 {
     static const bool sync = std::getenv("PS2X_DL_SYNC") != nullptr;
@@ -384,8 +412,8 @@ void ps2xGsBridgeReadFifoWait(void *ticket)
 {
     if (ticket && ps2xbridge::s_readFifoWait) ps2xbridge::s_readFifoWait(ticket);
 }
-// Spiel-Optionen aus dem Menue (z. B. 0 = Kamera-Unschaerfe); fallback ohne Bruecke
-// Online (TS2): Serverbrowser im Spielmenue oeffnen / Verbindungsstatus anzeigen
+// Game options from the menu (e.g. 0 = camera blur); fallback without the bridge
+// Online (TS2): open the server browser in the game menu / show the connection status
 void ps2xGsBridgeOnlineBrowser()
 {
     if (ps2xbridge::s_active && ps2xbridge::s_onlineBrowser) ps2xbridge::s_onlineBrowser();
@@ -394,11 +422,20 @@ void ps2xGsBridgeOnlineStatus(const char *text)
 {
     if (ps2xbridge::s_active && ps2xbridge::s_onlineStatus) ps2xbridge::s_onlineStatus(text);
 }
+int ps2xGsBridgeTextGet(int id, char *buf, int len)
+{
+    if (buf && len > 0) buf[0] = 0;
+    return (ps2xbridge::s_active && ps2xbridge::s_textGet) ? ps2xbridge::s_textGet(id, buf, len) : 0;
+}
+void ps2xGsBridgeText(int id, const char *text)
+{
+    if (ps2xbridge::s_active && ps2xbridge::s_text) ps2xbridge::s_text(id, text);
+}
 int ps2xGsBridgeOption(int id, int fallback)
 {
     return (ps2xbridge::s_active && ps2xbridge::s_option) ? ps2xbridge::s_option(id, fallback) : fallback;
 }
-// F10 im Spielfenster: Turbo (Bildratenbegrenzung aus)
+// F10 in the game window: turbo (frame limiter off)
 bool ps2xGsBridgeTurbo()
 {
     return ps2xbridge::s_active && ps2xbridge::s_turbo && ps2xbridge::s_turbo() != 0;
@@ -408,12 +445,12 @@ bool ps2xGsBridgeMenuOpen()
 {
     return ps2xbridge::s_active && ps2xbridge::s_menu && ps2xbridge::s_menu() != 0;
 }
-// Screenshot über den PCSX2-GS (PNG, so wie PCSX2 das Bild ausgibt); false, wenn die Brücke nicht aktiv ist
+// Screenshot through the PCSX2 GS (PNG, the way PCSX2 outputs the picture); false if the bridge is not active
 bool ps2xGsBridgeScreenshot(const char *path)
 {
     if (!ps2xbridge::init() || !ps2xbridge::s_shot) return false;
 #ifdef _WIN32
-    // PCSX2 oeffnet absolute Pfade als \\?\-Pfad: dort gilt '/' nicht als Trenner -> vereinheitlichen
+    // PCSX2 opens absolute paths as \\\\?\\ paths: '/' is not a separator there -> normalise
     std::string p(path);
     for (char &ch : p) if (ch == '/') ch = '\\';
     ps2xbridge::s_shot(p.c_str());
@@ -423,14 +460,14 @@ bool ps2xGsBridgeScreenshot(const char *path)
     return true;
 }
 
-// Zahl der echten Bildwechsel (DISPFB-Wechsel je VBlank) - fuer den Haenger-Bericht in ts2_override.cpp
+// Number of real frame flips (DISPFB changes per VBlank) - for the hang report in ts2_override.cpp
 std::atomic<uint64_t> g_ps2xBildwechsel{0};
-// Vom EE-Scheduler bei jedem VBlank: privilegierte Register im PS2-Layout (0x12000000..) + VSync
+// From the EE scheduler at every VBlank: privileged registers in the PS2 layout (0x12000000..) + VSync
 void ps2xGsBridgeVsync(GSRegisters &r)
 {
     if (!ps2xbridge::init()) return;
-    // MTVU-Pipeline: Register jetzt festhalten, VSync aber erst nach den GIF-Paketen dieses Bildes auf dem
-    // VU1-Arbeiter senden. Die EE rechnet derweil schon das naechste Bild (hoechstens ein Bild Vorlauf).
+    // MTVU pipeline: capture the registers now, but send the VSync only after this frame's GIF packets on the
+    // VU1 worker. Meanwhile the EE already computes the next frame (at most one frame ahead).
     extern bool ps2xMtvuPipeVsync(std::function<void()> fn);
     auto buf = std::make_shared<std::vector<uint8_t>>(0x2000u, 0u);
     uint8_t *regs = buf->data();
@@ -440,7 +477,7 @@ void ps2xGsBridgeVsync(GSRegisters &r)
     put(0x0080, r.display1); put(0x0090, r.dispfb2); put(0x00A0, r.display2); put(0x00B0, r.extbuf);
     put(0x00C0, r.extdata); put(0x00D0, r.extwrite); put(0x00E0, r.bgcolor);
     {
-        // Echte Spiel-Bildrate messen: wie oft wechselt der angezeigte Bildpuffer (DISPFB) je 250 VBlanks
+        // Measure the real game frame rate: how often the displayed frame buffer (DISPFB) changes per 250 VBlanks
         static uint64_t s_lastFb = ~0ull, s_vs = 0, s_flips = 0, s_minFb = 0;
         const uint64_t fb = r.dispfb1 ^ (r.dispfb2 << 1);
         if (fb != s_lastFb) { ++s_flips; s_lastFb = fb; g_ps2xBildwechsel.fetch_add(1, std::memory_order_relaxed); }
@@ -450,14 +487,14 @@ void ps2xGsBridgeVsync(GSRegisters &r)
             static auto s_t0 = std::chrono::steady_clock::now();
             const auto t1 = std::chrono::steady_clock::now();
             const double sek = std::chrono::duration<double>(t1 - s_t0).count(); s_t0 = t1;
-            // Echtzeit: VBlanks/s (Ziel 59.94) und daraus die tatsaechlich sichtbaren Bilder pro Sekunde
-            if (log) std::fprintf(stderr, "[Bildrate] %llu Bildwechsel / 250 VBlanks | %.1f VBlanks/s | %.1f fps sichtbar\n",
+            // Real time: VBlanks/s (target 59.94) and from that the frames per second actually visible
+            if (log) std::fprintf(stderr, "[framerate] %llu flips / 250 VBlanks | %.1f VBlanks/s | %.1f fps visible\n",
                                   (unsigned long long)s_flips, 250.0 / sek, (double)s_flips / sek);
             s_vs = 0; s_flips = 0; (void)s_minFb;
         }
     }
     {
-        // PS2X_DISPLOG=1: Anzeige-Register bei jeder Aenderung protokollieren (Vergleich mit PCSX2)
+        // PS2X_DISPLOG=1: log the display registers on every change (comparison with PCSX2)
         static const bool dlog = std::getenv("PS2X_DISPLOG") != nullptr;
         static uint64_t last[6] = {~0ull, ~0ull, ~0ull, ~0ull, ~0ull, ~0ull};
         const uint64_t cur[6] = {r.pmode, r.smode2, r.dispfb1, r.display1, r.dispfb2, r.display2};
@@ -485,7 +522,7 @@ void ps2xGsBridgeVsync(GSRegisters &r)
     if (ps2xMtvuPipeVsync(push))
         return;
     ps2xbridge::s_vsync(regs, field);
-    // Rueckstau begrenzen: laeuft der GS-Thread hinterher, kurz warten statt unbegrenzt Speicher zu fuellen
+    // Limit the backlog: if the GS thread falls behind, wait briefly instead of filling memory without bound
     if (ps2xbridge::s_queue)
         for (int i = 0; i < 200 && ps2xbridge::s_queue() > 200000u; ++i)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1115,14 +1152,14 @@ void GS::processGIFPacket(const uint8_t *data, uint32_t sizeBytes)
         }
         else
             ps2xbridge::s_transfer(g_ps2xCurrentGifPath, data, sizeBytes & ~15u);
-        // Mit dem PCSX2-GS zeichnet und speichert PCSX2 alles selbst; unser eigener GS braucht aus dem Paket nur
-        // noch die Ereignis-Register, die die EE ueber CSR/SIGLBLID sieht (SIGNAL/FINISH/LABEL per A+D).
-        // Spart das komplette Nachparsen jedes Pakets (Vertices, Texturen in unseren eigenen VRAM).
+        // With the PCSX2 GS, PCSX2 draws and stores everything itself; our own GS only needs from the packet
+        // the event registers the EE sees through CSR/SIGLBLID (SIGNAL/FINISH/LABEL by A+D).
+        // Saves re-parsing every packet completely (vertices, textures into our own VRAM).
         static const bool s_fullParse = [] { const char *e = std::getenv("PS2X_GS_FULLPARSE"); return e && *e == '1'; }();
         if (!s_fullParse)
         {
             if (g_ps2xBridgeStripTag)
-                return; // reine Bilddaten (VIF1 DIRECT-IMAGE), keine Register
+                return; // pure image data (VIF1 DIRECT-IMAGE), no registers
             uint32_t off = 0u;
             while (off + 16u <= sizeBytes)
             {
@@ -1588,23 +1625,23 @@ void GS::writeRegister(uint8_t regAddr, uint64_t value)
 {
     if (!g_ps2xOnVu1Worker)
     {
-        // MTVU: laeuft VU1 noch, die Registerschreibung hinten an dessen Arbeit anstellen statt zu warten
+        // MTVU: if VU1 is still running, queue the register write behind its work instead of waiting
         extern bool ps2xMtvuDefer(std::function<void()> fn);
         if (ps2xMtvuDefer([this, regAddr, value]() { writeRegister(regAddr, value); }))
             return;
     }
-    ps2xVu1Fence(); // direkte Registerschreibungen (HLE) erst nach laufendem VU1-Programm
+    ps2xVu1Fence(); // direct register writes (HLE) only after the running VU1 program
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
     if (ps2xbridge::init())
     {
-        // Direkte Registerschreibungen (HLE von sceGsPutDrawEnv & Co.) als A+D-Paket auf PATH3 weiterreichen,
-        // sonst kennt der PCSX2-GS FRAME/ZBUF/SCISSOR/... nicht.
+        // Pass direct register writes (HLE of sceGsPutDrawEnv & co.) on as an A+D packet on PATH3,
+        // otherwise the PCSX2 GS does not know FRAME/ZBUF/SCISSOR/...
         alignas(16) uint64_t pkt[4];
         pkt[0] = 1ull | (1ull << 15) | (1ull << 60); // NLOOP=1, EOP, FLG=PACKED, NREG=1
         pkt[1] = 0xEull;                               // REGS[0] = A+D
         pkt[2] = value;
         pkt[3] = regAddr;
-        // Nicht auf PATH3: dort kann gerade eine geteilte IMAGE-Uebertragung laufen, das A+D-Paket
+        // Not on PATH3: a split IMAGE transfer may be in progress there, the A+D packet
         // wuerde als Bilddaten verschluckt. PATH1-Pakete sind immer vollstaendig (EOP) -> sicher.
         static const int regPath = [] { const char *e = std::getenv("PS2X_PCSX2_REGPATH"); return e ? std::atoi(e) : 0; }();
         if (regPath >= 0)
@@ -2126,7 +2163,7 @@ void GS::vertexKick(bool drawing)
     if (m_vtxCount < needed)
         return;
 
-    // Mit PCSX2-GS zeichnet unser Rasterizer nicht: Zeichenauftrag gar nicht erst bauen und kopieren
+    // With the PCSX2 GS our rasterizer does not draw: do not even build and copy the draw job
     if (drawing && m_backend && !g_ps2xOwnRasterOff.load(std::memory_order_relaxed))
     {
         GSPrimitiveBatch batch = buildDrawBatch(needed);

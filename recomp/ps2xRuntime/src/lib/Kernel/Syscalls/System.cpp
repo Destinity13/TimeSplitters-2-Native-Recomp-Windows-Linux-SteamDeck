@@ -15,7 +15,7 @@ namespace ps2_syscalls
         int frameMode = getRegU32(ctx, 6);  // $a2 - 0=field, 1=frame
 
         {
-            // Bildrate folgt dem Videomodus des Spiels (SotC PAL: Optionsmenue 50/60 Hz) -> korrekte Spielphysik
+            // The frame rate follows the game's video mode (SotC PAL: options menu 50/60 Hz) -> correct game physics
             static const bool autoHz = [] { const char *e = std::getenv("PS2X_VBLANK_AUTO"); return e && *e == '1'; }();
             const uint32_t us = (videoMode == 2) ? 16683u : (videoMode == 3) ? 20000u : 0u;
             if (videoMode == 2 || videoMode == 3) g_ps2xHblankHz.store(videoMode == 3 ? 15625u : 15734u); // EE-Timer CLKS=3 (H-Blank)
@@ -485,10 +485,10 @@ namespace ps2_syscalls
     }
 
     // 0x3C SetupThread
-    // Kernel-Heapgrenze wie im PS2-Kernel: SetupHeap(start, -1) laesst den Heap bis zur Unterkante des mit SetupThread
-    // eingerichteten Stacks reichen, EndOfHeap() liefert genau diese Grenze. TS2 legt den Heap direkt hinter sein Programm
-    // (0x01FEDF30) und den Stack auf 0x01FF0000: die C-Bibliothek (malloc/sbrk, z. B. Puffer von printf("%f")) hat dort ~8 KB.
-    // Vorher lieferte EndOfHeap() 0 -> jedes malloc schlug fehl -> printf("%f") hing in einer Endlosschleife (Geschuetz, Siberia).
+    // Kernel heap limit as in the PS2 kernel: SetupHeap(start, -1) lets the heap reach down to the bottom of the stack set up
+    // with SetupThread, EndOfHeap() returns exactly this limit. TS2 puts the heap right after its program
+    // (0x01FEDF30) and the stack at 0x01FF0000: the C library (malloc/sbrk, e.g. buffers of printf("%f")) has ~8 KB there.
+    // Previously EndOfHeap() returned 0 -> every malloc failed -> printf("%f") hung in an endless loop (gun turret, Siberia).
     static uint32_t g_kernelStackBottom = 0u;
     static uint32_t g_kernelHeapEnd = 0u;
 
@@ -1048,13 +1048,13 @@ namespace ps2_syscalls
     }
 }
 
-// COP0 Count (EE-Takt 294,912 MHz) fuer MFC0 Count im uebersetzten Code (cop0_translator.cpp). Vorher eingefroren auf 0:
-// Spiele, die damit Zeit messen, standen still (TS2: Netzwerk-Uhr -> Pakete wurden nie gesendet).
+// COP0 Count (EE clock 294.912 MHz) for MFC0 Count in the translated code (cop0_translator.cpp). Previously frozen at 0:
+// games that measure time with it stood still (TS2: network clock -> packets were never sent).
 #include <chrono>
 uint32_t ps2xCop0Count()
 {
     static const auto start = std::chrono::steady_clock::now();
-    // PS2X_COUNT_KHZ: Takt in kHz zum Testen (Standard 294912 = EE-Takt)
+    // PS2X_COUNT_KHZ: clock in kHz for testing (default 294912 = EE clock)
     static const uint64_t khz = [] { const char *e = std::getenv("PS2X_COUNT_KHZ"); return e && *e ? std::strtoull(e, nullptr, 10) : 294912ull; }();
     const uint64_t ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count());
     return static_cast<uint32_t>(static_cast<unsigned __int128>(ns) * khz / 1000000u);

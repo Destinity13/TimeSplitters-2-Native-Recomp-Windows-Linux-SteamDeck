@@ -21,7 +21,7 @@ extern std::atomic<uint32_t> g_ps2xHblankHz;
 
 namespace
 {
-    // Cache für den GIF_STAT-Eintrag in m_ioRegisters (siehe advanceEeTimers); wird bei clear() verworfen.
+    // Cache for the GIF_STAT entry in m_ioRegisters (see advanceEeTimers); dropped on clear().
     thread_local const PS2Memory *s_gifOwner = nullptr;
     thread_local uint32_t *s_gifStat = nullptr;
     thread_local uint32_t s_gifRetry = 0;
@@ -179,23 +179,23 @@ namespace
     constexpr uint32_t kEeTimerModeEquf = 1u << 10;
     constexpr uint32_t kEeTimerModeOvff = 1u << 11;
     constexpr uint64_t kEeClockHz = 294912000ull;
-    // H-Blank-Takt (CLKS=3) folgt dem Videomodus: NTSC 15734 Hz, PAL 15625 Hz (SetGsCrt, PS2X_VBLANK_AUTO). Vorher fest NTSC.
+    // The H-blank clock (CLKS=3) follows the video mode: NTSC 15734 Hz, PAL 15625 Hz (SetGsCrt, PS2X_VBLANK_AUTO). Previously fixed NTSC.
     inline uint64_t eeTimerClockHz(uint32_t clks)
     {
         static constexpr uint64_t fixed[3] = {147456000ull, 9216000ull, 576000ull};
         return clks < 3u ? fixed[clks] : static_cast<uint64_t>(g_ps2xHblankHz.load(std::memory_order_relaxed));
     }
 
-    // H-Blank-getaktete EE-Zeitgeber (CLKS=3) haengen am VSync statt an der geschaetzten Taktzahl:
-    // je VSync genau 262,5 (NTSC) bzw. 312,5 (PAL) Zeilen. Spiele messen damit ihre Bildzeit (TS2: T1);
-    // mit der Taktschaetzung schwankte die gemessene Bildzeit um +-3 %, in PCSX2 um +-0,1 %.
-    // PS2X_TIMER_VSYNC=1 schaltet den Anker ein (Diagnose).
+    // H-blank clocked EE timers (CLKS=3) are tied to the VSync instead of the estimated cycle count:
+    // exactly 262.5 (NTSC) or 312.5 (PAL) lines per VSync. Games measure their frame time with it (TS2: T1);
+    // with the cycle estimate the measured frame time varied by +-3 %, in PCSX2 by +-0.1 %.
+    // PS2X_TIMER_VSYNC=1 turns the anchor on (diagnosis).
     struct HbAnker { uint64_t vs = ~0ull, cyc = 0u, letzter = 0u; bool init = false; };
     HbAnker g_hb[4];
-    // Standard aus (Messung 10.11.: Spielschritt und Wetter laufen wie in PCSX2, der Anker aenderte nichts Sichtbares).
+    // Off by default (measured 10 Nov: game step and weather run as in PCSX2, the anchor changed nothing visible).
     const bool g_hbVsync = [] { const char *e = std::getenv("PS2X_TIMER_VSYNC"); return e && (*e == '1' || *e == '2'); }();
-    // PS2X_TIMER_VSYNC=2: zusaetzlich den (geschaetzten) Fortschritt innerhalb des Bildes mitzaehlen. Standard: nur ganze
-    // Bilder, weil die Schaetzung je nach Rechenlast um mehrere Zeilen schwankt und genau das die Bildzeit des Spiels verrauscht.
+    // PS2X_TIMER_VSYNC=2: additionally count the (estimated) progress within the frame. Default: whole frames only,
+    // because the estimate varies by several lines depending on load, and exactly that adds noise to the game's frame time.
     const bool g_hbImBild = [] { const char *e = std::getenv("PS2X_TIMER_VSYNC"); return e && *e == '2'; }();
     inline uint64_t hbZiel(const HbAnker &h, uint64_t clockHz)
     {
@@ -243,7 +243,7 @@ namespace
         out.qwc = static_cast<uint16_t>(tag & 0xFFFFu);
         out.id = static_cast<uint8_t>((tag >> 28u) & 0x7u);
         out.irq = ((tag >> 31u) & 0x1ull) != 0ull;
-        {   // ps2x (TS2): SPR-Bit 31 = Scratchpad (wie ps2xDmaAddr / PCSX2 dmaGetAddr)
+        {   // ps2x (TS2): SPR bit 31 = scratchpad (as ps2xDmaAddr / PCSX2 dmaGetAddr)
             const uint32_t raw = static_cast<uint32_t>(tag >> 32u);
             out.addr = ((raw & 0x80000000u) != 0u && !ps2IsScratchpadAddress(raw)) ? (PS2_SCRATCHPAD_BASE + (raw & 0x3FF0u)) : raw;
         }
@@ -454,8 +454,8 @@ uint32_t PS2Memory::advanceEeTimers(uint64_t eeCycles) noexcept
 
     constexpr uint32_t kGifStat = 0x10003020u;
     constexpr uint32_t kGifFqcMask = 0x1F000000u;
-    // GIF_STAT-Eintrag merken statt bei jedem Takt in der Hash-Tabelle zu suchen.
-    // Zeiger auf unordered_map-Werte bleiben gültig, solange der Eintrag nicht gelöscht wird.
+    // Remember the GIF_STAT entry instead of looking it up in the hash table on every tick.
+    // Pointers to unordered_map values stay valid as long as the entry is not erased.
     if (s_gifOwner != this)
     {
         s_gifOwner = this;
@@ -467,7 +467,7 @@ uint32_t PS2Memory::advanceEeTimers(uint64_t eeCycles) noexcept
         auto gifStatIt = m_ioRegisters.find(kGifStat);
         if (gifStatIt != m_ioRegisters.end())
             s_gifStat = &gifStatIt->second;
-        s_gifRetry = 255u; // ohne Eintrag nur gelegentlich erneut nachsehen
+        s_gifRetry = 255u; // without an entry only look again occasionally
     }
     if (s_gifStat)
         *s_gifStat &= ~kGifFqcMask;
@@ -598,9 +598,9 @@ uint64_t PS2Memory::cyclesUntilNextEeTimerInterrupt() const noexcept
 }
 
 
-// ps2x (TS2): DMA-Adressen (MADR/TADR/Tag-ADDR) tragen in Bit 31 das SPR-Flag: gesetzt = Scratchpad, Offset addr & 0x3FF0
-// (PCSX2 dmaGetAddr). Für CPU-Zugriffe ist 0x8000xxxx dagegen KSEG0-RAM, deshalb nur hier in der DMA-Kette umrechnen.
-// Vorher wurde Bit 31 weggemaskt: Scratchpad-Referenzen (TS2-Displaylisten) lasen Müll aus dem unteren RAM.
+// ps2x (TS2): DMA addresses (MADR/TADR/tag ADDR) carry the SPR flag in bit 31: set = scratchpad, offset addr & 0x3FF0
+// (PCSX2 dmaGetAddr). For CPU accesses 0x8000xxxx is KSEG0 RAM instead, so only convert here in the DMA chain.
+// Previously bit 31 was masked off: scratchpad references (TS2 display lists) read garbage from low RAM.
 static inline uint32_t ps2xDmaAddr(uint32_t raw)
 {
     if ((raw & 0x80000000u) != 0u && !ps2IsScratchpadAddress(raw))
@@ -755,13 +755,13 @@ int32_t PS2Memory::tlbProbe(uint32_t vpn) const
 }
 
 
-// ---- MTVU (PS2X_MTVU=1): VU1-Programme laufen auf eigenem Thread ---------------------------------
-// Solange ein VU1-Programm laeuft, muss der EE-Thread vor allem warten, was davon abhaengt oder es stoeren kann:
+// ---- MTVU (PS2X_MTVU=1): VU1 programs run on their own thread ---------------------------------
+// While a VU1 program is running, the EE thread must wait before anything that depends on it or could disturb it:
 // GIF-Pakete (Reihenfolge PATH1 vor PATH2/3), VIF1/GIF-Register, VU1-Speicher, GS-Register. Ein einziger
-// atomarer Lesezugriff, solange nichts laeuft.
+// atomic read access while nothing is running.
 
-// Puffer-Pool fuer die an den VU1-Arbeiter uebergebenen DMA-Daten: der Arbeiter gibt sie zurueck, statt sie
-// freizugeben (Freigeben fremder malloc-Bereiche kollidierte mit der EE: __lll_lock_wait_private im Profil).
+// Buffer pool for the DMA data handed to the VU1 worker: the worker returns the buffers instead of
+// freeing them (freeing foreign malloc areas collided with the EE: __lll_lock_wait_private in the profile).
 namespace ps2x_bufpool
 {
     static std::mutex g_m;
@@ -785,8 +785,8 @@ namespace ps2x_bufpool
             g_pool.push_back(std::move(v));
     }
 }
-// Schnelles Anhaengen (memcpy) statt vector::insert: die insert-Variante kopierte hier Byte fuer Byte
-// (Profil: 8,5 % des EE-Threads), dazu viele Neuanlagen beim Wachsen.
+// Fast append (memcpy) instead of vector::insert: the insert variant copied byte by byte here
+// (profile: 8.5 % of the EE thread), plus many reallocations while growing.
 static inline void ps2xAppendBytes(std::vector<uint8_t> &v, const uint8_t *p, size_t n)
 {
     const size_t o = v.size();
@@ -819,7 +819,7 @@ void ps2xVu1FenceAddr(uint32_t address)
         }
         if ((s_n.fetch_add(1, std::memory_order_relaxed) & (s_dbg ? 0x3Fu : 0x3FFFu)) == (s_dbg ? 0x3Fu : 0x3FFFu))
         {
-            std::fprintf(stderr, "[MTVU] Adress-Wartepunkte nach 4-KB-Seite:");
+            std::fprintf(stderr, "[MTVU] address wait points per 4 KB page:");
             for (int i = 0; i < 16; ++i) if (s_hist[i].load()) std::fprintf(stderr, " %x:%u", i, s_hist[i].load());
             std::fprintf(stderr, " (Adresse zuletzt %08x)\n", phys);
         }
@@ -910,8 +910,8 @@ uint16_t PS2Memory::read16(uint32_t address)
 
 uint32_t PS2Memory::read32(uint32_t address)
 {
-    // MTVU-Pipeline: VIF1_STAT/GIF_STAT-Abfragen ("ist die Grafik fertig?") nicht blockieren. Die Werte
-    // kommen nicht vom Arbeiter, und die DMA-Daten sind bei der Uebergabe schon kopiert; alles, was
+    // MTVU pipeline: do not block VIF1_STAT/GIF_STAT queries ("is the graphics done?"). The values
+    // do not come from the worker, and the DMA data is already copied at handover; everything that
     // wirklich VU1-Ergebnisse liest (VU-Speicher, GS-CSR, Register-Schreibungen), wartet weiter.
     static const bool s_pipe = [] { const char *e = std::getenv("PS2X_MTVU_PIPE"); return e && *e == '1'; }();
     const uint32_t physStat = address & 0x1FFFFFFFu;
@@ -1361,7 +1361,7 @@ bool PS2Memory::writeIORegister(uint32_t address, uint32_t value)
         {
             const uint32_t previousMode = timer.mode;
             if (static const bool lg = std::getenv("PS2X_TIMERLOG") != nullptr; lg)
-                std::fprintf(stderr, "[TIMER] T%zu MODE=%08X (alt %08X count %u)\n", timerIndex, value, previousMode, timer.count);
+                std::fprintf(stderr, "[TIMER] T%zu MODE=%08X (old %08X count %u)\n", timerIndex, value, previousMode, timer.count);
             const uint32_t status = (previousMode & kEeTimerModeStatusMask) & ~(value & kEeTimerModeStatusMask);
             timer.mode = (value & kEeTimerModeConfigMask) | status;
             if (((previousMode ^ timer.mode) & (kEeTimerModeClksMask | kEeTimerModeCue)) != 0u)
@@ -1543,9 +1543,9 @@ bool PS2Memory::writeIORegister(uint32_t address, uint32_t value)
                     std::fprintf(stderr, "[dmalog] VIF1 CHCR=0x%X madr=0x%08X qwc=%u tadr=0x%08X stat=0x%X\n", value, madr, qwc,
                                  m_ioRegisters[channelBase + 0x30], m_ioRegisters[0x10003C00u]);
             }
-            // ps2x (TS2): VIF1 mit DIR=0 = Speicher <- VIF1-FIFO, d. h. GS-Download (TRXDIR=1, BUSDIR=1).
-            // Wie PCSX2 (MTGS::InitAndReadFIFO): erst alle offenen VIF1/GIF-Pakete an den GS geben, dann lesen,
-            // Kanal mit Interrupt abschließen. Vorher wurde das als Upload behandelt und der Interrupt kam nie.
+            // ps2x (TS2): VIF1 with DIR=0 = memory <- VIF1 FIFO, i.e. a GS download (TRXDIR=1, BUSDIR=1).
+            // As PCSX2 (MTGS::InitAndReadFIFO): first hand all open VIF1/GIF packets to the GS, then read,
+            // finish the channel with an interrupt. Previously this was treated as an upload and the interrupt never came.
             if (channelBase == 0x10009000u && (value & 0x1u) == 0u && qwc != 0u)
             {
                 extern void ps2xMtvuWaitIdle();
@@ -1553,11 +1553,16 @@ bool PS2Memory::writeIORegister(uint32_t address, uint32_t value)
                 if (ps2xMtvuEnabled()) ps2xMtvuWaitIdle();
                 const uint32_t bytes = qwc * 16u;
                 const uint32_t dstAddr = madr & 0x01FFFFF0u;
-                if (dstAddr + bytes <= 0x02000000u)
+                // PS2X_DL_JEDES=n (experiment): TS2 reads the whole 512x448 frame back every frame; only do the real
+                // read every n-th time and leave the previous picture in memory otherwise (saves a GPU->CPU sync).
+                static const uint32_t dlJedes = [] { const char *e = std::getenv("PS2X_DL_JEDES"); const long v = e ? std::atol(e) : 1L; return static_cast<uint32_t>(v < 1 ? 1 : v); }();
+                static uint32_t dlZaehler = 0;
+                const bool dlEcht = dlJedes <= 1 || (dlZaehler++ % dlJedes) == 0;
+                if (dlEcht && dstAddr + bytes <= 0x02000000u)
                 {
                     uint8_t *dst = m_rdram + dstAddr;
-                    // Asynchron (Standard): der Spiel-Thread wartet ohnehin auf den DMA-Interrupt, der erst beim
-                    // naechsten VBlank kommt (EeScheduler wartet dort auf das Ticket). Spart den EE-Stillstand je Bild.
+                    // Asynchronous (default): the game thread waits for the DMA interrupt anyway, which only comes at the
+                    // next VBlank (the EeScheduler waits for the ticket there). Saves the EE standstill per frame.
                     extern void *ps2xGsBridgeReadFifoAsync(uint8_t *dst, uint32_t qwc);
                     extern std::atomic<void *> g_ps2xVif1DownloadTicket;
                     if (void *t = ps2xGsBridgeReadFifoAsync(dst, qwc))
@@ -1566,14 +1571,14 @@ bool PS2Memory::writeIORegister(uint32_t address, uint32_t value)
                         std::memset(dst, 0, bytes);
                 }
                 static int s_log = 0;
-                static const bool s_dl = std::getenv("PS2X_DLLOG") != nullptr;   // jeden 30. Download protokollieren
+                static const bool s_dl = std::getenv("PS2X_DLLOG") != nullptr;   // log every 30th download
                 if (s_log++ < 8 || (s_dl && s_log % 30 == 0))
                     std::fprintf(stderr, "[ps2x] VIF1-Download #%d (GS->EE) madr=0x%08X qwc=%u D_STAT=0x%08X\n", s_log, madr, qwc, m_ioRegisters[0x1000E010u]);
                 m_ioRegisters[channelBase + 0x10] = madr + bytes;
                 m_ioRegisters[channelBase + 0x20] = 0u;
-                // Wie echte Hardware: der Transfer dauert (917 KB ~ einige ms). STR bleibt gesetzt, fertig meldet sich der
-                // Kanal erst beim nächsten VBlank-Ereignis (EeScheduler). TS2 gibt den Interrupt erst nach dem Start frei
-                // und erwartet ZWEI Meldungen (anhängiger Upload + Download) -> sofortiges Fertig ließ beide verschmelzen.
+                // Like real hardware: the transfer takes time (917 KB ~ a few ms). STR stays set, the channel reports done
+                // only at the next VBlank event (EeScheduler). TS2 enables the interrupt only after the start
+                // and expects TWO notifications (pending upload + download) -> an immediate done merged the two.
                 m_ioRegisters[channelBase] = value | 0x100u;
                 { extern std::atomic<bool> g_ps2xVif1DownloadPending; g_ps2xVif1DownloadPending.store(true); }
                 return true;
@@ -1818,7 +1823,7 @@ bool PS2Memory::writeIORegister(uint32_t address, uint32_t value)
                     }
 
                     if (sotcTagTrace && chainBuf.size() > (1u << 20))
-                        sotcSuspicious = true;   // ps2x (TS2): Kette über 1 MB -> Tags ausgeben
+                        sotcSuspicious = true;   // ps2x (TS2): chain over 1 MB -> print the tags
                     if (sotcSuspicious)
                     {
                         static std::atomic<int> chains{0};
@@ -1837,7 +1842,7 @@ bool PS2Memory::writeIORegister(uint32_t address, uint32_t value)
                                     std::fprintf(stderr, "     %08X: %08X %08X %08X %08X\n", a, w[0], w[1], w[2], w[3]);
                                 }
                             }
-                            {   // ps2x (TS2): Stream-Offsets je Tag (TTE: +8 Byte Tag-Oberteil), große Tags und Bereich um 1 MB
+                            {   // ps2x (TS2): stream offsets per tag (TTE: +8 bytes upper tag half), large tags and the range around 1 MB
                                 uint64_t off = 0;
                                 for (size_t k = 0; k < sotcTags.size(); ++k)
                                 {
@@ -1850,7 +1855,7 @@ bool PS2Memory::writeIORegister(uint32_t address, uint32_t value)
                                                      sotcTags[k].v0, sotcTags[k].v1);
                                     off += len;
                                 }
-                                std::fprintf(stderr, "   Summe Stream=%llu Byte, chainBuf=%zu\n", (unsigned long long)off, chainBuf.size());
+                                std::fprintf(stderr, "   total stream=%llu bytes, chainBuf=%zu\n", (unsigned long long)off, chainBuf.size());
                             }
                             for (size_t k = 0; k < sotcTags.size(); ++k)
                                 if (k < 24 || k + 8 >= sotcTags.size())
@@ -2153,7 +2158,7 @@ void PS2Memory::processPendingTransfers()
     m_pendingVif0Transfers.clear();
 
     const bool hadVif1 = !m_pendingVif1Transfers.empty();
-    // MTVU: VIF1-Daten kopieren und an den Arbeiter-Thread geben (Entpacken + VU1 + GIF dort, in Reihenfolge)
+    // MTVU: copy the VIF1 data and hand it to the worker thread (unpack + VU1 + GIF there, in order)
     bool vif1HandedOff = false;
     if (hadVif1 && ps2xMtvuEnabled() && !g_ps2xOnVu1Worker)
     {
@@ -2256,7 +2261,7 @@ void PS2Memory::processPendingTransfers()
     m_pendingVif1Transfers.clear();
 
     extern bool ps2xMtvuDefer(std::function<void()> fn);
-    if (!vif1HandedOff && !(m_gifArbiter && ps2xMtvuDefer([this]() { m_gifArbiter->drain(); }))) // sonst leert der Arbeiter die GIF-Warteschlange
+    if (!vif1HandedOff && !(m_gifArbiter && ps2xMtvuDefer([this]() { m_gifArbiter->drain(); }))) // otherwise the worker drains the GIF queue
     {
         ps2xVu1Fence();
         if (m_gifArbiter)
@@ -2346,7 +2351,7 @@ void PS2Memory::flushMaskedPath3Packets(bool drainImmediately)
 }
 
 std::atomic<uint64_t> g_ps2xPath1Packets{0}; // Bildraten-Messung
-// PS2X_GIFSTAT=1 (TS2-Diagnose): je GIF-Pfad zaehlen, welche Primitive (PRIM-Typ, FST/TME/ABE) gezeichnet werden
+// PS2X_GIFSTAT=1 (TS2 diagnosis): count per GIF path which primitives (PRIM type, FST/TME/ABE) are drawn
 static void ps2xGifStat(int path, const uint8_t *data, uint32_t size)
 {
     static const bool on = [] { const char *e = std::getenv("PS2X_GIFSTAT"); return e && *e == '1'; }();
@@ -2385,14 +2390,14 @@ static void ps2xGifStat(int path, const uint8_t *data, uint32_t size)
     }
 }
 
-// TS2 16:9: HUD und Menues in 4:3-Proportion halten. Beides kommt (wie die Welt) ueber PATH1, aber als 2D-Primitive mit
-// festen Texturkoordinaten (PRIM.FST=1); die 3D-Welt nutzt STQ. FST-Pakete werden um die Bildmitte auf 0.75 gestaucht
-// (wie ein 4:3-Bild mittig im 16:9-Bild), so bleiben Kreise rund und zusammengesetzte Grafiken (Logo) heil.
-// Ausgenommen: Vollbild-2D (>= 560 px breit: Menue-Hintergruende) und hohe Streifen (>= 360 px hoch: Bildkopien fuer
-// Effekte wie Unschaerfe/Nebel, die das bereits gezeichnete Bild streifenweise zurueckkopieren).
+// TS2 16:9: keep HUD and menus in 4:3 proportion. Both come (like the world) through PATH1, but as 2D primitives with
+// fixed texture coordinates (PRIM.FST=1); the 3D world uses STQ. FST packets are squeezed to 0.75 around the screen centre
+// (like a 4:3 picture centred in the 16:9 picture), so circles stay round and composite graphics (logo) stay intact.
+// Excluded: full-screen 2D (>= 560 px wide: menu backgrounds) and tall strips (>= 360 px high: frame copies for
+// effects such as blur/fog that copy the already drawn frame back strip by strip).
 // TS2_HUD43=0 schaltet es ab.
-// Render-Ziele merken (FRAME_1/2.FBP aus A+D, alle GIF-Pfade): eine Textur, die in einem davon liegt, ist eine
-// Bildkopie (Unschaerfe, Splitscreen-Streifen) und kein HUD. TBP0 (64 Worte) vs. FBP (2048 Worte) -> FBP*32.
+// Remember the render targets (FRAME_1/2.FBP from A+D, all GIF paths): a texture inside one of them is a
+// frame copy (blur, split-screen strips) and not HUD. TBP0 (64 words) vs. FBP (2048 words) -> FBP*32.
 static uint32_t g_ps2xFbSeen[8] = {~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u}; // FBP | FBW << 16
 static void ps2xFbTrack(const uint8_t *data, uint32_t size)
 {
@@ -2427,15 +2432,109 @@ static bool ps2xTexIstBild(uint32_t tbp)
     return false;
 }
 
-// TS2_BLENDLOG=1: Diagnose fuer Nachzieh-/Geisterbilder. Protokolliert Sprites mit Textur + Alpha-Blending, deren
-// Textur in einem Render-Ziel liegt (Bildkopie): Pfad, FRAME.FBP, TEX0.TBP0, ALPHA, Breite/Hoehe in Pixeln.
+// TS2_GROSSLOG=<tick,tick,...>: diagnosis for issue #3 (grey smoke wall). For the listed VBlank ticks, sums up per
+// texture/blend state the large alpha-blended textured primitives of PATH1 (count, biggest box, one sample).
+static void ps2xGrossLog(const uint8_t *data, uint32_t size, uint64_t tick)
+{
+    static const std::vector<uint64_t> ticks = [] { std::vector<uint64_t> v; const char *e = std::getenv("TS2_GROSSLOG");
+        while (e && *e) { char *end; const unsigned long long t = std::strtoull(e, &end, 10); if (end == e) break; v.push_back(t); e = *end ? end + 1 : end; } return v; }();
+    if (ticks.empty()) return;
+    struct Sum { uint32_t n = 0; int32_t w = 0, h = 0; std::string probe; };
+    static std::map<std::tuple<uint32_t, uint64_t, uint64_t, uint64_t, uint64_t>, Sum> sum; static uint64_t akt = ~0ull;
+    if (tick != akt)
+    {
+        if (!sum.empty())
+        {
+            for (const auto &[k, v] : sum)
+            {
+                const uint64_t tex0 = std::get<1>(k);
+                std::fprintf(stderr, "[GROSS] t=%llu prim=%x TBP=%x PSM=%x TW=%u TH=%u TCC=%u TFX=%u CBP=%x CLAMP=%llx ALPHA=%llx TEST=%llx n=%u max %dx%d%s\n",
+                             (unsigned long long)akt, std::get<0>(k), (unsigned)(tex0 & 0x3FFF), (unsigned)((tex0 >> 20) & 0x3F), (unsigned)((tex0 >> 26) & 0xF),
+                             (unsigned)((tex0 >> 30) & 0xF), (unsigned)((tex0 >> 34) & 1), (unsigned)((tex0 >> 35) & 3), (unsigned)((tex0 >> 37) & 0x3FFF),
+                             (unsigned long long)std::get<4>(k), (unsigned long long)std::get<2>(k), (unsigned long long)std::get<3>(k), v.n, v.w, v.h, v.probe.c_str());
+            }
+            sum.clear();
+        }
+        akt = tick;
+    }
+    if (std::find(ticks.begin(), ticks.end(), tick) == ticks.end()) return;
+    static uint32_t prim = 0; static uint64_t tex0 = 0, clamp = 0, alpha = 0, test = 0;
+    struct V { int32_t x, y; float s, t, q; uint32_t rgba; };
+    static V vv[3]; static int nv = 0; static float cs = 0, ct = 0, cq = 1; static uint32_t crgba = 0;
+    auto kick = [&](int32_t x, int32_t y, bool adc) {
+        vv[0] = vv[1]; vv[1] = vv[2]; vv[2] = V{x, y, cs, ct, cq, crgba}; ++nv;
+        const uint32_t typ = prim & 7; const int need = typ == 6 ? 2 : 3;
+        if (adc || typ < 3 || nv < need || !(prim & 0x40) || !(prim & 0x10)) return;
+        if (typ == 3 && nv % 3) return; if (typ == 6 && nv % 2) return;
+        int32_t x0 = vv[2].x, x1 = x0, y0 = vv[2].y, y1 = y0;
+        for (int i = 3 - need; i < 3; ++i) { x0 = std::min(x0, vv[i].x); x1 = std::max(x1, vv[i].x); y0 = std::min(y0, vv[i].y); y1 = std::max(y1, vv[i].y); }
+        const int32_t w = (x1 - x0) / 16, h = (y1 - y0) / 16;
+        if (w < 100 || h < 80) return;
+        Sum &e = sum[{prim, tex0, alpha, test, clamp}]; ++e.n;
+        if (w * h > e.w * e.h)
+        {
+            e.w = w; e.h = h; char buf[400]; int o2 = 0;
+            for (int i = 3 - need; i < 3; ++i)
+                o2 += std::snprintf(buf + o2, sizeof(buf) - o2, " | xy %d,%d st %.3f,%.3f q %.4f rgba %08x", vv[i].x / 16, vv[i].y / 16, vv[i].s, vv[i].t, vv[i].q, vv[i].rgba);
+            e.probe = buf;
+        }
+    };
+    uint32_t o = 0;
+    while (o + 16 <= size)
+    {
+        uint64_t lo, hi; std::memcpy(&lo, data + o, 8); std::memcpy(&hi, data + o + 8, 8); o += 16;
+        const uint32_t nloop = lo & 0x7FFF, flg = (lo >> 58) & 3; uint32_t nreg = (lo >> 60) & 0xF; if (!nreg) nreg = 16;
+        if ((lo >> 46) & 1) { prim = (lo >> 47) & 0x7FF; nv = 0; }
+        if (flg == 0)
+        {
+            for (uint32_t i = 0; i < nloop; ++i)
+                for (uint32_t r = 0; r < nreg; ++r, o += 16)
+                {
+                    if (o + 16 > size) return;
+                    const uint32_t reg = (hi >> (4 * r)) & 0xF;
+                    uint64_t v; std::memcpy(&v, data + o, 8);
+                    if (reg == 0x0) { prim = v & 0x7FF; nv = 0; }
+                    else if (reg == 0x1) { crgba = data[o] | (data[o + 4] << 8) | (data[o + 8] << 16) | (static_cast<uint32_t>(data[o + 12]) << 24); }
+                    else if (reg == 0x2) { std::memcpy(&cs, data + o, 4); std::memcpy(&ct, data + o + 4, 4); std::memcpy(&cq, data + o + 8, 4); }
+                    else if (reg == 0x6) tex0 = v;
+                    else if (reg == 0x8) clamp = v;
+                    else if (reg == 0x4 || reg == 0x5) { uint16_t x, y; std::memcpy(&x, data + o, 2); std::memcpy(&y, data + o + 4, 2); kick(x, y, (data[o + 13] & 0x80) != 0); }
+                    else if (reg == 0xE)
+                    {
+                        const uint32_t ad = data[o + 8];
+                        if (ad == 0x00) { prim = v & 0x7FF; nv = 0; }
+                        else if (ad == 0x01) { crgba = static_cast<uint32_t>(v); std::memcpy(&cq, data + o + 4, 4); }
+                        else if (ad == 0x02) { std::memcpy(&cs, data + o, 4); std::memcpy(&ct, data + o + 4, 4); }
+                        else if (ad == 0x06) tex0 = v;
+                        else if (ad == 0x08) clamp = v;
+                        else if (ad == 0x42) alpha = v;
+                        else if (ad == 0x47) test = v;
+                        else if (ad == 0x04 || ad == 0x05) kick(static_cast<int32_t>(v & 0xFFFF), static_cast<int32_t>((v >> 16) & 0xFFFF), false);
+                        else if (ad == 0x0C || ad == 0x0D) kick(static_cast<int32_t>(v & 0xFFFF), static_cast<int32_t>((v >> 16) & 0xFFFF), true);
+                    }
+                }
+        }
+        else if (flg == 1) o += ((nloop * nreg + 1) / 2) * 16;
+        else o += nloop * 16;
+        if (lo & 0x8000) break;
+    }
+}
+
+// TS2_BLENDLOG=1: diagnosis for trails/ghost images. Logs sprites with texture + alpha blending whose
+// texture lies in a render target (frame copy): path, FRAME.FBP, TEX0.TBP0, ALPHA, width/height in pixels.
 static void ps2xBlendLog(int path, const uint8_t *data, uint32_t size)
 {
     static const bool on = std::getenv("TS2_BLENDLOG") != nullptr;
     if (!on) return;
+    // TS2_BLENDLOG_AB=s: start logging only s seconds after the first packet (e.g. while zooming in a level)
+    {
+        static const int64_t ab = [] { const char *e = std::getenv("TS2_BLENDLOG_AB"); return e ? std::atoll(e) * 1000LL : 0LL; }();
+        static const auto t0 = std::chrono::steady_clock::now();
+        if (ab > 0 && std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count() < ab) return;
+    }
     static uint32_t fbp = 0, tbp = 0, prim = 0, nlog = 0; static uint64_t alpha = 0, tex0 = 0;
     static int32_t x0 = 0, y0 = 0; static int par = 0; static uint32_t cu = 0, cv = 0, u0 = 0, v0 = 0;
-    // Zusaetzlich: alle texturierten Primitive (jeder Typ), deren Textur in einem Render-Ziel liegt, je Bild zaehlen
+    // In addition: count per frame all textured primitives (any type) whose texture lies in a render target
     static std::map<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint64_t>, uint32_t> zaehl; static uint32_t pakete = 0;
     if (++pakete % 3000 == 0 && !zaehl.empty())
     {
@@ -2492,15 +2591,15 @@ static void ps2xBlendLog(int path, const uint8_t *data, uint32_t size)
     }
 }
 
-// TS2 Nachzieheffekt: das Spiel blendet jedes Bild Dreiecksstreifen (PRIM 0x15C: TME+ABE+FST, ALPHA 0x44 = (Cs-Cd)*As+Cd)
-// mit dem ANDEREN Bildpuffer (= vorigem Bild) als Textur ueber das neue -> Geisterbilder beim Drehen (in PCSX2 ebenso,
-// also Original-Verhalten). Ist die Menue-Option "Nachzieheffekt" aus (Standard), bekommen diese Primitive null Flaeche.
-// TS2_NACHZIEH=1 erzwingt den Effekt ohne Menue (Testlaeufe).
+// TS2 motion trail: every frame the game blends triangle strips (PRIM 0x15C: TME+ABE+FST, ALPHA 0x44 = (Cs-Cd)*As+Cd)
+// with the OTHER frame buffer (= previous frame) as texture over the new one -> ghost images when turning (the same in PCSX2,
+// so original behaviour). With the menu option "motion trail" off (default) these primitives get zero area.
+// TS2_NACHZIEH=1 forces the effect without the menu (test runs).
 extern int ps2xGsBridgeOption(int id, int fallback);
-// TS2_DUNST=<0..100> (Prozent, Standard 100 = Original): Deckkraft von Vollbild-Ueberlagerungen verringern, die einen
-// kleinen Bildausschnitt auf den ganzen Schirm ziehen (Sibirien: Schneetreiben/Wind-Schlieren aus einer verkleinerten
-// Bildkopie). Bei hoher interner Aufloesung ist diese Kopie viel schaerfer als auf der PS2, die Schlieren wirken unruhig.
-// Skaliert RGBAQ.A der Eckpunkte und ALPHA.FIX im Paket.
+// TS2_DUNST=<0..100> (percent, default 100 = original): reduce the opacity of full-screen overlays that stretch a
+// small part of the picture over the whole screen (Siberia: snow flurry/wind streaks from a downscaled
+// frame copy). At a high internal resolution this copy is much sharper than on the PS2 and the streaks look restless.
+// Scales RGBAQ.A of the vertices and ALPHA.FIX in the packet.
 static bool ps2xDunstFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
 {
     static const int proz = [] { const char *e = std::getenv("TS2_DUNST"); return e && *e ? std::clamp(std::atoi(e), 0, 100) : 100; }();
@@ -2547,13 +2646,16 @@ static bool ps2xDunstFix(const uint8_t *data, uint32_t size, std::vector<uint8_t
     }
     for (uint32_t f : fixOffs) out[f + 4] = static_cast<uint8_t>(out[f + 4] * proz / 100);
     static long logRest = [] { const char *e = std::getenv("PS2X_DUNSTLOG"); return e ? std::atol(e) : 0L; }();
-    if (logRest > 0) { --logRest; std::fprintf(stderr, "[DUNST] uv-Breite %.0f, %zu A-Werte (erster %u), %zu FIX\n", uw, aOffs.size(),
+    if (logRest > 0) { --logRest; std::fprintf(stderr, "[HAZE] uv width %.0f, %zu A values (first %u), %zu FIX\n", uw, aOffs.size(),
         aOffs.empty() ? 0u : static_cast<unsigned>(data[aOffs[0] + (aPacked[0] ? 12 : 3)]), fixOffs.size()); }
     return true;
 }
 
 static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
 {
+    // A frame copy is a direct-colour texture (CT32/CT24/CT16). Palette textures at an address that once was a render
+    // target (impact smoke: 8-bit, TBP 0x33e0) are ordinary textures and must stay untouched (GitHub issue #3).
+    static uint32_t psm = 0;
     static const int envFallback = [] { const char *e = std::getenv("TS2_NACHZIEH"); return (e && *e == '1') ? 1 : 0; }();
     static uint32_t prim = 0, tbp = 0, fbp = 0; static uint64_t alpha = 0;
     static bool anker = false; static uint16_t ax = 0, ay = 0;
@@ -2561,16 +2663,16 @@ static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint
     if (++pakete >= naechste) { an = ps2xGsBridgeOption(1, envFallback); naechste = pakete + 256; }
     if (an) return false;
     bool geaendert = false;
-    // Nachzieh-Primitiv: Dreiecksstreifen/Sprite mit Textur + Alpha (FST), ALPHA 0x44, Textur = Anfang des ANDEREN Bildpuffers
+    // Trail primitive: triangle strip/sprite with texture + alpha (FST), ALPHA 0x44, texture = start of the OTHER frame buffer
     auto treffer = [&]() {
         const uint32_t typ = prim & 7;
         return (typ == 4 || typ == 6) && (prim & 0x150) == 0x150 && (alpha & 0xFF) == 0x44 && (tbp & 31) == 0 &&
-               (tbp >> 5) != (fbp & 0x1FF) && ps2xTexIstBild(tbp);
+               (tbp >> 5) != (fbp & 0x1FF) && (psm <= 2 && ps2xTexIstBild(tbp));
     };
     auto vert = [&](uint32_t o, bool ad, uint16_t x, uint16_t y) {
         if (!treffer()) { anker = false; return; }
         if (!anker) { ax = x; ay = y; anker = true; return; }
-        // alle weiteren Eckpunkte auf den ersten legen -> Flaeche null, nichts wird gezeichnet
+        // put all further vertices onto the first one -> zero area, nothing is drawn
         if (!geaendert) { out.assign(data, data + size); geaendert = true; }
         std::memcpy(out.data() + o, &ax, 2);
         std::memcpy(out.data() + o + (ad ? 2 : 4), &ay, 2);
@@ -2589,14 +2691,14 @@ static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint
                     if (o + 16 > size) return geaendert;
                     const uint32_t reg = (hi >> (4 * r)) & 0xF;
                     uint64_t v; std::memcpy(&v, data + o, 8);
-                    if (reg == 0x6) tbp = v & 0x3FFF;
+                    if (reg == 0x6) { tbp = v & 0x3FFF; psm = (v >> 20) & 0x3F; }
                     else if (reg == 0x4 || reg == 0x5 || reg == 0xC || reg == 0xD)
                     { uint16_t x, y; std::memcpy(&x, data + o, 2); std::memcpy(&y, data + o + 4, 2); vert(o, false, x, y); }
                     else if (reg == 0xE)
                     {
                         const uint32_t ad = data[o + 8];
                         if (ad == 0x00) { prim = v & 0x7FF; anker = false; }
-                        else if (ad == 0x06) tbp = v & 0x3FFF;
+                        else if (ad == 0x06) { tbp = v & 0x3FFF; psm = (v >> 20) & 0x3F; }
                         else if (ad == 0x4C) fbp = v & 0x1FF;
                         else if (ad == 0x42) alpha = v;
                         else if (ad == 0x04 || ad == 0x05 || ad == 0x0C || ad == 0x0D)
@@ -2611,9 +2713,169 @@ static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint
     return geaendert;
 }
 
-// HUD-Gruppen fuer TS2_HUD_RAND: 2D-Pakete eines Bildes zu Bloecken zusammenfassen (gleiche Zeilen, Luecke <= 20 px).
-// Im naechsten Bild rueckt ein Paket nur an den Rand, wenn sein ganzer Block im aeusseren Viertel lag - so bleiben
-// Texte aus vielen Einzelpaketen (Missionsmeldungen) zusammen, Munition/Zeitanzeigen gehen an den Rand.
+// TS2 sniper/zoom blur: while zoomed the game blends the frame onto itself several times with triangle strips
+// (PRIM 0x15C, ALPHA 0x48 = Cs*As+Cd, additive) and a full-screen sprite (PRIM 0x156, ALPHA 0x54) -> radial smear.
+// The same happens on the PS2/in PCSX2, but at high internal resolution it just looks blurry.
+// Scope option (bridge option 12, env TS2_SCOPE_KLAR as fallback): 0 = original, 1 = clear (default): the zoom feedback
+// sprite blends with a fixed 8 % instead of the destination alpha (the original green tint stays), 2 = extra clear:
+// 4 % and without the additive tint layers.
+// The sprite stays because it also fills the picture edges that the zoomed scene does not cover.
+// time (ms, steady clock) the scope's zoom feedback sprite was last seen: the mouse aiming in ts2_override
+// uses it to notice "sniper scope is up although no zoom key is held"
+std::atomic<long long> g_ps2xScopeMs{0};
+static bool ps2xScopeKlarFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
+{
+    // A frame copy is a direct-colour texture (CT32/CT24/CT16). Palette textures at an address that once was a render
+    // target (impact smoke: 8-bit, TBP 0x33e0) are ordinary textures and must stay untouched (GitHub issue #3).
+    static uint32_t psm = 0;
+    static const int envFallback = [] { const char *e = std::getenv("TS2_SCOPE_KLAR"); return e && *e ? std::clamp(std::atoi(e), 0, 3) : 1; }();
+    static uint32_t prim = 0, tbp = 0; static uint64_t alpha = 0;
+    static bool anker = false; static uint16_t ax = 0, ay = 0;
+    static uint32_t pakete = 0, naechste = 0; static int stufe = 1;
+    if (++pakete >= naechste) { stufe = ps2xGsBridgeOption(12, envFallback); naechste = pakete + 256; }
+    if (stufe <= 0) return false;
+    bool geaendert = false;
+    uint32_t alphaOff = ~0u;   // offset of the ALPHA_1 write (A+D) in this packet
+    // Feedback weight of the zoom sprite: Klar 8 %, Extra klar 4 % (original: destination alpha)
+    const uint8_t fix = stufe >= 2 ? 0x05 : 0x0A;
+    bool alphaGesetzt = false, brauchtVorsatz = false; uint64_t alphaOrig = 0;
+    uint32_t eopTagOff = ~0u, eopEnde = size;
+    // vertices of the feedback sprite (for the edge strips): offsets of UV and XYZ, A+D or packed
+    struct Ecke { uint32_t uvOff, xyOff; bool uvAd, xyAd; }; Ecke ecken[2]; int nEcken = 0;
+    uint32_t uvOff = ~0u; bool uvAd = false;
+    auto kopie = [&]() { if (!geaendert) { out.assign(data, data + size); geaendert = true; } };
+    auto vert = [&](uint32_t o, bool ad, uint16_t x, uint16_t y) {
+        const uint32_t typ = prim & 7, a = static_cast<uint32_t>(alpha & 0xFF);
+        const bool bild = (prim & 0x150) == 0x150 && (psm <= 2 && ps2xTexIstBild(tbp));
+        if (bild && typ == 6 && a == 0x54 && stufe != 3)
+        {
+            g_ps2xScopeMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(), std::memory_order_relaxed);
+            if (nEcken < 2 && uvOff != ~0u) ecken[nEcken++] = {uvOff, o, uvAd, ad};
+            // zoom feedback sprite: keep it (it also fills the picture edges), but with a small fixed weight
+            if (alphaOff != ~0u) { if (!alphaGesetzt) { kopie(); uint64_t v; std::memcpy(&v, out.data() + alphaOff, 8);
+                v = (v & ~(0x30ull | (0xFFull << 32))) | 0x20ull | (static_cast<uint64_t>(fix) << 32); std::memcpy(out.data() + alphaOff, &v, 8); alphaGesetzt = true; }
+                anker = false; return; }
+            // ALPHA was set in an earlier packet: wrap this packet in its own ALPHA write (and restore it afterwards)
+            if (!brauchtVorsatz) { brauchtVorsatz = true; alphaOrig = alpha; }
+            anker = false; return;
+        }
+        // the additive layers are the green scope tint, not the blur: only "extra clear" removes them
+        const bool weg = bild && ((stufe == 2 && typ == 4 && a == 0x48) || (typ == 6 && a == 0x54 && stufe >= 2));
+        if (!weg) { anker = false; return; }
+        if (!anker) { ax = x; ay = y; anker = true; return; }
+        kopie();
+        std::memcpy(out.data() + o, &ax, 2);
+        std::memcpy(out.data() + o + (ad ? 2 : 4), &ay, 2);
+    };
+    uint32_t o = 0;
+    while (o + 16 <= size)
+    {
+        const uint32_t tagOff = o;
+        uint64_t lo, hi; std::memcpy(&lo, data + o, 8); std::memcpy(&hi, data + o + 8, 8); o += 16;
+        const uint32_t nloop = lo & 0x7FFF, flg = (lo >> 58) & 3; uint32_t nreg = (lo >> 60) & 0xF; if (!nreg) nreg = 16;
+        if ((lo >> 46) & 1) { prim = (lo >> 47) & 0x7FF; anker = false; }
+        if (flg == 0)
+        {
+            for (uint32_t i = 0; i < nloop; ++i)
+                for (uint32_t r = 0; r < nreg; ++r, o += 16)
+                {
+                    if (o + 16 > size) return geaendert;
+                    const uint32_t reg = (hi >> (4 * r)) & 0xF;
+                    uint64_t v; std::memcpy(&v, data + o, 8);
+                    if (reg == 0x6) { tbp = v & 0x3FFF; psm = (v >> 20) & 0x3F; }
+                    else if (reg == 0x3) { uvOff = o; uvAd = false; }
+                    else if (reg == 0x4 || reg == 0x5 || reg == 0xC || reg == 0xD)
+                    { uint16_t x, y; std::memcpy(&x, data + o, 2); std::memcpy(&y, data + o + 4, 2); vert(o, false, x, y); }
+                    else if (reg == 0xE)
+                    {
+                        const uint32_t ad = data[o + 8];
+                        if (ad == 0x00) { prim = v & 0x7FF; anker = false; }
+                        else if (ad == 0x06) { tbp = v & 0x3FFF; psm = (v >> 20) & 0x3F; }
+                        else if (ad == 0x03) { uvOff = o; uvAd = true; }
+                        else if (ad == 0x42) { alpha = v; alphaOff = o; }
+                        else if (ad == 0x04 || ad == 0x05 || ad == 0x0C || ad == 0x0D)
+                            vert(o, true, static_cast<uint16_t>(v & 0xFFFF), static_cast<uint16_t>((v >> 16) & 0xFFFF));
+                    }
+                }
+        }
+        else if (flg == 1) o += ((nloop * nreg + 1) / 2) * 16;
+        else o += nloop * 16;
+        if (lo & 0x8000) { eopTagOff = tagOff; eopEnde = std::min(o, size); break; }
+    }
+    if (brauchtVorsatz && eopTagOff != ~0u)
+    {
+        const uint64_t neu = (alphaOrig & ~(0x30ull | (0xFFull << 32))) | 0x20ull | (static_cast<uint64_t>(fix) << 32);
+        auto adTag = [](std::vector<uint8_t> &v, uint64_t wert, bool eop) {
+            const uint64_t tag = 1ull | (eop ? 0x8000ull : 0ull) | (1ull << 60), regs = 0xE;   // NLOOP 1, NREG 1, PACKED, A+D
+            uint8_t q[32] = {}; std::memcpy(q, &tag, 8); std::memcpy(q + 8, &regs, 8); std::memcpy(q + 16, &wert, 8); q[24] = 0x42;
+            v.insert(v.end(), q, q + 32); };
+        std::vector<uint8_t> body = geaendert ? out : std::vector<uint8_t>(data, data + size);
+        uint64_t tlo; std::memcpy(&tlo, body.data() + eopTagOff, 8); tlo &= ~0x8000ull; std::memcpy(body.data() + eopTagOff, &tlo, 8);
+        std::vector<uint8_t> neuPaket; neuPaket.reserve(body.size() + 64);
+        adTag(neuPaket, neu, false);
+        neuPaket.insert(neuPaket.end(), body.begin(), body.begin() + eopEnde);
+        adTag(neuPaket, alphaOrig, true);
+        neuPaket.insert(neuPaket.end(), body.begin() + eopEnde, body.end());
+        out.swap(neuPaket); geaendert = true;
+    }
+    // The zoomed scene leaves a thin border unrendered that the original feedback (zoomed copy at full weight) fills.
+    // Add the original sprite again, but only over 48 px edge strips (full weight there, so no stale border).
+    if (alphaGesetzt || brauchtVorsatz)
+    {
+        if (nEcken == 2 && eopTagOff != ~0u)
+        {
+            auto rd16 = [&](uint32_t off, int k) { uint16_t v; std::memcpy(&v, data + off + k, 2); return v; };
+            auto xyK = [&](const Ecke &c, bool y) { return static_cast<float>(rd16(c.xyOff, y ? (c.xyAd ? 2 : 4) : 0)); };
+            auto uvK = [&](const Ecke &c, bool vv) { uint32_t w; std::memcpy(&w, data + c.uvOff + (vv ? (c.uvAd ? 2 : 4) : 0), 4); return static_cast<float>(w & 0x3FFF); };
+            const float X0 = xyK(ecken[0], false), X1 = xyK(ecken[1], false), Y0 = xyK(ecken[0], true), Y1 = xyK(ecken[1], true);
+            const float U0 = uvK(ecken[0], false), U1 = uvK(ecken[1], false), V0 = uvK(ecken[0], true), V1 = uvK(ecken[1], true);
+            const float S = 48.0f * 16.0f;
+            if (X1 - X0 > 4 * S && Y1 - Y0 > 4 * S)
+            {
+                auto streifen = [&](float x0, float x1, float y0, float y1) {
+                    std::vector<uint8_t> k(data, data + size);
+                    uint64_t t; std::memcpy(&t, k.data() + eopTagOff, 8); t &= ~0x8000ull; std::memcpy(k.data() + eopTagOff, &t, 8);
+                    const float xs[2] = {x0, x1}, ys[2] = {y0, y1};
+                    for (int i = 0; i < 2; ++i)
+                    {
+                        const Ecke &c = ecken[i];
+                        const uint16_t nx = static_cast<uint16_t>(xs[i] + 0.5f), ny = static_cast<uint16_t>(ys[i] + 0.5f);
+                        std::memcpy(k.data() + c.xyOff, &nx, 2); std::memcpy(k.data() + c.xyOff + (c.xyAd ? 2 : 4), &ny, 2);
+                        const float u = U0 + (xs[i] - X0) * (U1 - U0) / (X1 - X0), vv = V0 + (ys[i] - Y0) * (V1 - V0) / (Y1 - Y0);
+                        uint32_t uw, vw; std::memcpy(&uw, k.data() + c.uvOff, 4); uw = (uw & ~0x3FFFu) | (static_cast<uint32_t>(u + 0.5f) & 0x3FFF); std::memcpy(k.data() + c.uvOff, &uw, 4);
+                        const uint32_t vo = c.uvOff + (c.uvAd ? 2 : 4);
+                        std::memcpy(&vw, k.data() + vo, 4); vw = (vw & ~0x3FFFu) | (static_cast<uint32_t>(vv + 0.5f) & 0x3FFF); std::memcpy(k.data() + vo, &vw, 4);
+                    }
+                    k.resize(eopEnde);
+                    // the copy runs after the restore tag (original ALPHA) - clear the EOP of what came before
+                    if (!out.empty()) { /* out ends with an EOP tag: find it via the restore tag we appended or the original */ }
+                    return k; };
+                // out currently ends with EOP (either the wrapped packet or the modified original): clear that EOP
+                {
+                    uint32_t q = 0, letzter = ~0u;
+                    while (q + 16 <= out.size())
+                    {
+                        uint64_t lo, hi; std::memcpy(&lo, out.data() + q, 8); std::memcpy(&hi, out.data() + q + 8, 8);
+                        const uint32_t nl = lo & 0x7FFF, fl = (lo >> 58) & 3; uint32_t nr = (lo >> 60) & 0xF; if (!nr) nr = 16;
+                        if (lo & 0x8000) { letzter = q; }
+                        q += 16 + (fl == 0 ? nl * nr * 16 : fl == 1 ? ((nl * nr + 1) / 2) * 16 : nl * 16);
+                        if (lo & 0x8000) break;
+                    }
+                    if (letzter != ~0u) { uint64_t lo; std::memcpy(&lo, out.data() + letzter, 8); lo &= ~0x8000ull; std::memcpy(out.data() + letzter, &lo, 8); out.resize(std::min<size_t>(q, out.size())); }
+                }
+                const std::vector<uint8_t> teile[4] = {streifen(X1 - S, X1, Y0, Y1), streifen(X0, X1, Y0, Y0 + S), streifen(X0, X0 + S, Y0, Y1), streifen(X0, X1, Y1 - S, Y1)};
+                for (const auto &t : teile) out.insert(out.end(), t.begin(), t.end());
+                // EOP on the last tag of the last strip
+                uint64_t lo; std::memcpy(&lo, out.data() + (out.size() - eopEnde) + eopTagOff, 8); lo |= 0x8000ull; std::memcpy(out.data() + (out.size() - eopEnde) + eopTagOff, &lo, 8);
+            }
+        }
+    }
+    return geaendert;
+}
+
+// HUD groups for TS2_HUD_RAND: combine the 2D packets of a frame into blocks (same rows, gap <= 20 px).
+// In the next frame a packet only moves to the edge if its whole block was in the outer quarter - this keeps
+// texts made of many single packets (mission messages) together while ammo/timers go to the edge.
 struct Ps2xHudBox { float x0, x1, y0, y1; };
 static void ps2xHudBloecke(std::vector<Ps2xHudBox> &b)
 {
@@ -2630,22 +2892,88 @@ static void ps2xHudBloecke(std::vector<Ps2xHudBox> &b)
                 else ++j;
 }
 
+// Menu layout for TS2_MENU_RAND: the in-game grouping glues menus into one block (header tiles, boxes and texts
+// all touch). Here two kinds are grouped separately: text lines (h < 32 px, merged only along the same line) and
+// areas (box parts, pictures, header tiles: merged when touching). Each group gets an anchor: narrow (< 200 px) and
+// centred in the left/right third -> that 16:9 edge, otherwise the centre. Text inside a box (area < 480 px wide)
+// follows the box, so a box never loses its contents.
+struct Ps2xMenuBlock { Ps2xHudBox b; float anker; };   // anker in 640 coordinates (64, 320, 576)
+static float ps2xMenuAnker(const Ps2xHudBox &g)
+{
+    const float w = g.x1 - g.x0, c = (g.x0 + g.x1) * 0.5f;
+    if (w < 200.0f && c < 235.0f) return 64.0f;
+    if (w < 200.0f && c > 405.0f) return 576.0f;
+    return 320.0f;
+}
+static bool ps2xMenuIstZeile(const Ps2xHudBox &k) { return (k.y1 - k.y0) < 32.0f; }
+static void ps2xMenuBloecke(const std::vector<Ps2xHudBox> &roh, std::vector<Ps2xMenuBlock> &zeilen, std::vector<Ps2xMenuBlock> &flaechen)
+{
+    std::vector<Ps2xHudBox> z, f;
+    for (const auto &k : roh) (ps2xMenuIstZeile(k) ? z : f).push_back(k);
+    ps2xHudBloecke(f);   // areas: merge when touching
+    // lines: merge only with vertical overlap >= half the smaller height and a gap <= 20 px
+    auto gleicheZeile = [](const Ps2xHudBox &p, const Ps2xHudBox &q) {
+        const float ov = std::min(p.y1, q.y1) - std::max(p.y0, q.y0), mh = std::min(p.y1 - p.y0, q.y1 - q.y0);
+        return ov >= 0.5f * std::max(mh, 1.0f) && p.x0 <= q.x1 + 20.0f && q.x0 <= p.x1 + 20.0f; };
+    for (int durchgang = 0; durchgang < 2; ++durchgang)
+        for (size_t i = 0; i < z.size(); ++i)
+            for (size_t j = i + 1; j < z.size();)
+                if (gleicheZeile(z[i], z[j]))
+                { z[i] = {std::min(z[i].x0, z[j].x0), std::max(z[i].x1, z[j].x1), std::min(z[i].y0, z[j].y0), std::max(z[i].y1, z[j].y1)}; z[j] = z.back(); z.pop_back(); j = i + 1; }
+                else ++j;
+    flaechen.clear(); zeilen.clear();
+    // Areas only move as a whole picture/box (>= 60x60); thin frame parts (box borders, glow brackets) stay centred
+    // (edge anchors for pictures tore level pictures away from their list rows - everything keeps the original 4:3
+    //  composition in the centre, which is how the PS2 widescreen mode lays out its menus as well)
+    for (const auto &g : f) flaechen.push_back({g, 320.0f});
+    for (const auto &g : z)
+    {
+        // Text never gets an edge anchor of its own: glyph runs of one word can arrive as separate pieces and were torn
+        // apart ("Ven  us Starr", "Selec  t"). Text stays centred and only follows a picture/box it sits in.
+        float a = 320.0f;
+        const float cx = (g.x0 + g.x1) * 0.5f, cy = (g.y0 + g.y1) * 0.5f;
+        for (const auto &fl : flaechen)   // text inside a box follows the box
+            if (fl.anker != 320.0f && fl.b.x1 - fl.b.x0 < 480.0f && g.x0 >= fl.b.x0 - 4.0f && g.x1 <= fl.b.x1 + 4.0f && cy >= fl.b.y0 && cy <= fl.b.y1) { a = fl.anker; break; }
+        zeilen.push_back({g, a});
+    }
+    // Mirror pairs (left/right parts of a centred composition, e.g. a box while it opens) belong to the centre
+    // (for text lines only short pieces such as frame corners - real texts may legitimately sit left and right)
+    auto spiegel = [](std::vector<Ps2xMenuBlock> &v, const std::vector<Ps2xMenuBlock> &alle, float maxBreite) {
+        for (auto &x : v)
+        {
+            if (x.anker == 320.0f || x.b.x1 - x.b.x0 > maxBreite) continue;
+            for (const auto &y : alle)
+            {
+                if (&x == &y) continue;
+                const float cx = (x.b.x0 + x.b.x1) * 0.5f, cy = (y.b.x0 + y.b.x1) * 0.5f, wx = x.b.x1 - x.b.x0, wy = y.b.x1 - y.b.x0;
+                if (std::fabs(cx + cy - 640.0f) < 24.0f && std::fabs(x.b.y0 - y.b.y0) < 16.0f && std::fabs(x.b.y1 - y.b.y1) < 16.0f &&
+                    std::fabs(wx - wy) <= 0.3f * std::max(wx, wy) + 4.0f) { x.anker = 320.0f; break; }
+            }
+        }
+    };
+    std::vector<Ps2xMenuBlock> alle(flaechen); alle.insert(alle.end(), zeilen.begin(), zeilen.end());
+    spiegel(flaechen, alle, 1e9f); spiegel(zeilen, alle, 40.0f);
+}
+
+static uint64_t s_ps2xTest1 = 0;   // TEST_1 as last set by the game (depth test state across packets)
+static uint64_t s_ps2xScissor1 = 0x01DF0000027Full;   // SCISSOR_1 as last set by the game (GS state across packets)
 static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out, uint64_t bild)
 {
+    const uint64_t scStart = s_ps2xScissor1;   // state at the start of this packet
     static const bool on = [] { const char *w = std::getenv("TS2_WIDESCREEN"); const char *h = std::getenv("TS2_HUD43");
                                 return w && *w == '1' && !(h && *h == '0'); }();
     if (!on) return false;
-    static int32_t ofx = 1728 * 16;   // XYOFFSET_1.OFX (12.4), aus A+D-Schreibzugriffen mitgelesen
+    static int32_t ofx = 1728 * 16;   // XYOFFSET_1.OFX (12.4), tracked from A+D writes
     static int32_t ofy = 1824 * 16;   // XYOFFSET_1.OFY
-    uint32_t curU = 0, curV = 0;      // letzter UV-Wert (10.4) vor dem Eckpunkt
-    // Durchlauf: Callback je XYZ-Feld (Offset des 16-Bit-X) mit aktuellem FST-Zustand
+    uint32_t curU = 0, curV = 0;      // last UV value (10.4) before the vertex
+    // Walk: callback per XYZ field (offset of the 16-bit X) with the current FST state
     uint32_t curPrim = 0, primWrites = 0;
-    static uint32_t curTbp = ~0u;   // TEX0_1.TBP0 (bleibt ueber Pakete hinweg gueltig)
-    // PRMODECONT.AC = 0: TME/FST kommen aus PRMODE statt aus PRIM (bleibt ueber Pakete hinweg gueltig)
+    static uint32_t curTbp = ~0u;   // TEX0_1.TBP0 (stays valid across packets)
+    // PRMODECONT.AC = 0: TME/FST come from PRMODE instead of PRIM (stays valid across packets)
     static uint32_t prmodeAc = 1, prmode = 0;
     auto tme = [&]() { return ((prmodeAc ? curPrim : prmode) & 0x10) != 0; };
     auto untexSprite = [&]() { return (curPrim & 7) == 6 && !tme(); };
-    std::vector<uint32_t> scissorOffs; uint32_t eopTagOff = ~0u, eopEnde = size;   // SCISSOR_1/2 (A+D) im Paket, letzter GIFtag
+    std::vector<uint32_t> scissorOffs; uint32_t eopTagOff = ~0u, eopEnde = size;   // SCISSOR_1/2 (A+D) in the packet, last GIFtag
     auto walk = [&](auto &&onXyz) {
         uint32_t o = 0; bool fst = false;
         scissorOffs.clear();
@@ -2672,9 +3000,10 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
                             else if (ad == 0x18) { ofx = static_cast<int32_t>(dlo & 0xFFFF); ofy = static_cast<int32_t>((dlo >> 32) & 0xFFFF); }
                             else if (ad == 0x03) { curU = dlo & 0x3FFF; curV = (dlo >> 16) & 0x3FFF; }
                             else if (ad == 0x06) curTbp = dlo & 0x3FFF;
+                            else if (ad == 0x47) s_ps2xTest1 = dlo;
                             else if (ad == 0x1A) prmodeAc = dlo & 1;
                             else if (ad == 0x1B) prmode = dlo & 0x7FF;
-                            else if (ad == 0x40 || ad == 0x41) scissorOffs.push_back(o);
+                            else if (ad == 0x40 || ad == 0x41) { scissorOffs.push_back(o); if (ad == 0x40) std::memcpy(&s_ps2xScissor1, data + o, 8); }
                             else if (ad == 0x04 || ad == 0x05 || ad == 0x0C || ad == 0x0D) onXyz(o, fst || untexSprite(), true);
                         }
                     }
@@ -2685,18 +3014,23 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
         }
     };
     int32_t mn = INT32_MAX, mx = INT32_MIN, ymn = INT32_MAX, ymx = INT32_MIN;
-    // Streifenkopie: SPRITE, dessen Textur 1:1 (oder 1:2) auf den Bildschirm abgebildet wird und >= 64 px hoch ist
-    // (Bildschirmkopie in Seitenstreifen, z.B. Unschaerfe im geteilten Bild; die Streifen-U beginnt dabei je Streifen bei 0).
+    // Strip copy: SPRITE whose texture is mapped 1:1 (or 1:2) onto the screen and is >= 64 px high
+    // (screen copy in side strips, e.g. blur in split screen; the strip U starts at 0 for each strip).
     uint32_t sprPrimW = ~0u, sprPar = 0, nSprKopie = 0, nSpr = 0, nScope = 0; int32_t px0 = 0, py0 = 0; uint32_t pu0 = 0, pv0 = 0;
     uint32_t nVert = 0, nKopie = 0, uMin = 0xFFFF, uMax = 0, vMin = 0xFFFF, vMax = 0, primSeen = 0;
-    // 2D-Eckpunkte: FST-Primitive und untexturierte SPRITEs (Fadenkreuz, Lebensbalken, Zielfernrohr-Abdunklung)
+    // 2D vertices: FST primitives and untextured SPRITEs (crosshair, health bars, scope darkening)
     uint32_t nUntexSpr = 0;   // Eckpunkte untexturierter SPRITEs
-    uint32_t n3d = 0;   // 3D-Eckpunkte (STQ, nicht SPRITE): Spielszene laeuft
+    uint32_t n3d = 0;   // 3D vertices (STQ, not SPRITE): the game scene is running
+    // World effects drawn as 2D sprites (impact smoke, explosions, fire, water spray, sparks): the game projects them
+    // itself and tests them against the depth buffer (ZTST >= GEQUAL). HUD and menus are drawn with ZTST ALWAYS.
+    // Such packets must keep their place - squeezed like the HUD they slid towards the screen centre, the further
+    // from the centre the more (smoke and fountain water "moved" while walking, issue #3 follow-up).
+    uint32_t nTief = 0;
     walk([&](uint32_t o, bool fst, bool ad) {
         if (!fst) { ++n3d; return; } uint16_t x, y; std::memcpy(&x, data + o, 2);
         std::memcpy(&y, data + o + (ad ? 2 : 4), 2);   // Y: A+D-Registerwert Bits 16..31, gepackt Bits 32..47
         mn = std::min<int32_t>(mn, x); mx = std::max<int32_t>(mx, x); ymn = std::min<int32_t>(ymn, y); ymx = std::max<int32_t>(ymx, y);
-        // Bildkopie? Texturkoordinate = Bildschirmkoordinate (1:1 oder halbe Aufloesung fuer Effektpuffer)
+        // Frame copy? Texture coordinate = screen coordinate (1:1 or half resolution for effect buffers)
         const int32_t sx = static_cast<int32_t>(x) - ofx, sy = static_cast<int32_t>(y) - ofy;
         const bool kopie = tme() && ((std::abs(static_cast<int32_t>(curU) - sx) <= 48 && std::abs(static_cast<int32_t>(curV) - sy) <= 48) ||
                            (std::abs(static_cast<int32_t>(curU) * 2 - sx) <= 64 && std::abs(static_cast<int32_t>(curV) * 2 - sy) <= 64));
@@ -2711,14 +3045,15 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
                 const int32_t du = std::abs(static_cast<int32_t>(curU) - static_cast<int32_t>(pu0)), dv = std::abs(static_cast<int32_t>(curV) - static_cast<int32_t>(pv0));
                 const bool eins = std::abs(du - dx) <= 32 && std::abs(dv - dy) <= 32, halb = std::abs(du * 2 - dx) <= 48 && std::abs(dv * 2 - dy) <= 48;
                 if (dy >= 64 * 16 && (eins || halb)) ++nSprKopie;
-                // Zielfernrohr-Abdunklung: untexturiertes Rechteck vom linken Bildrand nach innen (>= 48 breit, >= 100 hoch,
-                // nicht bis zum rechten Rand wie ein Vollbild-Blitz) -> HUD gehoert zum Zielfernrohr, nicht an den Rand
+                // Scope darkening: untextured rectangle from the left screen edge inwards (>= 48 wide, >= 100 high,
+                // not up to the right edge like a full-screen flash) -> the HUD belongs to the scope, not to the edge
                 const int32_t xa = (std::min<int32_t>(x, px0) - ofx) / 16, xb = (std::max<int32_t>(x, px0) - ofx) / 16;
                 if (untexSprite() && xa <= 65 && xb < 560 && dx >= 48 * 16 && dy >= 100 * 16) ++nScope;
             }
         }
         if (untexSprite()) ++nUntexSpr;
-        ++nVert; if (kopie || (tme() && ps2xTexIstBild(curTbp))) ++nKopie;   // TBP zaehlt nur bei TME (untexturierte Zielfernrohr-Rahmen)
+        if (((s_ps2xTest1 >> 16) & 1) && ((s_ps2xTest1 >> 17) & 3) >= 2) ++nTief;
+        ++nVert; if (kopie || (tme() && ps2xTexIstBild(curTbp))) ++nKopie;   // TBP only counts with TME (untextured scope frames)
         primSeen |= 1u << (curPrim & 7) | ((curPrim & 0x40) ? 0x100u : 0u) | (tme() ? 0x200u : 0u);
         uMin = std::min(uMin, curU); uMax = std::max(uMax, curU); vMin = std::min(vMin, curV); vMax = std::max(vMax, curV); });
     static std::atomic<int64_t> last3dMs{0};
@@ -2752,7 +3087,7 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
                          ofx / 16, ofy / 16, nVert, nKopie, nSprKopie, nSpr, primSeen);
     }
     {
-        // PS2X_HUDLOG3=n (ab PS2X_HUDLOG3_AB Sekunden): alle 2D-Pakete mit Kopie-Statistik protokollieren
+        // PS2X_HUDLOG3=n (from PS2X_HUDLOG3_AB seconds): log all 2D packets with copy statistics
         static long rest3 = [] { const char *e = std::getenv("PS2X_HUDLOG3"); return e ? std::atol(e) : 0L; }();
         static const int64_t ab3 = [] { const char *e = std::getenv("PS2X_HUDLOG3_AB"); return e ? std::atoll(e) * 1000LL : 0LL; }();
         static const int64_t t03 = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -2763,26 +3098,52 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
                 nVert, nKopie, nSprKopie, nSpr, primSeen, curTbp); }
     }
     if (nKopie * 4 >= nVert * 3) return false;
+    {
+        // TS2_PARTIKEL_FREI=0: old behaviour; =w (tests): alternate every 64 VBlanks, so one run shows both
+        static const int modus = [] { const char *e = std::getenv("TS2_PARTIKEL_FREI"); return (e && *e == '0') ? 0 : (e && *e == 'w') ? 2 : 1; }();
+        const bool partikelFrei = modus == 1 || (modus == 2 && ((bild >> 6) & 1) == 0);
+        if (nVert && nTief * 2 >= nVert)
+        {
+            // TS2_PARTIKEL_LOG=1: count the packets this rule applies to (tests)
+            static const bool plog = [] { const char *e = std::getenv("TS2_PARTIKEL_LOG"); return e && *e == '1'; }();
+            static uint64_t nFrei = 0;
+            if (plog && (++nFrei % 500) == 1)
+                std::fprintf(stderr, "[TS2] effect packets: %llu (vblank %llu, x %.0f-%.0f y %.0f-%.0f, %u vertices, prims %03x, kept %d)\n", (unsigned long long)nFrei,
+                             (unsigned long long)bild, (mn - ofx) / 16.0, (mx - ofx) / 16.0, (ymn - ofy) / 16.0, (ymx - ofy) / 16.0, nVert, primSeen, partikelFrei ? 1 : 0);
+            if (partikelFrei) return false;
+        }
+    }
     if (nSprKopie && nSprKopie * 2 >= nSpr) return false;   // ueberwiegend Streifenkopien -> Effekt
     const float L = static_cast<float>(ofx), Wd = 640.0f * 16.0f;
     const float wpx = (mx - mn) / 16.0f, cpx = ((mn + mx) * 0.5f - L) / 16.0f;
-    // Menue-Erkennung fuer TS2_HUD_RAND: Menues zeichnen breite 2D-Flaechen (Hintergrund, Kopfzeile); im Spiel gibt es
-    // keine. Solange in den letzten 150 ms eine solche Flaeche kam, bleibt alles mittig (Menues zusammensetzen).
+    // Menu detection for TS2_HUD_RAND: menus draw wide 2D areas (background, header); there are none in the
+    // game. As long as such an area came within the last 150 ms everything stays centred (menus stay assembled).
     static std::atomic<int64_t> lastWideMs{0};
     const int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    // TS2 zeichnet ins Bild x 64..575 (512 breit, Mitte 320): "breit" = fast ganze Bildbreite
-    // nur texturierte Flaechen zaehlen (Menue-Hintergruende); untexturierte Vollbild-SPRITEs sind Blitze/Abdunklungen im Spiel
-    if ((wpx >= 480.0f && (primSeen & 0x200u)) || nScope) lastWideMs.store(nowMs, std::memory_order_relaxed);
+    // TS2 draws into x 64..575 (512 wide, centre 320): "wide" = almost the whole picture width
+    // count only textured areas (menu backgrounds); untextured full-screen SPRITEs are flashes/darkening in the game
+    // ... and only areas that lie inside the picture: menu backgrounds span x 62..577. Effects drawn over the game
+    // (damage arcs, explosion rings) are wide too but reach far beyond the screen edge - they are not a menu and
+    // must not pull the HUD to the centre. TS2_MENUE_EFFEKT=1 restores the old rule (for comparisons).
+    {
+        static const bool alt = [] { const char *e = std::getenv("TS2_MENUE_EFFEKT"); return e && *e == '1'; }();
+        static long logRest = [] { const char *e = std::getenv("TS2_MENUELOG"); return e ? std::atol(e) : 0L; }();
+        const float x0 = (mn - L) / 16.0f, x1 = (mx - L) / 16.0f, y0 = (ymn - ofy) / 16.0f, y1 = (ymx - ofy) / 16.0f;
+        const bool imBild = x0 >= 40.0f && x1 <= 600.0f && y0 >= -24.0f && y1 <= 472.0f;
+        const bool breit = wpx >= 480.0f && (primSeen & 0x200u);
+        if (breit && logRest > 0) { --logRest; std::fprintf(stderr, "[MENUE] wide x %.0f-%.0f y %.0f-%.0f n %u prims %03x inside %d\n", x0, x1, y0, y1, nVert, primSeen, imBild ? 1 : 0); }
+        if ((breit && (imBild || alt)) || nScope) lastWideMs.store(nowMs, std::memory_order_relaxed);
+    }
     if (wpx >= 560.0f || (ymx - ymn) / 16.0f >= 360.0f) return false;
-    // Untexturierte SPRITEs ueber die ganze Breite: Loeschen von Farb-/Tiefenpuffer in Streifen (Splitscreen) - nie stauchen
+    // Untextured SPRITEs across the full width: clearing colour/depth buffer in strips (split screen) - never squeeze
     if (nUntexSpr && wpx >= 480.0f) return false;
-    // ... und ohne 3D-Szene (Ladebildschirm, reine 2D-Menues) ebenfalls nichts an den Rand ruecken
+    // ... and without a 3D scene (loading screen, pure 2D menus) do not move anything to the edge either
     const bool imMenue = nowMs - lastWideMs.load(std::memory_order_relaxed) < 150 || nowMs - last3dMs.load(std::memory_order_relaxed) > 250;
-    // TS2_HUD_RAND=1: HUD-Elemente im linken/rechten Drittel an den Bildrand des 16:9-Bildes ruecken (wie moderne
-    // Remaster), Mitte bleibt mittig. Standard: ganzes HUD als 4:3-Bereich in der Mitte.
+    // TS2_HUD_RAND=1: move HUD elements in the left/right third to the edge of the 16:9 picture (like modern
+    // remasters), the centre stays centred. Default: whole HUD as a 4:3 area in the centre.
     static const bool hudRand = [] { const char *e = std::getenv("TS2_HUD_RAND"); return !(e && *e == '0'); }();   // Standard an
     {
-        // PS2X_HUDLOG2=n: n Pakete aus der unteren Bildhaelfte (HUD-Kandidaten) mit Entscheidungsgrundlage protokollieren
+        // PS2X_HUDLOG2=n: log n packets from the lower half of the picture (HUD candidates) with the basis for the decision
         static long rest = [] { const char *e = std::getenv("PS2X_HUDLOG2"); return e ? std::atol(e) : 0L; }();
         const float cy = ((ymn + ymx) * 0.5f - ofy) / 16.0f;
         static const int64_t ab = [] { const char *e = std::getenv("PS2X_HUDLOG2_AB"); return e ? std::atoll(e) * 1000LL : 0LL; }();
@@ -2797,17 +3158,48 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
         static uint64_t jetztBild = ~0ull;
         if (bild != jetztBild) { ps2xHudBloecke(jetzt); vorher.swap(jetzt); jetzt.clear(); jetztBild = bild; }
         const Ps2xHudBox k{(mn - L) / 16.0f, (mx - L) / 16.0f, (ymn - ofy) / 16.0f, (ymx - ofy) / 16.0f};
-        if (jetzt.size() < 512) jetzt.push_back(k);
-        if (!imMenue)
+        // Wide strips (menu backgrounds drawn in 6 px bands, >= 400 px) are not part of any block - otherwise they
+        // glue every menu element into one screen-wide block and nothing can move to the edge.
+        if (jetzt.size() < 512 && wpx < 400.0f) jetzt.push_back(k);
+        // TS2_MENU_RAND (default on, 0 = off): also in menus move narrow groups in the outer thirds to the 16:9 edge (titles, button
+        // prompts, level pictures), so they line up with the full-width menu backgrounds instead of floating inside.
+        static const bool menuRand = [] { const char *e = std::getenv("TS2_MENU_RAND"); return !(e && *e == '0'); }();   // default on, 0 = off
+        static std::vector<Ps2xHudBox> menuRoh, menuRohVorher; static uint64_t menuBild = ~0ull;
+        static std::vector<Ps2xMenuBlock> mZeilen, mFlaechen;
+        if (menuRand)
         {
-            // Block aus dem letzten Bild, in dem dieses Paket liegt; ohne Block (neu aufgetaucht) bleibt es mittig
+            if (bild != menuBild) { menuRohVorher.swap(menuRoh); menuRoh.clear(); menuBild = bild; ps2xMenuBloecke(menuRohVorher, mZeilen, mFlaechen); }
+            if (menuRoh.size() < 1024 && wpx < 560.0f) menuRoh.push_back(k);
+        }
+        if (menuRand && imMenue)
+        {
+            const auto &liste = ps2xMenuIstZeile(k) ? mZeilen : mFlaechen;
+            const Ps2xMenuBlock *gef = nullptr;
+            for (const auto &g : liste)
+                if (k.x0 <= g.b.x1 && g.b.x0 <= k.x1 && k.y0 <= g.b.y1 && g.b.y0 <= k.y1) { anchor = L + g.anker * 16.0f; gef = &g; break; }
+            static long rest = [] { const char *e = std::getenv("PS2X_MENUBLOCKLOG"); return e ? std::atol(e) : 0L; }();
+            static const int64_t ab = [] { const char *e = std::getenv("PS2X_MENUBLOCKLOG_AB"); return e ? std::atoll(e) * 1000LL : 0LL; }();
+            static const int64_t t0m = nowMs;
+            if (rest > 0 && nowMs - t0m >= ab) { --rest; std::fprintf(stderr, "[MENUBLK] %s p %.0f-%.0f/%.0f-%.0f blk %.0f-%.0f/%.0f-%.0f anker %.0f\n", ps2xMenuIstZeile(k) ? "Z" : "F",
+                k.x0, k.x1, k.y0, k.y1, gef ? gef->b.x0 : -1.f, gef ? gef->b.x1 : -1.f, gef ? gef->b.y0 : -1.f, gef ? gef->b.y1 : -1.f, gef ? gef->anker : -1.f); }
+        }
+        else if (!imMenue)
+        {
+            // Block from the last frame that contains this packet; without a block (newly appeared) it stays centred
             for (const Ps2xHudBox &g : vorher)
                 if (k.x0 <= g.x1 && g.x0 <= k.x1 && k.y0 <= g.y1 && g.y0 <= k.y1)
                 {
-                    // Block schmaler als ein Drittel, Mitte im linken/rechten Drittel des Bildes (x 64..576)
+                    // Block narrower than a third, centre in the left/right third of the picture (x 64..576)
                     const float gc = (g.x0 + g.x1) * 0.5f;
                     if (g.x1 - g.x0 < 200.0f && gc < 235.0f) anchor = L + 64.0f * 16.0f;        // linke Bildkante bleibt
                     else if (g.x1 - g.x0 < 200.0f && gc > 405.0f) anchor = L + 576.0f * 16.0f;  // rechte Bildkante bleibt
+                    {   // PS2X_HUDBLOCKLOG=n (from PS2X_HUDBLOCKLOG_AB s): packet, its block and the chosen anchor
+                        static long rest = [] { const char *e = std::getenv("PS2X_HUDBLOCKLOG"); return e ? std::atol(e) : 0L; }();
+                        static const int64_t ab = [] { const char *e = std::getenv("PS2X_HUDBLOCKLOG_AB"); return e ? std::atoll(e) * 1000LL : 0LL; }();
+                        static const int64_t t0 = nowMs;
+                        if (rest > 0 && nowMs - t0 >= ab) { --rest; std::fprintf(stderr, "[HUDBLK] p %.0f-%.0f/%.0f-%.0f blk %.0f-%.0f/%.0f-%.0f (%zu) menu %d anchor %.0f\n",
+                            k.x0, k.x1, k.y0, k.y1, g.x0, g.x1, g.y0, g.y1, vorher.size(), imMenue ? 1 : 0, (anchor - L) / 16.0f); }
+                    }
                     break;
                 }
         }
@@ -2815,42 +3207,56 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
     out.assign(data, data + size);
     walk([&](uint32_t o, bool fst, bool) {
         if (!fst) return; uint16_t x; std::memcpy(&x, data + o, 2);
-        // Eckpunkte an der Bildkante bleiben an der Kante (Zielfernrohr-Abdunklung, randbuendige Balken)
+        // Vertices on the picture edge stay on the edge (scope darkening, bars flush with the edge)
         const float sx = (static_cast<float>(x) - L) / 16.0f;
-        if (sx <= 72.0f || sx >= 568.0f) return;   // auch schmale Randleisten (62..66, Splitscreen-Rahmen) nicht aufziehen
+        if (sx <= 72.0f || sx >= 568.0f) return;   // do not widen narrow edge strips either (62..66, split-screen frame)
         const float nx = anchor + (static_cast<float>(x) - anchor) * 0.75f;
         const uint16_t v = static_cast<uint16_t>(std::clamp(nx, 0.0f, 65535.0f) + 0.5f); std::memcpy(out.data() + o, &v, 2); });
-    // SCISSOR im gestauchten 2D-Paket mitstauchen (sonst schneidet er falsch: MapMaker-Kachelliste, abgeschnittene Texte).
-    // Danach den Originalwert per angehaengtem A+D wiederherstellen, damit spaetere (3D-)Pakete den Zustand des Spiels sehen.
-    static const bool scissorAn = [] { const char *e = std::getenv("TS2_HUD_SCISSOR"); return e && *e == '1'; }();   // Versuch, Standard aus (MapMaker setzt SCISSOR nicht in diesen Paketen)
-    if (scissorAn && !scissorOffs.empty() && eopTagOff != ~0u)
+    // Squeeze the SCISSOR in the squeezed 2D packet too (otherwise it clips wrongly: MapMaker tile list, cut-off texts).
+    // Then restore the original value with an appended A+D so that later (3D) packets see the game's state.
+    // Squeeze the clipping rectangle (SCISSOR_1) together with the 2D content. In menus it is usually set in an EARLIER
+    // packet (scrolling list columns such as the character portraits): squeezing only the sprites moved them out of the
+    // unchanged rectangle and they were cut in half. So the state valid for this packet is squeezed (prepended A+D),
+    // the packet's own writes are squeezed, and the game's value is restored at the end for later (3D) packets.
+    static const bool scissorAn = [] { const char *e = std::getenv("TS2_HUD_SCISSOR"); return !(e && *e == '0'); }();   // default on (0 = off)
+    if (scissorAn && imMenue && eopTagOff != ~0u)
     {
         const float aS = (anchor - L) / 16.0f;
-        uint64_t letzter[2] = {0, 0}; bool hat[2] = {false, false};
+        auto quetsche = [&](uint64_t v) {
+            const float x0 = static_cast<float>(v & 0x7FF), x1 = static_cast<float>((v >> 16) & 0x7FF);
+            // union of the game's rectangle and the squeezed one: squeezed sprites stay inside, unsqueezed texts
+            // (menu text keeps its position) are not cut at the panel edge either
+            const float n0 = (x0 <= 72.0f) ? x0 : std::min(x0, std::floor(aS + (x0 - aS) * 0.75f));
+            const float n1 = (x1 >= 568.0f) ? x1 : std::max(x1, std::ceil(aS + (x1 - aS) * 0.75f));
+            return (v & ~0x07FF07FFull) | (static_cast<uint64_t>(std::clamp(n0, 0.0f, 2047.0f)) & 0x7FF) |
+                   ((static_cast<uint64_t>(std::clamp(n1, 0.0f, 2047.0f)) & 0x7FF) << 16); };
+        uint64_t letzterOrig = scStart; bool aenderung = false;
         for (uint32_t o : scissorOffs)
         {
-            uint64_t v; std::memcpy(&v, data + o, 8); const uint32_t r = data[o + 8] & 1;
-            letzter[r] = v; hat[r] = true;
-            const float x0 = static_cast<float>(v & 0x7FF), x1 = static_cast<float>((v >> 16) & 0x7FF);
-            const float n0 = (x0 <= 72.0f) ? x0 : std::floor(aS + (x0 - aS) * 0.75f);
-            const float n1 = (x1 >= 568.0f) ? x1 : std::ceil(aS + (x1 - aS) * 0.75f);
-            v = (v & ~0x07FF07FFull) | (static_cast<uint64_t>(std::clamp(n0, 0.0f, 2047.0f)) & 0x7FF) |
-                ((static_cast<uint64_t>(std::clamp(n1, 0.0f, 2047.0f)) & 0x7FF) << 16);
-            std::memcpy(out.data() + o, &v, 8);
+            if (data[o + 8] != 0x40) continue;
+            uint64_t v; std::memcpy(&v, data + o, 8); letzterOrig = v;
+            const uint64_t q = quetsche(v); if (q != v) { std::memcpy(out.data() + o, &q, 8); aenderung = true; }
         }
-        // EOP vom letzten GIFtag nehmen, neuen A+D-Tag (EOP) mit den Originalwerten dahinter einfuegen
-        uint64_t tlo; std::memcpy(&tlo, out.data() + eopTagOff, 8); tlo &= ~0x8000ull; std::memcpy(out.data() + eopTagOff, &tlo, 8);
-        const uint32_t n = (hat[0] ? 1u : 0u) + (hat[1] ? 1u : 0u);
-        std::vector<uint8_t> ein((1 + n) * 16, 0);
-        const uint64_t tag = n | 0x8000ull | (1ull << 60), regs = 0xE;   // NLOOP=n, EOP, NREG=1, FLG=PACKED, REG A+D
-        std::memcpy(ein.data(), &tag, 8); std::memcpy(ein.data() + 8, &regs, 8);
-        uint32_t k = 16;
-        for (uint32_t r = 0; r < 2; ++r)
-            if (hat[r]) { std::memcpy(ein.data() + k, &letzter[r], 8); ein[k + 8] = static_cast<uint8_t>(0x40 + r); k += 16; }
-        out.insert(out.begin() + eopEnde, ein.begin(), ein.end());
-        static long logRest = [] { const char *e = std::getenv("PS2X_SCISSORLOG"); return e ? std::atol(e) : 0L; }();
-        if (logRest > 0) { --logRest; std::fprintf(stderr, "[SCISSOR] %zu Schreibzugriffe, x %llu-%llu, Paket x %.0f-%.0f\n", scissorOffs.size(),
-            (unsigned long long)(letzter[hat[0] ? 0 : 1] & 0x7FF), (unsigned long long)((letzter[hat[0] ? 0 : 1] >> 16) & 0x7FF), (mn - L) / 16.0f, (mx - L) / 16.0f); }
+        uint32_t versatz = 0;
+        const uint64_t qStart = quetsche(scStart);
+        if (qStart != scStart && (scissorOffs.empty() || scissorOffs.front() > 16u))
+        {
+            std::vector<uint8_t> vor(32, 0);
+            const uint64_t tag = 1ull | (1ull << 60), regs = 0xE;   // NLOOP=1, no EOP, NREG=1, PACKED, REG A+D
+            std::memcpy(vor.data(), &tag, 8); std::memcpy(vor.data() + 8, &regs, 8);
+            std::memcpy(vor.data() + 16, &qStart, 8); vor[24] = 0x40;
+            out.insert(out.begin(), vor.begin(), vor.end());
+            versatz = 32; aenderung = true;
+        }
+        if (aenderung)
+        {
+            uint64_t tlo; std::memcpy(&tlo, out.data() + eopTagOff + versatz, 8); tlo &= ~0x8000ull; std::memcpy(out.data() + eopTagOff + versatz, &tlo, 8);
+            std::vector<uint8_t> ein(32, 0);
+            const uint64_t tag = 1ull | 0x8000ull | (1ull << 60), regs = 0xE;   // EOP
+            std::memcpy(ein.data(), &tag, 8); std::memcpy(ein.data() + 8, &regs, 8);
+            std::memcpy(ein.data() + 16, &letzterOrig, 8); ein[24] = 0x40;
+            out.insert(out.begin() + eopEnde + versatz, ein.begin(), ein.end());
+        }
     }
     return true;
 }
@@ -2863,7 +3269,7 @@ void PS2Memory::submitGifPacket(GifPathId pathId, const uint8_t *data, uint32_t 
         return;
     if (!g_ps2xOnVu1Worker)
     {
-        // MTVU: laeuft VU1 noch, das Paket hinten anstellen statt zu warten (Reihenfolge bleibt erhalten)
+        // MTVU: if VU1 is still running, queue the packet behind it instead of waiting (order is preserved)
         extern bool ps2xMtvuDefer(std::function<void()> fn);
         auto copy = std::make_shared<std::vector<uint8_t>>(data, data + sizeBytes);
         if (ps2xMtvuDefer([this, copy, pathId, drainImmediately, path2DirectHl, bridgeStripTag]()
@@ -2874,6 +3280,7 @@ void PS2Memory::submitGifPacket(GifPathId pathId, const uint8_t *data, uint32_t 
     ps2xGifStat(pathId == GifPathId::Path1 ? 1 : pathId == GifPathId::Path2 ? 2 : 3, data, sizeBytes);
     ps2xFbTrack(data, sizeBytes);
     ps2xBlendLog(pathId == GifPathId::Path1 ? 1 : pathId == GifPathId::Path2 ? 2 : 3, data, sizeBytes);
+    if (pathId == GifPathId::Path1) ps2xGrossLog(data, sizeBytes, gs().vsyncTick.load(std::memory_order_relaxed));
     thread_local std::vector<uint8_t> hudBuf;
     if (pathId == GifPathId::Path1 && ps2xHudFix(data, sizeBytes, hudBuf, gs().vsyncTick.load(std::memory_order_relaxed)))
     {
@@ -2892,6 +3299,12 @@ void PS2Memory::submitGifPacket(GifPathId pathId, const uint8_t *data, uint32_t 
         data = nachziehBuf.data();
         sizeBytes = static_cast<uint32_t>(nachziehBuf.size());
     }
+    thread_local std::vector<uint8_t> scopeBuf;
+    if (pathId == GifPathId::Path1 && ps2xScopeKlarFix(data, sizeBytes, scopeBuf))
+    {
+        data = scopeBuf.data();
+        sizeBytes = static_cast<uint32_t>(scopeBuf.size());
+    }
 
     if (pathId == GifPathId::Path3)
     {
@@ -2905,7 +3318,7 @@ void PS2Memory::submitGifPacket(GifPathId pathId, const uint8_t *data, uint32_t 
 
     if (m_gifArbiter && drainImmediately && m_gifArbiter->empty())
     {
-        m_gifArbiter->processNow(pathId, data, sizeBytes, bridgeStripTag); // gleiche Reihenfolge, keine Kopie
+        m_gifArbiter->processNow(pathId, data, sizeBytes, bridgeStripTag); // same order, no copy
         return;
     }
     if (m_gifArbiter)
@@ -3234,10 +3647,10 @@ uint32_t PS2Memory::readIORegister(uint32_t address)
 {
     if (g_lazyVif1Pending && address >= 0x10009000u && address < 0x10009100u)
         ps2xFlushLazyVif1Chain(*this);
-    // TS2: Sonys sceGsSyncPath (Originalcode) wartet in Schleifen auf D1_CHCR.STR, D2_CHCR.STR, VIF1_STAT und GIF_STAT.
-    // Auf echter Hardware laufen die Uebertragungen parallel weiter; hier werden aufgeschobene Uebertragungen beim Lesen
-    // dieser Statusregister abgearbeitet (wie es der HLE-Nachbau vor dem Abfragen tat). Ohne das lief das Original bis zur
-    // Zeitgrenze (16 Mio. Abfragen) und halbierte die Bildrate.
+    // TS2: Sony's sceGsSyncPath (original code) waits in loops for D1_CHCR.STR, D2_CHCR.STR, VIF1_STAT and GIF_STAT.
+    // On real hardware the transfers continue in parallel; here deferred transfers are processed when these status
+    // registers are read (as the HLE version did before querying). Without this the original ran until its
+    // time limit (16 million queries) and halved the frame rate.
     if (address == 0x10009000u || address == 0x1000A000u || address == 0x10003C00u || address == 0x10003020u)
     {
         static const bool aus = std::getenv("PS2X_POLL_NO_FLUSH") != nullptr;
@@ -3254,7 +3667,7 @@ uint32_t PS2Memory::readIORegister(uint32_t address)
             if (g_hbVsync && (timer.mode & kEeTimerModeClksMask) == 3u && (timer.mode & kEeTimerModeCue) != 0u &&
                 (timer.mode & (kEeTimerModeCmpe | kEeTimerModeOvfe | kEeTimerModeZret)) == 0u)
             {
-                // direkt beim Lesen nachziehen: der VSync kann seit dem letzten Sammelschritt gekommen sein
+                // catch up directly on read: the VSync may have come since the last batch step
                 HbAnker &h = g_hb[timerIndex];
                 const uint64_t vs = gs().vsyncTick.load(std::memory_order_relaxed);
                 if (vs != h.vs) { h.vs = vs; h.cyc = 0u; }
@@ -3269,7 +3682,7 @@ uint32_t PS2Memory::readIORegister(uint32_t address)
             {
                 static uint64_t n[4]; static uint32_t letzter[4];
                 if ((++n[timerIndex] % 2000u) == 1u)
-                    std::fprintf(stderr, "[TIMER] T%zu COUNT gelesen #%llu wert=%u (zuletzt %u)\n", timerIndex, (unsigned long long)n[timerIndex], timer.count, letzter[timerIndex]);
+                    std::fprintf(stderr, "[TIMER] T%zu COUNT read #%llu value=%u (last %u)\n", timerIndex, (unsigned long long)n[timerIndex], timer.count, letzter[timerIndex]);
                 letzter[timerIndex] = timer.count;
             }
             return timer.count & 0xFFFFu;

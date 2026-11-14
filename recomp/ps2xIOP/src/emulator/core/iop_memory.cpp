@@ -285,10 +285,10 @@ namespace ps2x::iop::detail
             if (std::getenv("PS2X_STREAMLOG")) { static int n = 0; if (n++ < 20000) std::fprintf(stderr, "[STREAM] IOP SPU-DMA kern%d madr=%06x hw=%u\n", secondCore ? 1 : 0, madr, halfwords); }
             g_spuBridge.dma(secondCore ? 1 : 0, reinterpret_cast<unsigned short *>(m_ram.data() + madr), halfwords,
                             (value & 1u) ? 1 : 0, static_cast<unsigned int>(g_spuIopCycle));
-            // Die Daten sind jetzt im SPU2. Die Fertig-Meldung kaeme erst nach dessen Transferzeit, gemessen in IOP-Takten;
-            // waehrend eines RPC-Bursts vom EE (Soundbank in vielen Teilen: sceSdVoiceTrans je Teil) vergeht aber kaum
-            // IOP-Zeit -> Kanal blieb "belegt", libsd lehnte jeden weiteren Teil mit -210 ab (keine Schussgeraeusche).
-            // Daher wie ohne Bruecke: sofort fertig, Interrupt ueber die normale DMA-Planung; spaetere SPU2-Meldung verwerfen.
+            // The data is in the SPU2 now. Its done message would only come after its transfer time, measured in IOP cycles;
+            // but during an RPC burst from the EE (sound bank in many parts: one sceSdVoiceTrans per part) hardly any
+            // IOP time passes -> the channel stayed "busy" and libsd refused every further part with -210 (no gunshot sounds).
+            // So, as without the bridge: done immediately, interrupt through the normal DMA scheduling; drop the later SPU2 message.
             ++m_spuDmaIgnore[secondCore ? 1 : 0];
         }
         m_hardware[address] = value & ~kDmaStart;
@@ -311,7 +311,7 @@ namespace ps2x::iop::detail
         const uint64_t transferWords = static_cast<uint64_t>(wordsPerBlock) * blockCount;
         m_dmaStart = DmaStart{
             secondCore ? kDmaSpu1Irq : kDmaSpu0Irq,
-            g_spuBridge.dma ? 64u : std::max<uint64_t>(transferWords * 2u, 64u),   // mit SPU2-Bruecke: Daten schon dort
+            g_spuBridge.dma ? 64u : std::max<uint64_t>(transferWords * 2u, 64u),   // with the SPU2 bridge: the data is already there
         };
     }
 

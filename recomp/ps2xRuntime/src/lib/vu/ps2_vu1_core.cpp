@@ -24,7 +24,7 @@
 
 namespace
 {
-    // PS2X_VU1_FAST=1 (Standard in den Skripten): wie PCSX2 microVU ohne long-double-Nachrechnung und ohne Produkt-Sticky-Flags
+    // PS2X_VU1_FAST=1 (default in the scripts): like PCSX2 microVU without the long double recomputation and without product sticky flags
     inline bool vu1FastFmac()
     {
         static const bool fast = [] { const char *e = std::getenv("PS2X_VU1_FAST"); return e && *e && *e != '0'; }();
@@ -55,9 +55,9 @@ namespace
             g_vu1NextCommit = readyCycle;
     }
 
-    // Belegungsmasken der Pipeline-Arrays: commitReadyPipelines() besucht nur
-    // Slots, die seit dem letzten Commit belegt wurden. Bei Besitzerwechsel
-    // werden alle Bits gesetzt (konservativ, ein falsches Bit kostet nur einen Test).
+    // Occupancy masks of the pipeline arrays: commitReadyPipelines() only visits
+    // slots that were filled since the last commit. On an owner change
+    // all bits are set (conservative, a wrong bit only costs one test).
     struct Vu1Occupancy
     {
         const void *owner = nullptr;
@@ -128,7 +128,7 @@ void VU1Interpreter::resetScheduler()
     m_vfWritePipeline = {};
     m_viWritePipeline = {};
     m_accWritePipeline = {};
-    // ohne den 64-KB-Paketpuffer zu nullen (lief bei jedem MSCAL: ~35 MB memset je Bild)
+    // without zeroing the 64 KB packet buffer (ran on every MSCAL: ~35 MB memset per frame)
     m_xgkick.sourceAddress = 0; m_xgkick.totalBytes = 0; m_xgkick.copiedBytes = 0; m_xgkick.currentTagEnd = 0;
     m_xgkick.cycleCredit = 0; m_xgkick.issueCycle = 0; m_xgkick.active = false; m_xgkick.currentTagEop = false;
     m_vfReady = {};
@@ -260,8 +260,8 @@ void VU1Interpreter::normalizeFmacResult(float *result, uint8_t dest,
         if ((dest & laneForComponent(component)) == 0u)
             continue;
 
-        // PS2X_VU1_FAST=1: ohne die exakte long-double-Nachrechnung (Over/Underflow-Flags bitgenau), stattdessen
-        // SSE-Float + Klemmen wie PCSX2 microVU. Deutlich schneller, Ergebnis in Grenzfällen um 1 ulp anders.
+        // PS2X_VU1_FAST=1: without the exact long double recomputation (over/underflow flags bit-exact), instead
+        // SSE float + clamping like PCSX2 microVU. Much faster, result differs by 1 ulp in edge cases.
         static const bool fastFmac = [] { const char *e = std::getenv("PS2X_VU1_FAST"); return e && *e && *e != '0'; }();
         long double exactResult = 0.0L;
         if (!fastFmac && calculateFmacExactResult(component, exactResult))
@@ -606,8 +606,8 @@ void VU1Interpreter::applyFmacDest(float *dst, float *result, uint8_t dest)
 {
     uint8_t laneFlags[4]{};
     normalizeFmacResult(result, dest, laneFlags);
-    if (m_flagsLive) // sonst verwirft updateFmacFlags ohnehin alles: Sticky-Nachrechnung sparen
-        updateFmacFlags(laneFlags, dest, vu1FastFmac() ? 0u : calculateFmacProductSticky(dest)); // FAST: wie microVU ohne Produkt-Sticky
+    if (m_flagsLive) // otherwise updateFmacFlags discards everything anyway: skip the sticky recomputation
+        updateFmacFlags(laneFlags, dest, vu1FastFmac() ? 0u : calculateFmacProductSticky(dest)); // FAST: like microVU without product sticky
     applyDest(dst, result, dest);
 }
 
@@ -615,8 +615,8 @@ void VU1Interpreter::applyFmacDestAcc(float *result, uint8_t dest)
 {
     uint8_t laneFlags[4]{};
     normalizeFmacResult(result, dest, laneFlags);
-    if (m_flagsLive) // sonst verwirft updateFmacFlags ohnehin alles: Sticky-Nachrechnung sparen
-        updateFmacFlags(laneFlags, dest, vu1FastFmac() ? 0u : calculateFmacProductSticky(dest)); // FAST: wie microVU ohne Produkt-Sticky
+    if (m_flagsLive) // otherwise updateFmacFlags discards everything anyway: skip the sticky recomputation
+        updateFmacFlags(laneFlags, dest, vu1FastFmac() ? 0u : calculateFmacProductSticky(dest)); // FAST: like microVU without product sticky
     applyDestAcc(result, dest);
 }
 
@@ -984,7 +984,7 @@ void VU1Interpreter::commitReadyPipelines()
     m_nextCommit = pendingMin;
 }
 
-// ps2x (TS2): Zustand beim letzten XGKICK (für die Diagnose übergroßer Pakete)
+// ps2x (TS2): state at the last XGKICK (for diagnosing oversized packets)
 namespace { thread_local struct { uint32_t pc, qw, top, itop; uint16_t vi[16]; } t_lastKick{}; }
 void VU1Interpreter::progressXgkick()
 {
@@ -1004,7 +1004,7 @@ void VU1Interpreter::progressXgkick()
 
         const uint32_t qwordOffset = m_xgkick.copiedBytes;
         const uint32_t src0 = (m_xgkick.sourceAddress + m_xgkick.copiedBytes) % m_activeVuDataSize;
-        if (src0 + 16u <= m_activeVuDataSize) // haeufiger Fall ohne Umbruch: ein Block statt 16 Einzelbytes
+        if (src0 + 16u <= m_activeVuDataSize) // common case without wrap-around: one block instead of 16 single bytes
             std::memcpy(&m_xgkick.packet[m_xgkick.copiedBytes], m_activeVuData + src0, 16u);
         else
             for (uint32_t i = 0; i < 16u; ++i)
@@ -1040,7 +1040,7 @@ void VU1Interpreter::progressXgkick()
 
             if (tagBytes > XgkickPipeline::kBufferSize - qwordOffset)
             {
-                {   // ps2x (TS2): Diagnose übergroßer XGKICK-Pakete
+                {   // ps2x (TS2): diagnosis of oversized XGKICK packets
                     static int n = 0;
                     if (n++ < 12)
                     {
@@ -1048,7 +1048,7 @@ void VU1Interpreter::progressXgkick()
                         std::fprintf(stderr, "[XGKICK Ausloeser] pc=0x%X qw=0x%X top=0x%X itop=0x%X vi=", t_lastKick.pc, t_lastKick.qw, t_lastKick.top, t_lastKick.itop);
                         for (int i = 0; i < 16; ++i) std::fprintf(stderr, "%X ", t_lastKick.vi[i]);
                         std::fprintf(stderr, "\n");
-                        std::fprintf(stderr, "[XGKICK zu gross] src=0x%X off=0x%X tag=%016llX:%016llX nloop=%u flg=%u nreg=%u bytes=%llu\n",
+                        std::fprintf(stderr, "[XGKICK too big] src=0x%X off=0x%X tag=%016llX:%016llX nloop=%u flg=%u nreg=%u bytes=%llu\n",
                                      m_xgkick.sourceAddress, qwordOffset, (unsigned long long)tagHi, (unsigned long long)tagLo, nloop, format, nreg,
                                      (unsigned long long)tagBytes);
                         // Tag-Kette ab Paketanfang erneut ablaufen (Offset, NLOOP, EOP, FLG, NREG, PRIM)
@@ -1107,16 +1107,16 @@ void VU1Interpreter::progressXgkickBulk()
     {
         if (m_xgkick.currentTagEnd == 0u || m_xgkick.copiedBytes >= m_xgkick.currentTagEnd)
         {
-            // genau ein Quadword (GIFtag bzw. Abschluss) mit der bisherigen Logik
+            // exactly one quadword (GIFtag or terminator) with the previous logic
             m_xgkick.cycleCredit = 1u;
             progressXgkick();
             continue;
         }
-        uint32_t remaining = m_xgkick.currentTagEnd - m_xgkick.copiedBytes; // Vielfaches von 16, passt in den Puffer
+        uint32_t remaining = m_xgkick.currentTagEnd - m_xgkick.copiedBytes; // multiple of 16, fits into the buffer
         while (remaining != 0u)
         {
             const uint32_t src0 = (m_xgkick.sourceAddress + m_xgkick.copiedBytes) % m_activeVuDataSize;
-            uint32_t chunk = m_activeVuDataSize - src0; // bis zum Umbruch im VU-Datenspeicher
+            uint32_t chunk = m_activeVuDataSize - src0; // up to the wrap-around in VU data memory
             if (chunk > remaining)
                 chunk = remaining;
             std::memcpy(&m_xgkick.packet[m_xgkick.copiedBytes], m_activeVuData + src0, chunk);
@@ -1166,6 +1166,37 @@ void VU1Interpreter::startXgkick(uint32_t qwordAddress)
     for (int i = 0; i < 16; ++i) t_lastKick.vi[i] = static_cast<uint16_t>(m_state.vi[i]);
     if (m_unit != Unit::VU1 || !m_activeVuData || m_activeVuDataSize < 16u)
         return;
+    {
+        // TS2_KICKDUMP=n (diagnosis): arm the VU1 dump for the first n kicks whose first GIF tag draws FST triangle
+        // strips with a vertex far outside the screen (the stretched impact smoke quads)
+        static int rest = [] { const char *e = std::getenv("TS2_KICKDUMP"); return e ? std::atoi(e) : 0; }();
+        if (rest > 0)
+        {
+            uint32_t o = (qwordAddress * 16u) % m_activeVuDataSize; bool weit = false; uint32_t prim = 0;
+            for (int tags = 0; tags < 12 && !weit && o + 16u <= m_activeVuDataSize; ++tags)
+            {
+                uint64_t lo, hi; std::memcpy(&lo, m_activeVuData + o, 8); std::memcpy(&hi, m_activeVuData + o + 8, 8); o += 16u;
+                const uint32_t nloop = lo & 0x7FFFu, flg = (lo >> 58) & 3u; uint32_t nreg = (lo >> 60) & 0xFu; if (!nreg) nreg = 16;
+                if ((lo >> 46) & 1u) prim = (lo >> 47) & 0x7FFu;
+                if (flg == 0u)
+                {
+                    for (uint32_t i = 0; i < nloop && !weit; ++i)
+                        for (uint32_t r = 0; r < nreg; ++r, o += 16u)
+                        {
+                            if (o + 16u > m_activeVuDataSize) { i = nloop; break; }
+                            const uint32_t reg = (hi >> (4u * r)) & 0xFu;
+                            if (reg == 0xEu && m_activeVuData[o + 8] == 0x00) { uint64_t d; std::memcpy(&d, m_activeVuData + o, 8); prim = d & 0x7FFu; }
+                            if ((reg == 4u || reg == 5u || reg == 0xCu || reg == 0xDu) && (prim & 0x157u) == 0x154u)
+                            { uint16_t y; std::memcpy(&y, m_activeVuData + o + 4, 2); if (y / 16u > 3000u || y / 16u < 900u) weit = true; }
+                        }
+                }
+                else if (flg == 1u) o += ((nloop * nreg + 1u) / 2u) * 16u;
+                else o += nloop * 16u;
+                if (lo & 0x8000u) break;
+            }
+            if (weit) { --rest; g_ps2xVu1DumpArm.store(1); }
+        }
+    }
     if (g_ps2xVu1DumpArm.load(std::memory_order_relaxed) > 0)
     {
         static int dumpIndex = 0;
@@ -1193,8 +1224,8 @@ void VU1Interpreter::startXgkick(uint32_t qwordAddress)
     }
 
     const uint32_t sourceAddress = (qwordAddress * 16u) % m_activeVuDataSize;
-    // Nur die Verwaltungsfelder zuruecksetzen: "m_xgkick = {}" hat bei jedem XGKICK den 64-KB-Puffer genullt
-    // (der Puffer wird ohnehin vor dem Lesen beschrieben).
+    // Only reset the bookkeeping fields: "m_xgkick = {}" zeroed the 64 KB buffer on every XGKICK
+    // (the buffer is written before it is read anyway).
     m_xgkick.sourceAddress = 0; m_xgkick.totalBytes = 0; m_xgkick.copiedBytes = 0; m_xgkick.currentTagEnd = 0;
     m_xgkick.cycleCredit = 0; m_xgkick.issueCycle = 0; m_xgkick.active = false; m_xgkick.currentTagEop = false;
     m_xgkick.active = true;
@@ -1217,8 +1248,8 @@ void VU1Interpreter::advanceTo(uint64_t targetCycle)
 {
     while (m_cycle < targetCycle)
     {
-        // Ohne laufende XGKICK-Uebertragung passiert bis zur naechsten Faelligkeit (m_nextCommit) nichts:
-        // commitReadyPipelines() und progressXgkick() kehren sofort zurueck. Direkt davor springen (bitgleich).
+        // Without an XGKICK transfer in progress nothing happens until the next due time (m_nextCommit):
+        // commitReadyPipelines() and progressXgkick() return immediately. Jump right before it (bit-identical).
         if (!m_xgkick.active)
         {
             const uint64_t stop = m_nextCommit < targetCycle ? m_nextCommit : targetCycle;
@@ -1813,8 +1844,8 @@ void VU1Interpreter::rebuildDecodedCodeCache(const uint8_t *vuCode, uint32_t cod
     for (uint32_t i = 0; i < pairCount; ++i)
         m_decodedCodeCache[i] = decodeInstructionPair(vuCode, i * 8u);
 
-    // PS2X_VU1_FLAGS_ALWAYS=1 schaltet die Ersparnis ab. Sonst: liest kein Befehl im Mikrospeicher MAC/Status
-    // (FSEQ/FSAND/FSOR/FMEQ/FMAND/FMOR), braucht die FMAC-Flag-Pipeline nicht gefuellt zu werden.
+    // PS2X_VU1_FLAGS_ALWAYS=1 turns the saving off. Otherwise: if no instruction in micro memory reads MAC/status
+    // (FSEQ/FSAND/FSOR/FMEQ/FMAND/FMOR), the FMAC flag pipeline does not need to be filled.
     static const bool flagsAlways = [] { const char *e = std::getenv("PS2X_VU1_FLAGS_ALWAYS"); return e && *e && *e != '0'; }();
     bool live = flagsAlways;
     for (uint32_t i = 0; i < pairCount && !live; ++i)
@@ -1896,8 +1927,8 @@ void VU1Interpreter::reportReservedInstruction(bool upper, uint32_t instruction)
 }
 
 
-// PS2X_VU1_DUMP=<ordner>: VU1-Mikroprogramme mitschneiden (Grundlage fuer den VU1-Rekompilierer).
-//   <ordner>/vu1_<hash>.bin   : 16 KB Mikrospeicher beim ersten Lauf dieses Codes
+// PS2X_VU1_DUMP=<dir>: record VU1 micro programs (basis for the VU1 recompiler).
+//   <dir>/vu1_<hash>.bin   : 16 KB micro memory at the first run of this code
 //   <ordner>/vu1_index.txt    : hash startpc aufrufe zyklen (alle 2048 Aufrufe neu geschrieben)
 namespace ps2x_vu1dump
 {
@@ -1924,8 +1955,8 @@ namespace ps2x_vu1dump
     static void record(uint64_t hash, uint32_t pc, uint64_t cycles)
     {
         Val &v = g_map[Key{hash, pc}]; v.calls++; v.cycles += cycles;
-        // PS2X_VU1_DUMP_EVERY: Aufrufe zwischen zwei Schreibvorgaengen (Standard 2048 ~ 1 Bild; im Spielbetrieb
-        // z. B. 262144 ~ 2 min, damit das Mitschneiden beim Spielen keine Ruckler erzeugt)
+        // PS2X_VU1_DUMP_EVERY: calls between two writes (default 2048 ~ 1 frame; while playing
+        // e.g. 262144 ~ 2 min, so that recording causes no hitches during play)
         static const uint64_t every = [] { const char *e = std::getenv("PS2X_VU1_DUMP_EVERY"); const unsigned long long n = (e && *e) ? std::strtoull(e, nullptr, 10) : 0ull; return n ? (uint64_t)n : 2048ull; }();
         if ((++g_calls % every) != 0u) return;
         char path[512]; std::snprintf(path, sizeof(path), "%s/vu1_index.txt", dir());
@@ -1949,7 +1980,7 @@ namespace ps2x_vu1dump
 
 
 extern const VU1Interpreter::CompiledEntry g_vu1CompiledTable[];
-extern const uint32_t g_vu1CompiledStatusIgnore; // Status-Bits, die die uebersetzten Programme nicht fuehren (ungelesen)
+extern const uint32_t g_vu1CompiledStatusIgnore; // status bits the translated programs do not track (unread)
 extern const size_t g_vu1CompiledCount;
 extern const uint8_t *vu1CompiledEntryMap(uint64_t hash);
 extern VU1Interpreter::CompiledFn vu1CompiledMatch(const uint8_t *code, uint32_t size, uint64_t whole, const uint8_t **entry);
@@ -2012,7 +2043,7 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
     m_state.vf[0][1] = 0.0f;
     m_state.vf[0][2] = 0.0f;
     m_state.vf[0][3] = 1.0f;
-    // PS2X_VU1_DIFF=1: jeder Aufruf zusaetzlich als Referenz durch den reinen Interpreter (Kopie), Ergebnis bitgenau vergleichen
+    // PS2X_VU1_DIFF=1: additionally run every call through the pure interpreter as a reference (copy), compare the result bit-exactly
     static const bool diffOn = [] { const char *e = std::getenv("PS2X_VU1_DIFF"); return e && *e && *e != '0'; }();
     if (diffOn && m_unit == Unit::VU1 && memory && vuCode == memory->getVU1Code() && !m_compiledDisabled)
     {
@@ -2039,20 +2070,20 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
                     if (std::memcmp(&a.vf[r][c], &b.vf[r][c], 4) != 0)
                     {
                         uint32_t x, y; std::memcpy(&x, &a.vf[r][c], 4); std::memcpy(&y, &b.vf[r][c], 4);
-                        std::snprintf(detail, sizeof(detail), " vf%d.%c uebersetzt %08x (%g) Interpreter %08x (%g)", r, "xyzw"[c], x, a.vf[r][c], y, b.vf[r][c]);
+                        std::snprintf(detail, sizeof(detail), " vf%d.%c translated %08x (%g) interpreter %08x (%g)", r, "xyzw"[c], x, a.vf[r][c], y, b.vf[r][c]);
                         break;
                     }
         }
         else if (std::memcmp(a.vi, b.vi, sizeof(a.vi)) != 0) what = "VI";
         else if (std::memcmp(a.acc, b.acc, sizeof(a.acc)) != 0) what = "ACC";
         else if (std::memcmp(&a.q, &b.q, 4) || std::memcmp(&a.p, &b.p, 4) || std::memcmp(&a.i, &b.i, 4) || a.r != b.r) what = "Q/P/I/R";
-        else if (capReal != capRef) what = "XGKICK-Daten";   // TS2: Ausgabe zuerst (CLIP am Ende kann noch in der Pipeline stecken)
-        else if ([&] { // TS2: endgueltiger CLIP-Wert inkl. noch laufender Pipeline-Eintraege (Stufe 5 endet mit weniger Takten)
+        else if (capReal != capRef) what = "XGKICK data";   // TS2: output first (CLIP at the end may still be in the pipeline)
+        else if ([&] { // TS2: final CLIP value incl. pipeline entries still in flight (level 5 ends with fewer cycles)
                      auto fin = [](const VU1Interpreter &x) { uint32_t c = x.m_state.clip; uint64_t best = 0; bool any = false;
                          for (const auto &e : x.m_flagPipeline) if (e.valid && e.writesClip && (!any || e.issueCycle >= best)) { best = e.issueCycle; c = e.clip; any = true; }
                          return c; };
                      const bool d = fin(*this) != fin(*ref);
-                     if (d) std::snprintf(detail, sizeof(detail), " clip uebersetzt %06x/fin %06x/work %06x  Interpreter %06x/fin %06x/work %06x",
+                     if (d) std::snprintf(detail, sizeof(detail), " clip translated %06x/fin %06x/work %06x  interpreter %06x/fin %06x/work %06x",
                                           m_state.clip, fin(*this), m_workingClip, ref->m_state.clip, fin(*ref), ref->m_workingClip);
                      return d; }()) what = "CLIP";
         else if (m_flagsLive && (a.mac != b.mac || ((a.status ^ b.status) & ~g_vu1CompiledStatusIgnore) != 0u)) what = "MAC/STATUS";
@@ -2061,9 +2092,9 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
         {
             what = "VU-Datenspeicher";
             for (uint32_t k = 0; k < dataSize; ++k)
-                if (vuData[k] != refData[k]) { std::snprintf(detail, sizeof(detail), " erste Abweichung bei 0x%04x", k); break; }
+                if (vuData[k] != refData[k]) { std::snprintf(detail, sizeof(detail), " first difference at 0x%04x", k); break; }
         }
-        // PS2X_VU1_DIFF=2: Taktzahl nicht vergleichen (Stufe 3 uebertraegt XGKICK sofort statt Takt fuer Takt)
+        // PS2X_VU1_DIFF=2: do not compare the cycle count (level 3 transfers XGKICK at once instead of cycle by cycle)
         static const bool cyclesToo = [] { const char *e = std::getenv("PS2X_VU1_DIFF"); return !(e && e[0] == '2'); }();
         if (!what && cyclesToo && m_cycle != ref->m_cycle) what = "Zyklen";
         static std::map<std::pair<uint64_t, std::string>, uint64_t> s_kinds;
@@ -2074,26 +2105,26 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
             kindCount = ++s_kinds[{ps2x_vu1dump::fnv(vuCode, codeSize), what}];
         }
         if (what && kindCount <= 3)
-            std::fprintf(stderr, "[VU1-DIFF] Aufruf %llu Code %016llx Start 0x%04x: %s weicht ab%s (pc %04x/%04x, Zyklen %llu/%llu)\n",
+            std::fprintf(stderr, "[VU1-DIFF] call %llu code %016llx start 0x%04x: %s differs%s (pc %04x/%04x, cycles %llu/%llu)\n",
                          (unsigned long long)s_calls, (unsigned long long)ps2x_vu1dump::fnv(vuCode, codeSize), pc0, what, detail,
                          a.pc, b.pc, (unsigned long long)m_cycle, (unsigned long long)ref->m_cycle);
         if ((s_calls % 20000u) == 0u)
         {
-            std::fprintf(stderr, "[VU1-DIFF] %llu Aufrufe geprueft, %llu Abweichungen:", (unsigned long long)s_calls, (unsigned long long)s_bad);
+            std::fprintf(stderr, "[VU1-DIFF] %llu calls checked, %llu differences:", (unsigned long long)s_calls, (unsigned long long)s_bad);
             for (const auto &kv : s_kinds)
                 std::fprintf(stderr, " [%016llx %s: %llu]", (unsigned long long)kv.first.first, kv.first.second.c_str(), (unsigned long long)kv.second);
             std::fprintf(stderr, "\n");
         }
         return;
     }
-    // PS2X_VU1_SELFTEST=<ordner mit vu1_<hash>.bin>: jedes uebersetzte Programm an jedem Einstieg mit Zufallsregistern und
-    // -daten einmal uebersetzt und einmal im Interpreter rechnen und bitgenau vergleichen (auch Module, die keine
-    // Teststrecke erreicht). Laeuft einmal beim ersten VU1-Aufruf; Mikrospeicher wird danach wiederhergestellt.
+    // PS2X_VU1_SELFTEST=<dir with vu1_<hash>.bin>: compute every translated program at every entry with random registers and
+    // data once translated and once in the interpreter and compare bit-exactly (also modules no
+    // test route reaches). Runs once at the first VU1 call; micro memory is restored afterwards.
     if (m_unit == Unit::VU1 && memory && vuCode == memory->getVU1Code())
     {
         static std::atomic<bool> s_stStarted{false};
-        static const char *const sdEnv = std::getenv("PS2X_VU1_SELFTEST"); // einmal lesen (execute laeuft >2000x je Bild)
-        if (sdEnv && *sdEnv && !s_stStarted.exchange(true)) [&] { // verschachtelte execute()-Aufrufe des Tests laufen normal
+        static const char *const sdEnv = std::getenv("PS2X_VU1_SELFTEST"); // read once (execute runs >2000x per frame)
+        if (sdEnv && *sdEnv && !s_stStarted.exchange(true)) [&] { // nested execute() calls of the test run normally
             const char *sd = sdEnv;
             const int seeds = [] { const char *e = std::getenv("PS2X_VU1_SELFTEST_N"); return (e && *e) ? std::max(1, std::atoi(e)) : 8; }();
             std::vector<uint8_t> saveCode(vuCode, vuCode + codeSize), saveData(vuData, vuData + dataSize);
@@ -2111,7 +2142,7 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
                 if (FILE *f = std::fopen(fp.string().c_str(), "rb")) { (void)std::fread(img.data(), 1, img.size(), f); std::fclose(f); }
                 const uint8_t *entry = nullptr;
                 const uint64_t whole = ps2x_vu1dump::fnv(img.data(), codeSize);
-                if (!vu1CompiledMatch(img.data(), codeSize, whole, &entry) || !entry) { std::fprintf(stderr, "[VU1-Selbsttest] %s: nicht uebersetzt\n", fp.filename().string().c_str()); continue; }
+                if (!vu1CompiledMatch(img.data(), codeSize, whole, &entry) || !entry) { std::fprintf(stderr, "[VU1 self-test] %s: not translated\n", fp.filename().string().c_str()); continue; }
                 ++progs;
                 std::memcpy(vuCode, img.data(), codeSize);
                 unsigned pBad = 0;
@@ -2132,8 +2163,8 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
                             float fv = static_cast<float>(static_cast<int64_t>(x % 20001u) - 10000) / 32.0f;
                             uint32_t w; std::memcpy(&w, &fv, 4);
                             if ((x >> 40) % 4u == 0u) w = static_cast<uint32_t>(x >> 20) & 0x3FFu; // auch kleine Ganzzahlen (Zaehler, Adressen)
-                            // Jedes Quadword beginnt mit einem gueltigen GIF-Tag (EOP, NLOOP 0): ein XGKICK an beliebiger
-                            // Adresse uebertraegt dann wie im Spiel einen sauberen Tag statt Zufallsmuell
+                            // Every quadword starts with a valid GIF tag (EOP, NLOOP 0): an XGKICK at any
+                            // address then transfers a clean tag as in the game instead of random garbage
                             if ((k & 15u) == 0u) w = 0x00008000u;
                             else if ((k & 15u) == 4u) w = 0u;
                             std::memcpy(dA.data() + k, &w, 4);
@@ -2142,7 +2173,7 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
                         auto A = std::make_unique<VU1Interpreter>(*this);
                         auto B = std::make_unique<VU1Interpreter>(*this);
                         std::vector<uint8_t> capA, capB;
-                        A->m_compiledDisabled = true; A->m_gifCapture = &capA; A->m_gifSubmit = false; A->m_recGen = ~0ull; A->m_cachedCodeSize = 0u; // Decoder-Cache: Testabbild, nicht der alte Code
+                        A->m_compiledDisabled = true; A->m_gifCapture = &capA; A->m_gifSubmit = false; A->m_recGen = ~0ull; A->m_cachedCodeSize = 0u; // decoder cache: test image, not the old code
                         B->m_gifCapture = &capB; B->m_gifSubmit = false; B->m_recGen = ~0ull; B->m_cachedCodeSize = 0u;
                         A->m_state = st; B->m_state = st;
                         const uint32_t top = static_cast<uint32_t>(rnd() % 1024u), itop = static_cast<uint32_t>(rnd() % 1024u);
@@ -2160,7 +2191,7 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
                         else if (a.clip != b.clip) what = "CLIP";
                         else if (B->m_flagsLive && (a.mac != b.mac || ((a.status ^ b.status) & ~g_vu1CompiledStatusIgnore) != 0u)) what = "MAC/STATUS";
                         else if (a.pc != b.pc) what = "PC";
-                        else if (capA != capB) what = "XGKICK-Daten";
+                        else if (capA != capB) what = "XGKICK data";
                         else if (dA != dB) what = "VU-Datenspeicher";
                         if (what)
                         {
@@ -2176,11 +2207,11 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
             }
             std::memcpy(vuCode, saveCode.data(), codeSize);
             std::memcpy(vuData, saveData.data(), dataSize);
-            std::fprintf(stderr, "[VU1-Selbsttest] %u Programme, %u Faelle: %u gleich, %u Abweichungen, %u uebersprungen (Budget)\n", progs, cases, ok, bad, skipped);
+            std::fprintf(stderr, "[VU1 self-test] %u programs, %u cases: %u equal, %u differences, %u skipped (budget)\n", progs, cases, ok, bad, skipped);
         }();
     }
-    // PS2X_VU1_DECODE=<ordner>: Mikrospeicher-Abbilder (vu1_<hash>.bin, z. B. aus tools/vu1_module.py) einmalig mit
-    // dem Decoder dieser Runtime in .dec uebersetzen (Grundlage fuer tools/vu1rec.py, ohne das Spiel zu spielen)
+    // PS2X_VU1_DECODE=<dir>: translate micro memory images (vu1_<hash>.bin, e.g. from tools/vu1_module.py) once into
+    // .dec with this runtime's decoder (basis for tools/vu1rec.py, without playing the game)
     if (m_unit == Unit::VU1)
     {
         static std::once_flag s_dec;
@@ -2200,7 +2231,7 @@ void VU1Interpreter::execute(uint8_t *vuCode, uint32_t codeSize,
                 ++n;
             }
             std::fprintf(stderr, "[VU1-Decode] %u Abbilder in %s dekodiert\n", n, dd);
-            // Release-Installer: nach dem Dekodieren sofort beenden (Durchgang 1 des lokalen Builds)
+            // Release installer: exit right after decoding (pass 1 of the local build)
             if (const char *x = std::getenv("PS2X_VU1_DECODE_EXIT"); x && *x == '1') { std::fflush(nullptr); std::_Exit(0); }
         });
     }
@@ -2248,8 +2279,8 @@ void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,
     g_vu1LastCode = vuCode;
     g_vu1LastCodeSize = codeSize;
 
-    // Rundung Richtung null wie die VU. Auf dem MTVU-Arbeiter ist sie dauerhaft gesetzt -> keine libm-Aufrufe je
-    // Programm (fegetround/fesetround kosteten ~1,5 % des VU1-Threads). Sonst wie bisher.
+    // Rounding towards zero like the VU. On the MTVU worker it is set permanently -> no libm calls per
+    // program (fegetround/fesetround cost ~1.5 % of the VU1 thread). Otherwise as before.
     const unsigned int csrNow = _mm_getcsr();
     const bool alreadyChop = (csrNow & 0x6000u) == 0x6000u && g_ps2xOnVu1Worker;
     const int previousRoundingMode = alreadyChop ? -1 : std::fegetround();
@@ -2257,18 +2288,18 @@ void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,
     const uint64_t budgetEnd = m_cycle + maxCycles;
     bool programEnded = false;
     const bool dumpCover = m_unit == Unit::VU1 && ps2x_vu1dump::dir() && memory && vuCode == memory->getVU1Code();
-    std::vector<uint8_t> *coverVec = nullptr; // einmal je Lauf nachschlagen statt je Befehlspaar
+    std::vector<uint8_t> *coverVec = nullptr; // look up once per run instead of per instruction pair
     // PS2X_VU1_REC=1: vorab uebersetzte Mikroprogramme benutzen (Abdeckungsluecken -> Interpreter)
     static const bool recOn = [] { const char *e = std::getenv("PS2X_VU1_REC"); return e && *e && *e != '0'; }();
-    // Mitschnitt (dumpCover) und Uebersetzer zusammen: der Interpreter zeichnet dann genau die Abdeckungsluecken auf
+    // Recording (dumpCover) and translator together: the interpreter then records exactly the coverage gaps
     if (recOn && !m_compiledDisabled && m_unit == Unit::VU1 && memory && vuCode == memory->getVU1Code())
     {
         const uint64_t gen = memory->getVU1CodeGeneration();
         if (gen != m_recGen)
         {
             m_recGen = gen;
-            // Schluessel fuers Nachschlagen: zwei CRC32C-Ketten ueber 8-Byte-Woerter (Hardware, ~10x schneller als FNV je
-            // Byte; lief bei jedem Code-Upload und kostete ~6 % der VU1-Zeit). Zuordnung selbst ueber Signaturen (gecacht).
+            // Lookup key: two CRC32C chains over 8-byte words (hardware, ~10x faster than FNV per
+            // byte; ran on every code upload and cost ~6 % of the VU1 time). The mapping itself goes through signatures (cached).
             uint64_t recHash;
             {
                 uint64_t c0 = 0x9E3779B9u, c1 = 0x85EBCA6Bu;
@@ -2280,17 +2311,17 @@ void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,
                 }
                 recHash = ((c0 << 32) | (c1 & 0xFFFFFFFFu)) ^ (0xC2B2AE3D27D4EB4Full * codeSize) ^ 0x5A5A000000000000ull;
             }
-            // Erkennung ueber die Bytes der uebersetzten Paare (Signatur), nicht ueber den ganzen Mikrospeicher:
-            // derselbe Modulcode mit anderen Resten im Speicher bleibt erkannt
+            // Recognition through the bytes of the translated pairs (signature), not the whole micro memory:
+            // the same module code with different leftovers in memory is still recognised
             m_recFn = vu1CompiledMatch(vuCode, codeSize, recHash, &m_recEntry);
             m_recSkipPc = ~0u;
             if (!m_recFn)
             {
-                // Unbekanntes Mikroprogramm laeuft komplett im Interpreter: einmal je Programm melden
+                // An unknown micro program runs entirely in the interpreter: report once per program
                 static std::mutex s_m; static std::set<uint64_t> s_seen;
                 std::lock_guard<std::mutex> lk(s_m);
                 if (s_seen.insert(recHash).second)
-                    std::fprintf(stderr, "[VU1-Rec] unbekanntes Programm %016llx (Interpreter)\n", (unsigned long long)ps2x_vu1dump::fnv(vuCode, codeSize));
+                    std::fprintf(stderr, "[VU1-Rec] unknown program %016llx (interpreter)\n", (unsigned long long)ps2x_vu1dump::fnv(vuCode, codeSize));
             }
         }
         if (m_recFn && m_recFn(*this, vuCode, codeSize, vuData, dataSize, gs, memory, budgetEnd, programEnded) == 0)
@@ -2301,8 +2332,8 @@ void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,
         commitReadyPipelines();
         if (m_state.pc + 8u > codeSize)
             break;
-        // Nach einem Rueckfall (Abdeckungsluecke) am naechsten Einstieg zurueck in den uebersetzten Code, statt das
-        // restliche Programm im Interpreter zu rechnen. Gleiche Bedingungen wie der Einstieg im uebersetzten Code.
+        // After a fallback (coverage gap) return to the translated code at the next entry instead of computing the
+        // rest of the program in the interpreter. Same conditions as the entry in the translated code.
         if (m_recEntry && !m_compiledDisabled && m_state.pc != m_recSkipPc && m_recEntry[(m_state.pc & 0x3FFFu) >> 3] &&
             !m_state.branchPending && !m_state.ebit && !m_state.haltAfterDelaySlot && !hasPendingRegWrites() && !hasPendingOther() && allWritesRetired())
         {
@@ -2506,10 +2537,10 @@ void VU1Interpreter::run(uint8_t *vuCode, uint32_t codeSize,
 vu1_run_epilogue:
     if (programEnded)
     {
-        // wie flushPipelines(), plus die sofort geschriebenen Ergebnisse der uebersetzten Programme
+        // like flushPipelines(), plus the immediately written results of the translated programs
         while (pipelinesPending() || m_cycle < m_recPend)
         {
-            // wie advanceTo: bis zur naechsten Faelligkeit passiert nichts (keine XGKICK aktiv) -> springen
+            // like advanceTo: nothing happens until the next due time (no XGKICK active) -> jump
             if (!m_xgkick.active)
             {
                 uint64_t stop = m_nextCommit;

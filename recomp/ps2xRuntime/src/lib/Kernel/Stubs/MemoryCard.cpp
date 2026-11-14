@@ -110,7 +110,7 @@ namespace ps2_stubs
 
         bool isValidMcPortSlot(int32_t port, int32_t slot)
         {
-            // TS2: nur Schacht 1 hat eine Karte (wie PCSX2-Standard / eine PS2 mit einer Karte). TS2_MC_SLOT2=1 = zwei Karten.
+            // TS2: only slot 1 has a card (like the PCSX2 default / a PS2 with one card). TS2_MC_SLOT2=1 = two cards.
             static const bool zweiKarten = [] { const char *e = std::getenv("TS2_MC_SLOT2"); return e && *e == '1'; }();
             if (port == 1 && !zweiKarten)
                 return false;

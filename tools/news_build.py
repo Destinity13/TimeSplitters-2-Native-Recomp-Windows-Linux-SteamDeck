@@ -8,7 +8,7 @@ Each news/YYYY-MM-DD-name.md starts with a header block:
     tag: Coming soon | Patch | Release | Dev log
     summary: one or two sentences
     ---
-Each post may also set `image: img/<file>.jpg` (shown in the main README). Writes launcher/news.json (read by the
+Each post may also set `image: img/<file>.jpg` (shown in the main README) and `order: N` (posts of the same day: higher first). Writes launcher/news.json (read by the
 launcher's News tab), refreshes the post table in news/README.md and the "Latest news" block in the main README.
 """
 import json
@@ -38,7 +38,7 @@ def read_post(path):
 
 
 def main():
-    posts = sorted((read_post(p) for p in NEWS.glob("[0-9]*.md")), key=lambda p: p["date"], reverse=True)
+    posts = sorted((read_post(p) for p in NEWS.glob("[0-9]*.md")), key=lambda p: (p["date"], int(p.get("order", 0) or 0)), reverse=True)   # same day: higher `order:` first
     feed = [{"date": p["date"] + "T12:00:00Z", "title": p["title"], "tag": p["tag"], "body": p["summary"], "url": REPO_URL + p["file"]} for p in posts]
     out = ROOT / "launcher" / "news.json"
     out.parent.mkdir(exist_ok=True)
