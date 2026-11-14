@@ -1940,6 +1940,9 @@ namespace ps2xmenu
 			n60 = std::fabs(vps - 60.f) < 1.5f ? n60 + 1 : 0; n50 = std::fabs(vps - 50.f) < 1.5f ? n50 + 1 : 0;
 			if (n60 >= 6) beste = 60.f; else if (n50 >= 6) beste = 50.f;
 		}
+		// a PC that is too slow from the first frame never shows the nominal rate: assume 60 after 45 s, otherwise the
+		// guard would never step down exactly where it is needed (GTX 1050 at 1080p: auto = 4x, about 20 fps)
+		if (beste < 45.f && jetzt > 45.0) beste = 60.f;
 		if (beste < 45.f || vps <= 1.f || vps >= 0.88f * beste) { schlechtSeit = -1.0; return; }
 		if (schlechtSeit < 0.0) { schlechtSeit = jetzt; return; }
 		if (jetzt - schlechtSeit < 10.0 || jetzt - letzte < 20.0) return;
