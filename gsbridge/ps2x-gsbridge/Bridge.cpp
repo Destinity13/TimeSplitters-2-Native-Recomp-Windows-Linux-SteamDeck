@@ -3333,12 +3333,20 @@ namespace ps2xin
 	// Last input device used: Steam (Deck, desktop mode) sends keyboard/mouse events in addition to the gamepad
 	// (D-pad = arrow keys, B = Esc ...). While the gamepad is active, the keyboard does not count as a pad.
 	std::atomic<long long> padAktivMs{-100000};
+	// Last time the gamepad AIMED (right stick). Only this releases a captured mouse: with Steam Input hybrid layouts
+	// (left stick native, right stick as joystick mouse - issue #5) walking with the stick released the mouse after
+	// 250 ms and it had to be woken up with a click.
+	std::atomic<long long> padZielMs{-100000};
 	long long jetztMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 	bool padAktiv() { return jetztMs() - padAktivMs.load() < 1500; }
 	// Last real mouse/keyboard input. If the gamepad is used afterwards, the bridge releases the mouse
 	// (Steam Deck: a touchscreen tap or the trackpad would otherwise capture the mouse and the game would stay in mouse aiming).
 	std::atomic<long long> mausAktivMs{-100000};
-	bool padSeitMaus() { return padAktivMs.load() > mausAktivMs.load() + 250; }
+	bool padSeitMaus() { static const bool alt = [] { const char* e = std::getenv("PS2X_PAD_LOEST_ALT"); return e && *e == '1'; }();
+		return (alt ? padAktivMs.load() : padZielMs.load()) > mausAktivMs.load() + 250; }
+	// The mouse was captured when the menu opened: capture it again when the menu closes (issue #5: after a pause the
+	// mouse had to be woken up with a click)
+	std::atomic<bool> wiederFangen{false};
 
 	void key(KeySym ks, bool down)
 	{
@@ -3486,6 +3494,7 @@ namespace ps2xin
 		}
 		{
 			const auto weg = [](SDL_GamepadAxis a) { const int v = SDL_GetGamepadAxis(gp, a); return v > 9000 || v < -9000; };
+			if (weg(SDL_GAMEPAD_AXIS_RIGHTX) || weg(SDL_GAMEPAD_AXIS_RIGHTY)) padZielMs.store(jetztMs());
 			if (m || weg(SDL_GAMEPAD_AXIS_LEFTX) || weg(SDL_GAMEPAD_AXIS_LEFTY) || weg(SDL_GAMEPAD_AXIS_RIGHTX) || weg(SDL_GAMEPAD_AXIS_RIGHTY) ||
 			    btn(SDL_GAMEPAD_BUTTON_GUIDE) || SDL_GetGamepadAxis(gp, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 12000 || SDL_GetGamepadAxis(gp, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 12000)
 				padAktivMs.store(jetztMs());
@@ -3888,8 +3897,22 @@ static LRESULT CALLBACK ps2xWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			ps2xin::pollPad(); // Gamepad ~250 Hz
 			if (ps2xin::mausGefangen.load() && !ps2xMausWill()) // menu opened / mouse aiming off -> release
 			{
+				ps2xin::wiederFangen.store(ps2xmenu::open.load() && !ps2xin::padSeitMaus());
 				ps2xin::mausGefangen.store(false);
 				ClipCursor(nullptr);
+			}
+			else if (!ps2xin::mausGefangen.load() && ps2xin::wiederFangen.load() && !ps2xmenu::open.load())
+			{
+				ps2xin::wiederFangen.store(false);
+				if (GetForegroundWindow() == hwnd && ps2xMausWill())
+				{
+					RAWINPUTDEVICE rid{0x01, 0x02, 0, hwnd};
+					RegisterRawInputDevices(&rid, 1, sizeof(rid));
+					RECT cr; GetClientRect(hwnd, &cr); MapWindowPoints(hwnd, nullptr, reinterpret_cast<POINT*>(&cr), 2);
+					ClipCursor(&cr);
+					ps2xin::mausDX.store(0); ps2xin::mausDY.store(0);
+					ps2xin::mausAktivMs.store(ps2xin::jetztMs()); ps2xin::mausGefangen.store(true);
+				}
 			}
 			return 0;
 		case WM_SETCURSOR:
@@ -4177,6 +4200,20 @@ void GSRunner::PumpPlatformMessages(bool forever)
 				case MotionNotify:
 					ps2xmenu::mouseX.store(event.xmotion.x);
 					ps2xmenu::mouseY.store(event.xmotion.y);
+					// Steam Deck (Game Mode, Steam Input "joystick mouse" or trackpad as mouse): the first mouse movement in the
+					// focused game window captures the mouse - a click was needed before (issue #5). Desktop PCs keep click-to-capture.
+					if (!ps2xin::mausGefangen.load() && ps2xAufSteamDeck() && ps2xMausWill() && !ps2xin::padSeitMaus())
+					{
+						Window fw = None; int rv = 0; XGetInputFocus(s_display, &fw, &rv);
+						if (fw == s_window &&
+						    XGrabPointer(s_display, s_window, True, PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
+						                 GrabModeAsync, GrabModeAsync, s_window, None, CurrentTime) == GrabSuccess)
+						{
+							ps2xin::mausNeu.store(true);
+							ps2xin::mausDX.store(0); ps2xin::mausDY.store(0);
+							ps2xin::mausAktivMs.store(ps2xin::jetztMs()); ps2xin::mausGefangen.store(true);
+						}
+					}
 					if (ps2xin::mausGefangen.load())
 					{
 						// Relative movement to the last position. Near the edge move the pointer to the centre; the event caused by
@@ -4276,9 +4313,23 @@ void GSRunner::PumpPlatformMessages(bool forever)
 			}
 			if (ps2xin::mausGefangen.load() && !ps2xMausWill()) // menu opened / mouse aiming off -> release
 			{
+				ps2xin::wiederFangen.store(ps2xmenu::open.load() && !ps2xin::padSeitMaus());
 				ps2xin::mausGefangen.store(false);
 				for (int i = 0; i < ps2xmenu::kAnzAktionen; ++i) ps2xin::impulse[i].store(0);
 				XUngrabPointer(s_display, CurrentTime); XFlush(s_display);
+			}
+			else if (!ps2xin::mausGefangen.load() && ps2xin::wiederFangen.load() && !ps2xmenu::open.load())
+			{
+				ps2xin::wiederFangen.store(false);
+				Window fw = None; int rv = 0; XGetInputFocus(s_display, &fw, &rv);
+				if (fw == s_window && ps2xMausWill() &&
+				    XGrabPointer(s_display, s_window, True, PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
+				                 GrabModeAsync, GrabModeAsync, s_window, None, CurrentTime) == GrabSuccess)
+				{
+					ps2xin::mausNeu.store(true);
+					ps2xin::mausDX.store(0); ps2xin::mausDY.store(0);
+					ps2xin::mausAktivMs.store(ps2xin::jetztMs()); ps2xin::mausGefangen.store(true);
+				}
 			}
 			static u32 s_tick = 0;
 			if ((++s_tick & 3u) == 0u)
