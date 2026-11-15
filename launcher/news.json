@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-15T22:50:00Z",
+    "title": "Update 1.1.1 takes a little longer",
+    "tag": "Update",
+    "body": "In the last round of testing we found a few new bugs. We want to fix them before 1.1.1 goes out, so you get an update that really works.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-15-1-1-1-a-little-longer.md"
+  },
+  {
     "date": "2026-11-15T12:00:00Z",
     "title": "Coming soon: update 1.1.1",
     "tag": "Coming soon",
