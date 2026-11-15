@@ -33,8 +33,8 @@
 
 <table>
 <tr>
+<td width="50%" valign="top"><sub>2026-11-15 · Coming soon</sub><br><b><a href="news/2026-11-15-coming-in-1-1-1.md">Coming soon: update 1.1.1</a></b><br><sub>A quick fix update is almost ready. Weapons with the mouse, optional cheats, Online+ fixes, a second try for the Windows setup and the launcher on the Steam Deck.</sub></td>
 <td width="50%" valign="top"><sub>2026-11-15 · Update</sub><br><b><a href="news/2026-11-15-weapons-and-mouse-aiming.md">Weapons with mouse aiming - we are working on a fix</a></b><br><sub>Some weapons do not behave right with mouse aiming in 1.1.0, most of all the two sniper rifles. We are working on the fix as fast as possible. It will come through the launcher.</sub></td>
-<td width="50%" valign="top"><a href="news/2026-11-14-patch-notes-1-1-0.md"><img src="news/img/compare-11-dam.jpg" width="100%" alt=""></a><br><sub>2026-11-14 · Release</sub><br><b><a href="news/2026-11-14-patch-notes-1-1-0.md">Version 1.1.0 is out - patch notes</a></b><br><sub>New launcher with automatic updates and news, fog, snow, smoke and debris like the original, a picture that fits any screen, rebuilt mouse aiming. If you are on 1.0.x, download 1.1 once by hand - after that the launcher updates the game for you.</sub></td>
 </tr>
 </table>
 
