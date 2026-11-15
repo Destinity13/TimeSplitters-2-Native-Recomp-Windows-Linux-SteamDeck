@@ -3292,6 +3292,7 @@ namespace ps2xin
 	enum : u16 { SELECT = 0x0001, L3 = 0x0002, R3 = 0x0004, START = 0x0008, UP = 0x0010, RIGHT = 0x0020, DOWN = 0x0040, LEFT = 0x0080,
 		L2 = 0x0100, R2 = 0x0200, L1 = 0x0400, R1 = 0x0800, TRI = 0x1000, CIRCLE = 0x2000, CROSS = 0x4000, SQUARE = 0x8000 };
 	std::atomic<u32> keyBtns{0};      // keyboard -> buttons
+	std::atomic<int> waffenTaste{0};  // TS2: number key 1-9 pressed (weapon slot), read and cleared by the game (option 39)
 	std::atomic<u32> keyStick{0};     // Tastatur -> Sticks: Bits 0-3 links (oben unten links rechts), 4-7 rechts
 	std::atomic<u32> padBtns{0};
 	std::atomic<u32> padAxes{0x80808080u}; // lx | ly<<8 | rx<<16 | ry<<24
@@ -3705,7 +3706,16 @@ static void ps2xKey(KeySym ks, bool down, bool alt)
 			if (!down) ps2xin::key(ks, false); // do not leave game keys hanging that were released inside the menu
 		}
 		else
+		{
+			// TS2: number keys 1-9 pick a weapon slot (the game override steps through the weapons), unless bound to an action
+			if (down && ks >= '1' && ks <= '9' && std::strcmp(ps2xmenu::cfgName(), "ts2-recomp") == 0)
+			{
+				bool gebunden = false;
+				{ std::lock_guard<std::mutex> lk(ps2xmenu::m); for (int i = 0; i < ps2xmenu::kAnzAktionen; ++i) if (ps2xmenu::cfg.bel[i][0] == static_cast<int>(ks) || ps2xmenu::cfg.bel[i][1] == static_cast<int>(ks)) gebunden = true; }
+				if (!gebunden) ps2xin::waffenTaste.store(static_cast<int>(ks - '0'));
+			}
 			ps2xin::key(ks, down);
+		}
 }
 
 // Mouse button (1 left, 2 middle, 3 right, 4/5 wheel, 8/9 side): capture in learn mode, as a bound action in capture mode
@@ -5186,6 +5196,7 @@ PS2XGS_API int ps2xgs_option(int id, int fallback)
 		case 36: return ps2xmenu::onlinePlus() ? 0 : ps2xmenu::cfg.cheatArmor;
 		case 37: return ps2xmenu::onlinePlus() ? 0 : ps2xmenu::cfg.cheatAmmo;
 		case 38: return ps2xmenu::cfg.fov;
+		case 39: return ps2xin::waffenTaste.exchange(0);
 		case 12: return ps2xmenu::cfg.scope;
 		case 15: return ps2xmenu::onlinePlus() ? ps2xmenu::cfg.impact : 0;
 		case 16: return ps2xmenu::cfg.impactKick;
