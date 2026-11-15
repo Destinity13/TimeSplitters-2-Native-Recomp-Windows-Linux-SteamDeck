@@ -29,6 +29,31 @@ struct Launcher {
 
 // ---------------------------------------------------------------- Pfade
 
+// Running as AppImage (Steam Deck): AppRun sets PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, PATH, GTK_* and more to point
+// into the AppImage. Children (setup with the system python, the game, the server) must not inherit that: the setup
+// failed with "Failed to import encodings module". Entries pointing into $APPDIR are removed, the rest is kept.
+fn appimage_env(c: &mut Command) {
+    let Some(appdir) = std::env::var_os("APPDIR").map(|v| v.to_string_lossy().to_string()).filter(|v| !v.is_empty()) else { return };
+    for k in ["PYTHONHOME", "PYTHONPATH", "PYTHONDONTWRITEBYTECODE", "PERLLIB", "QT_PLUGIN_PATH", "GTK_THEME", "APPDIR", "APPIMAGE", "ARGV0", "OWD"] {
+        c.env_remove(k);
+    }
+    for (k, v) in std::env::vars() {
+        if !v.contains(&appdir) { continue; }
+        let rest: Vec<&str> = v.split(':').filter(|e| !e.is_empty() && !e.starts_with(&appdir)).collect();
+        if rest.is_empty() || !v.contains(':') { c.env_remove(&k); } else { c.env(&k, rest.join(":")); }
+    }
+}
+
+// the launcher's own file: inside an AppImage current_exe() points into the temporary mount, the real file is $APPIMAGE
+fn self_exe() -> Option<PathBuf> {
+    #[cfg(target_os = "linux")]
+    if let Some(a) = std::env::var_os("APPIMAGE") {
+        let p = PathBuf::from(a);
+        if p.is_file() { return p.canonicalize().ok().or(Some(p)); }
+    }
+    std::env::current_exe().ok().and_then(|p| p.canonicalize().ok())
+}
+
 fn find_root() -> PathBuf {
     if let Ok(r) = std::env::var("TS2_ROOT") {
         if !r.is_empty() {
@@ -36,7 +61,7 @@ fn find_root() -> PathBuf {
         }
     }
     // Windows: canonicalize() returns \\?\C:\... - the compiler and the scripts cannot use that form (include paths fail)
-    let exe = std::env::current_exe().ok().and_then(|p| p.canonicalize().ok()).map(|p| {
+    let exe = self_exe().map(|p| {
         let t = p.to_string_lossy().to_string();
         match t.strip_prefix(r"\\?\") { Some(r) if !r.starts_with("UNC\\") => PathBuf::from(r), _ => p }
     });
@@ -80,7 +105,7 @@ const KEYMAP: &[(&str, &str)] = &[
     ("nachzieheffekt", "motion_trail"), ("maus_zielen", "mouse_aim"), ("maus_empfindlichkeit", "mouse_sensitivity"),
     ("maus_invertiert", "mouse_invert"), ("maus_zielmodus_dauer", "aim_mode_hold"), ("sprache", "language"),
     ("eingabeanzeige", "show_input"), ("zoom_empfindlichkeit", "zoom_sensitivity"), ("belegung_version", "bindings_version"),
-    ("effekte", "effects"), ("alles_frei", "unlock_all"), ("pad_modern", "modern_gamepad_aim"), ("pad_tempo", "gamepad_aim_speed"), ("fadenkreuz", "crosshair"), ("zielfernrohr", "scope"), ("online_plus_effekte", "impact_effects"), ("schaden_stoss", "damage_kick"), ("treffermarker", "hit_markers"), ("treffer_klang", "hit_sound"), ("blickwinkel_max", "pitch_limit"), ("texturpakete", "texture_packs"), ("online_passwort", "online_password"), ("online_favoriten", "online_favorites"),
+    ("effekte", "effects"), ("alles_frei", "unlock_all"), ("pad_modern", "modern_gamepad_aim"), ("pad_tempo", "gamepad_aim_speed"), ("auto_ziel", "auto_aim"), ("leben_unendlich", "infinite_health"), ("ruestung_unendlich", "infinite_armor"), ("munition_unendlich", "infinite_ammo"), ("fadenkreuz", "crosshair"), ("zielfernrohr", "scope"), ("online_plus_effekte", "impact_effects"), ("schaden_stoss", "damage_kick"), ("treffermarker", "hit_markers"), ("treffer_klang", "hit_sound"), ("blickwinkel_max", "pitch_limit"), ("texturpakete", "texture_packs"), ("online_passwort", "online_password"), ("online_favoriten", "online_favorites"),
 ];
 const FXMAP: &[(&str, &str)] = &[("aus", "off"), ("klar", "clear"), ("filmisch", "cinematic")];
 
@@ -188,7 +213,7 @@ fn status(st: State<Launcher>) -> Status {
 
 // Schlüssel, die der Launcher schreiben darf (gleiche Namen wie im Spielmenü, Bridge.cpp Cfg::load/save)
 const KEYS: &[&str] = &[
-    "aufloesung", "bildformat", "bildformat_v2", "alles_frei", "pad_modern", "pad_tempo", "fxaa", "cas", "cas_staerke", "dithering", "tv_shader", "farbe", "helligkeit", "kontrast",
+    "aufloesung", "bildformat", "bildformat_v2", "alles_frei", "pad_modern", "pad_tempo", "auto_ziel", "leben_unendlich", "ruestung_unendlich", "munition_unendlich", "fxaa", "cas", "cas_staerke", "dithering", "tv_shader", "farbe", "helligkeit", "kontrast",
     "saettigung", "texturfilter", "anisotrop", "vollbild", "fps_anzeige", "vibration", "vibration_staerke", "vsync",
     "lautstaerke", "kamera_unschaerfe", "nachzieheffekt", "startmenue", "effekte", "trilinear", "hd_text", "maus_zielen",
     "maus_empfindlichkeit", "maus_invertiert", "maus_zielmodus_dauer", "sprache", "eingabeanzeige", "zoom_empfindlichkeit", "fadenkreuz", "blickwinkel_max",
@@ -358,12 +383,27 @@ fn setup_start(app: AppHandle, st: State<Launcher>, iso: String) -> Result<(), S
         let emit = |kind: &'static str, value: String| {
             let _ = app.emit("setup", Ev { kind, value });
         };
+        // an incomplete package (wrong download, partial or permission-less extraction) gave a silent failure before
+        let noetig: Vec<PathBuf> = if cfg!(windows) {
+            vec![root.join("toolchain").join("python").join("python.exe"), root.join("tools").join("release").join("first_setup.py"), root.join("toolchain").join("zig").join("zig.exe")]
+        } else {
+            vec![root.join("tools").join("release").join("first_setup.sh"), root.join("toolchain").join("zig").join("zig")]
+        };
+        if let Some(f) = noetig.iter().find(|f| !f.is_file()) {
+            let rel = f.strip_prefix(&root).map(|p| p.display().to_string()).unwrap_or_else(|_| f.display().to_string());
+            emit("line", format!("ERROR missing: app/{rel}"));
+            emit("error", "The package is incomplete. Download TS2-Recomp-<version>-<system> from the Releases page again (not \"Source code\") and extract it completely into a new folder.".into());
+            *app.state::<Launcher>().setup.lock().unwrap() = false;
+            return;
+        }
         let mut c = if cfg!(windows) {
             let mut c = Command::new(root.join("toolchain").join("python").join("python.exe"));
+            appimage_env(&mut c);
             c.arg(root.join("tools").join("release").join("first_setup.py"));
             c
         } else {
             let mut c = Command::new("bash");
+            appimage_env(&mut c);
             c.arg(root.join("tools").join("release").join("first_setup.sh"));
             c
         };
@@ -621,7 +661,7 @@ fn install_core(pkg: &Path, m: &UpdManifest, data: Vec<u8>, changed: &[UpdFile],
         }
         emit("pct", format!("{}", 60 + 30 * (i + 1) / changed.len().max(1)));
     }
-    let exe = std::env::current_exe().ok().and_then(|p| p.canonicalize().ok());
+    let exe = self_exe();
     let mut launcher_neu = false;
     for f in changed {
         let src = stage.join(&f.path);
@@ -686,12 +726,14 @@ fn play(app: AppHandle, st: State<Launcher>) -> Result<(), String> {
     let b = |x: bool| if x { "1" } else { "0" };
     let mut c = if cfg!(windows) {
         let mut c = Command::new("powershell");
+        appimage_env(&mut c);
         c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File"])
             .arg(root.join("tools").join("release").join("TS2-Recomp.ps1"))
             .arg("-Play");
         c
     } else {
         let mut c = Command::new("bash");
+        appimage_env(&mut c);
         c.arg(root.join("tools").join("ts2_run.sh"));
         c
     };
@@ -904,6 +946,7 @@ fn host_start(st: State<Launcher>, name: String, password: String, max: u32, mot
     }
     let clean = |s: &str, n: usize| s.replace(['\r', '\n', '\0'], " ").chars().take(n).collect::<String>();
     let mut c = Command::new(bin);
+    appimage_env(&mut c);
     c.arg("--name").arg(clean(&name, 48)).arg("--max").arg(max.clamp(2, 16).to_string());
     if !motd.trim().is_empty() {
         c.arg("--motd").arg(clean(&motd, 120));
@@ -973,10 +1016,12 @@ fn make_shortcut(st: State<Launcher>) -> Result<(), String> {
             top.display().to_string().replace('\'', "''")
         );
         let mut c = Command::new("powershell");
+        appimage_env(&mut c);
         c.args(["-NoProfile", "-Command", &script]);
         c
     } else {
         let mut c = Command::new("bash");
+        appimage_env(&mut c);
         c.arg(st.root.join("..").join("TS2-Recomp.sh")).arg("--shortcut");
         c
     };
@@ -993,10 +1038,74 @@ fn quit_launcher(app: tauri::AppHandle) {
 
 // ----------------------------------------------------------------
 
+// `TS2-Launcher --setup <iso>` (tests): runs the setup exactly the way the Setup button does (same child process, same
+// flags: no console window, stdin and stderr closed, stdout piped) without the window. Lines go to
+// app/build/launcher_setup.txt; exit code 0 = DONE seen. Found necessary by issue #4: the Windows test ran the setup
+// through the script, never through the launcher.
+fn headless_setup(root: &PathBuf, iso: &str) -> i32 {
+    use std::io::Write;
+    let _ = std::fs::create_dir_all(root.join("build"));
+    let mut logf = std::fs::File::create(root.join("build").join("launcher_setup.txt")).ok();
+    let mut c = if cfg!(windows) {
+        let mut c = Command::new(root.join("toolchain").join("python").join("python.exe"));
+        appimage_env(&mut c);
+        c.arg(root.join("tools").join("release").join("first_setup.py"));
+        c
+    } else {
+        let mut c = Command::new("bash");
+        appimage_env(&mut c);
+        c.arg(root.join("tools").join("release").join("first_setup.sh"));
+        c
+    };
+    c.arg(iso).current_dir(root).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    hide_console(&mut c);
+    let mut ok = false;
+    match c.spawn() {
+        Ok(mut ch) => {
+            if let Some(out) = ch.stdout.take() {
+                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                    if line.trim_end() == "DONE" { ok = true; }
+                    if let Some(f) = logf.as_mut() { let _ = writeln!(f, "{}", line.trim_end()); let _ = f.flush(); }
+                }
+            }
+            let code = ch.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+            if let Some(f) = logf.as_mut() { let _ = writeln!(f, "exit code {code}"); }
+        }
+        Err(e) => { if let Some(f) = logf.as_mut() { let _ = writeln!(f, "spawn failed: {e}"); } }
+    }
+    if ok { 0 } else { 1 }
+}
+
+// `TS2-Launcher --update-from <update-*.json> <update-*.zip>` (tests): installs an update from local files the way the
+// Update button does (same file comparison, save backup and install step); result in app/build/launcher_update.txt
+fn headless_update(root: &Path, js: &str, zp: &str) -> i32 {
+    let pkg = pkg_dir(root);
+    let r = (|| -> Result<String, String> {
+        let m: UpdManifest = serde_json::from_slice(&std::fs::read(js).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        let changed = changed_files(&pkg, &m);
+        if changed.is_empty() { return Ok(format!("nothing to do ({})", m.version)); }
+        backup_saves(root)?;
+        let neu = install_core(&pkg, &m, std::fs::read(zp).map_err(|e| e.to_string())?, &changed, &|_, _| {})?;
+        Ok(format!("installed {} ({} files){}{}", m.version, changed.len(), if m.rebuild || m.critical { ", rebuild" } else { "" }, if neu { ", launcher replaced" } else { "" }))
+    })();
+    let (code, line) = match r { Ok(t) => (0, t), Err(e) => (1, format!("ERROR {e}")) };
+    let exe = self_exe().map(|p| p.display().to_string()).unwrap_or_default();
+    let txt = format!("{line}\nlauncher file: {exe}\n");
+    print!("{txt}");
+    let _ = std::fs::create_dir_all(root.join("build"));
+    let _ = std::fs::write(root.join("build").join("launcher_update.txt"), txt);
+    code
+}
+
 fn main() {
     let root = find_root();
+    {
+        let a: Vec<String> = std::env::args().collect();
+        if a.len() >= 3 && a[1] == "--setup" { std::process::exit(headless_setup(&root, &a[2])); }
+        if a.len() >= 4 && a[1] == "--update-from" { std::process::exit(headless_update(&root, &a[2], &a[3])); }
+    }
     // leftover of a self-update
-    if let Ok(e) = std::env::current_exe() { let _ = std::fs::remove_file(e.with_extension("old")); }
+    if let Some(e) = self_exe() { let _ = std::fs::remove_file(e.with_extension("old")); }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

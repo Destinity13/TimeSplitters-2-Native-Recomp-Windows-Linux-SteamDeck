@@ -59,6 +59,7 @@ extern std::atomic<unsigned> g_ps2xPadZusatz;
 extern std::atomic<unsigned> g_ps2xPadMaske;
 extern std::atomic<unsigned> g_ps2xPadRoh;
 extern std::atomic<unsigned> g_ps2xPadRStickAus;
+extern std::atomic<unsigned> g_ps2xPadRStickSetzen;
 extern std::atomic<unsigned> g_ps2xPadAchsenRoh;
 extern std::atomic<long long> g_ps2xScopeMs;                // ps2_memory.cpp: sniper scope feedback last seen (ms)               // gs_frontend.cpp: additional PS2 buttons for player 1
 
@@ -89,6 +90,11 @@ void ps2xSetPadOverridePlayer(int player, uint16_t buttons, uint8_t lx, uint8_t 
 bool ps2xMultitapActive();
 // Online+ hits/kills not yet reported to the online server (ts2netz sends them every 5 s)
 std::atomic<uint32_t> g_opTrefferOffen{0}, g_opKillsOffen{0};
+
+std::atomic<uint32_t> g_ts2EigenKills{0};   // own kills seen by the hit detection (Online+ scoreboard when the game's counter stays)
+std::atomic<uint64_t> g_ts2EigenKillTick[8];   // ticks of the last own kills, for the kill feed
+
+std::atomic<uint64_t> g_ts2EigenTrefferTick[8]; std::atomic<uint32_t> g_ts2EigenTreffer{0};   // ticks of the player's last hits
 namespace ts2melde {
     // Online+ texts shown through the game's OWN on-screen message system (same font, place and animation as
     // "First kill: X!" / "Killed by X"): 0x32A9B0(screen a0, delay f12, type a1 1..6, text a2) - per screen a queue
@@ -139,19 +145,44 @@ namespace ts2impact {
         if (!an) { figuren.clear(); spielerLetzt = -1.0f; return; }
         const uint32_t spObj = ru(r, kSpielerZeiger) & 0x1FFFFFFu;
         const uint32_t sp = (spObj && spObj < 0x1FFF000u) ? (ru(r, spObj + 0x1BC) & 0x1FFFFFFu) : 0u;
-        // rescan twice a second (new enemies spawn); keep the last health of known ones
-        if (t >= naechsterScan)
+        // figure scan: spread over 30 frames (0.2 ms per frame instead of a 3 ms spike twice a second);
+        // TS2_IMPACT_SCAN=1 keeps the old one-shot scan. Known figures keep their last health.
         {
-            naechsterScan = t + 30;
-            std::vector<Fig> neu;
-            for (uint32_t b = 0x500000u; b < 0x1C00000u && neu.size() < 256; b += 16u)
-                if (b != sp && istFigur(r, b))
+            static const bool einmal = [] { const char *e = std::getenv("TS2_IMPACT_SCAN"); return e && *e == '1'; }();
+            constexpr uint32_t kVon = 0x500000u, kBis = 0x1C00000u, kTeile = 30u, kSchritt = ((kBis - kVon) / kTeile + 15u) & ~15u;
+            static std::vector<Fig> neu; static uint32_t teil = 0;
+            static double maxMs = 0.0;
+            auto scanne = [&](uint32_t von, uint32_t bis) {
+                const auto t0 = std::chrono::steady_clock::now();
+                struct Mess { std::chrono::steady_clock::time_point t0; ~Mess() { const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(); if (ms > maxMs) maxMs = ms; } } mess{t0};
+                for (uint32_t b = von; b < bis && neu.size() < 256; b += 16u)
+                    if (b != sp && istFigur(r, b))
+                    {
+                        Fig n{b, rf(r, b + 0x19C), rf(r, b + 0x1A0), t};
+                        for (const auto &f : figuren) if (f.b == b) { n = f; break; }
+                        neu.push_back(n);
+                    }
+            };
+            if (einmal) { if (t >= naechsterScan) { naechsterScan = t + 30; neu.clear(); scanne(kVon, kBis); figuren.swap(neu); neu.clear(); } }
+            else
+            {
+                const uint32_t von = kVon + teil * kSchritt, bis = std::min(kBis, von + kSchritt);
+                if (teil == 0) neu.clear();
+                scanne(von, bis);
+                if (++teil >= kTeile)
                 {
-                    Fig n{b, rf(r, b + 0x19C), rf(r, b + 0x1A0), t};
-                    for (const auto &f : figuren) if (f.b == b) { n = f; break; }
-                    neu.push_back(n);
+                    teil = 0;
+
+                    for (auto &n : neu) for (const auto &f : figuren) if (f.b == n.b) { n = f; break; }
+                    figuren.swap(neu);
                 }
-            figuren.swap(neu);
+            }
+            static const bool slog = std::getenv("TS2_IMPACT_LOG") != nullptr;
+            if (slog && t % 600u == 0u)
+            {
+                size_t voll = 0; for (uint32_t b = kVon; b < kBis; b += 16u) if (b != sp && istFigur(r, b)) ++voll;
+                std::fprintf(stderr, "[impact] tick %llu scan max %.2f ms per tick (last 10 s), list %zu, one-shot now %zu\n", (unsigned long long)t, maxMs, figuren.size(), voll); maxMs = 0.0;
+            }
         }
         // only in a level (player character valid); damage is a step: the value was stable before, max stays the same,
         // the drop is at least 2 % of max
@@ -169,10 +200,12 @@ namespace ts2impact {
                 f.h = h; f.seit = t;
             }
         }
-        if (hatTreffer) { ::ps2xGsBridgeOption(13, ++treffer); ++g_opTrefferOffen; }
+        if (hatTreffer) { ::ps2xGsBridgeOption(13, ++treffer); ++g_opTrefferOffen; g_ts2EigenTrefferTick[g_ts2EigenTreffer.fetch_add(1) & 7u].store(t); }
         if (hatKill)
         {
             ::ps2xGsBridgeOption(14, ++kills); ++g_opKillsOffen;
+            g_ts2EigenKillTick[g_ts2EigenKills.fetch_add(1) & 7u].store(t);   // own kill for the kill feed / scoreboard
+
             // multi-kill (kills within 4 s) and streak (kills without dying) -> the game's own big on-screen messages
             static uint64_t letzterKill = 0; static int kette = 0;
             kette = (letzterKill && t - letzterKill <= 240) ? kette + 1 : 1; letzterKill = t; ++g_ts2Serie;
@@ -2226,6 +2259,7 @@ namespace
     static uint16_t g_skriptPad = 0; static uint8_t g_skriptAx[4] = {0x80, 0x80, 0x80, 0x80}; static bool g_skriptPadDa = false; static uint16_t g_skriptPadRoh = 0; static uint8_t g_skriptRStickRoh[2] = {0x80, 0x80};
     std::atomic<bool> g_ts2EigenesZiel{false};   // mouse aim mode active: the game's aim HUD is hidden, the port draws its crosshair
     std::atomic<bool> g_ts2MausZielt{false};     // mouse captured in first-person view: no game auto-aim
+    std::atomic<bool> g_ts2Geschuetz{false};     // player on a turret / mounted gun (set in the weapon block below)
     namespace maus
     {
         constexpr uint32_t kSpielerZeiger = 0x0059DC0Cu;
@@ -2274,6 +2308,23 @@ namespace
             // First-person view? (player object present, yaw/pitch in the valid range) - otherwise touch nothing
             uint32_t pb = 0; std::memcpy(&pb, r + kSpielerZeiger, 4);
             bool ego = pb >= 0x100000u && pb < 0x1FF0000u;
+            // Cutscene (issue #8: mouse crosshair visible in cutscenes): in the game the camera *(0x59DB7C) +0x27C/+0x280/+0x284
+            // sits exactly on the player position +0x1A0/+0x1A4/+0x1A8, in cutscenes somewhere else (measured in the Siberia
+            // intro). Then it counts like no first-person view: no crosshair, no aim mode, no view writes. TS2_SEQUENZ=0 = off.
+            if (ego)
+            {
+                static const bool seqAn = [] { const char *e = std::getenv("TS2_SEQUENZ"); return !(e && *e == '0'); }();
+                uint32_t cam = 0; std::memcpy(&cam, r + 0x0059DB7Cu, 4); cam &= 0x1FFFFFFu;
+                if (seqAn && cam >= 0x100000u && cam < 0x1FFF000u && (pb & 0x1FFFFFFu) + 0x1B0u < 0x2000000u)
+                {
+                    const uint32_t q = pb & 0x1FFFFFFu;
+                    const bool seq = std::fabs(rf(r, cam + 0x27C) - rf(r, q + 0x1A0)) > 0.5f || std::fabs(rf(r, cam + 0x280) - rf(r, q + 0x1A4)) > 0.5f ||
+                                     std::fabs(rf(r, cam + 0x284) - rf(r, q + 0x1A8)) > 0.5f;
+                    static bool altSeq = false;
+                    if (seq != altSeq) { altSeq = seq; std::fprintf(stderr, "[maus] %s\n", seq ? "cutscene camera: mouse layer paused" : "cutscene over"); }
+                    if (seq && !g_ts2Geschuetz.load(std::memory_order_relaxed)) ego = false;
+                }
+            }
             float gier = 0.f, nick = 0.f, grenze = 0.f;
             if (ego)
             {
@@ -2297,7 +2348,9 @@ namespace
                 {
                     const uint32_t hs = ts2impact::ru(r, pb + 0x1BC) & 0x1FFFFFFu;
                     const bool lebt = hs >= 0x100000u && hs < 0x1FFF000u && rf(r, hs + 0x1A0) >= 0.2f && rf(r, hs + 0x1A0) <= 500.f &&
-                                      rf(r, hs + 0x19C) > 0.f && rf(r, hs + 0x19C) <= rf(r, hs + 0x1A0) + 0.01f;
+                                      rf(r, hs + 0x19C) > 0.f && rf(r, hs + 0x19C) <= 1000.f;
+                    // (health above the maximum is allowed: in Neo Tokyo a character heals the player above it, and the mouse
+                    // stayed off until the next hit - issue #8, second report)
                     if (!lebt) ego = false;
                 }
             }
@@ -2314,8 +2367,19 @@ namespace
               if (pz.second && tick >= pz.first && tick < pz.second) dauer = false; }
             // Option 7 (zoom key held) counts too: older bridges do not know option 10 and do not hold L2 themselves.
             const bool padL2 = padZiel && ((g_skriptPadDa ? g_skriptPadRoh : static_cast<uint16_t>(g_ps2xPadRoh.load(std::memory_order_relaxed))) & 0x0100u) != 0;
-            const bool zoomt = gefangen && ego && (::ps2xGsBridgeOption(10, 0) != 0 || ::ps2xGsBridgeOption(7, 0) != 0 || padL2);
-            g_ps2xPadRStickAus.store((padZiel && ego) ? 1u : 0u, std::memory_order_relaxed);
+
+            // test hook TS2_ZOOM_TEST="tick*frames,...": zoom key held for those frames (regression case scopetap)
+            const bool zoomTest = [&] { static const std::vector<std::pair<uint64_t, uint64_t>> v = [] { std::vector<std::pair<uint64_t, uint64_t>> r2; if (const char *e = std::getenv("TS2_ZOOM_TEST")) { std::string q(e); size_t p2 = 0;
+                    while (p2 < q.size()) { unsigned long long a = 0, n = 1; if (std::sscanf(q.c_str() + p2, "%llu*%llu", &a, &n) >= 1) r2.push_back({a, n}); p2 = q.find(',', p2); if (p2 == std::string::npos) break; ++p2; } } return r2; }();
+                for (const auto &x : v) if (tick >= x.first && tick < x.first + x.second) return true; return false; }();
+
+            // test hook TS2_WAFFE_TEST="tick:value,...": writes the weapon slot word (player +0xD48) at that tick
+            { static std::vector<std::pair<uint64_t, uint32_t>> wt = [] { std::vector<std::pair<uint64_t, uint32_t>> r2; if (const char *e = std::getenv("TS2_WAFFE_TEST")) { std::string q(e); size_t p2 = 0;
+                    while (p2 < q.size()) { unsigned long long a2 = 0; unsigned v2 = 0; if (std::sscanf(q.c_str() + p2, "%llu:%u", &a2, &v2) == 2) r2.push_back({a2, v2}); p2 = q.find(',', p2); if (p2 == std::string::npos) break; ++p2; } } return r2; }();
+              for (const auto &x : wt) if (x.first == tick && pb) { const uint32_t ad = (pb & 0x1FFFFFFu) + 0xD48u; if (ad + 4 <= 0x2000000u) { std::memcpy(const_cast<uint8_t *>(r) + ad, &x.second, 4); std::fprintf(stderr, "[waffentest] t=%llu index %u written\n", (unsigned long long)tick, x.second); } } }
+            const bool zoomTaste = ::ps2xGsBridgeOption(10, 0) != 0 || ::ps2xGsBridgeOption(7, 0) != 0 || zoomTest;
+            bool zoomt = gefangen && ego && (zoomTaste || padL2);
+            g_ps2xPadRStickAus.store((padZiel && ego && !g_ts2Geschuetz.load(std::memory_order_relaxed)) ? 1u : 0u, std::memory_order_relaxed);   // on a turret the right stick stays with the game
             // Sniper rifle: its aim mode IS the scope. If the scope comes up although no zoom key is held, the permanent
             // aim mode is switched off until the weapon changes (D-pad left/right = mouse wheel) or the player respawns.
             // The zoom key still brings the scope up and takes it down again.
@@ -2326,8 +2390,118 @@ namespace
                 uint16_t pt = 0; uint8_t ax[4] = {0x80, 0x80, 0x80, 0x80};
                 const bool dreieck = g_skriptPadDa ? (g_skriptPad & 0x00A0u) != 0 : (::ps2xGsBridgePad(pt, ax) && (pt & 0x00A0u) != 0);   // weapon change: D-pad right/left (mouse wheel)
                 if (sperre && (pb != sperrePb || dreieck)) sperre = false;
-                if (!sperre && dauer && !zoomt && scope) { sperre = true; sperrePb = pb; std::fprintf(stderr, "[maus] scope weapon: permanent aim mode off until weapon change\n"); }
+
+                // scope slot memory (TS2_SCOPE_SLOT=0 off): a weapon slot that brought the scope up without the zoom key never
+                // gets the permanent aim mode again, until the player respawns
+                static const bool slotAn = [] { const char *e = std::getenv("TS2_SCOPE_SLOT"); return !(e && *e == '0'); }();
+                static uint64_t scopeSlots = 0; static uint32_t slotsPb = 0; static uint64_t zoomSeit = 0;
+                if (pb != slotsPb) { scopeSlots = 0; slotsPb = pb; }
+                const uint32_t slot = (ego && pb) ? ts2impact::ru(r, pb + 0xD48) : 64u;
+                const bool slotOk = slotAn && slot < 64u;
+                if (!sperre && dauer && !zoomt && scope)
+                {
+                    sperre = true; sperrePb = pb;
+                    if (slotOk) scopeSlots |= (1ull << slot);
+                    std::fprintf(stderr, "[maus] scope weapon (slot %u): permanent aim mode off until weapon change\n", slot);
+                }
+                if (slotOk && (scopeSlots >> slot) & 1ull)
+                {
+                    static uint32_t altSlot = 64u;
+                    if (altSlot != slot) std::fprintf(stderr, "[maus] slot %u is a scope weapon: no permanent aim mode\n", slot);
+                    altSlot = slot;
+                    if (zoomt && !scope) { if (!zoomSeit) zoomSeit = tick; else if (tick - zoomSeit > 40) { scopeSlots &= ~(1ull << slot); zoomSeit = 0; std::fprintf(stderr, "[maus] slot %u: no scope with the zoom key - forgotten\n", slot); } }
+                    else zoomSeit = 0;
+                    if ((scopeSlots >> slot) & 1ull) dauer = false;
+                }
+                else zoomSeit = 0;
                 if (sperre) dauer = false;
+
+                // weapon in hand: player +0x584 -> gun object, +8 = index into the model table 0x5410C0 (<name>_ph.raw, all 30
+                // weapons by name). Scope weapons never get the permanent aim mode (TS2_WAFFENTAB=0 turns this rule off).
+                {
+                    static const bool tabAn = [] { const char *e = std::getenv("TS2_WAFFENTAB"); return !(e && *e == '0'); }();
+                    struct W { uint16_t modell; const char *name; bool scope; };
+                    static const W kWaffen[] = {
+                        {978, "defaultgun", false}, {981, "assaultshotgun", false}, {984, "silencedpistol", false}, {987, "electrogun", false},
+                        {990, "flamethrower", false}, {993, "sniperrifle", true}, {996, "sniperbolt", true}, {999, "ak47", false},
+                        {1002, "fireext", false}, {1007, "laser", false}, {1010, "plasmamachinegun", false}, {1013, "rocketlauncher", false},
+                        {1016, "homingrocketlauncher", false}, {1019, "grenadelauncher", false}, {1022, "remotemine", false}, {1025, "timedmine", false},
+                        {1028, "proxmine", false}, {1034, "tnt", false}, {1037, "tommygun", false}, {1040, "doublebarrelshotgun", false},
+                        {1043, "magnum", false}, {1046, "scifihandgun", false}, {1049, "uzi", false}, {1052, "silencedluger", false},
+                        {1055, "luger", false}, {1058, "mapboy", false}, {1061, "crossbow", false}, {1064, "minigun", false},
+                        {1067, "powderkeg", false}, {1070, "brick", false}};
+                    uint32_t modell = 0;
+                    bool sonder = false;
+                    if (ego && pb) { const uint32_t g = ts2impact::ru(r, pb + 0x584) & 0x1FFFFFFu; if (g >= 0x100000u && g < 0x1FFFF00u) { modell = ts2impact::ru(r, g + 8);
+                        const uint32_t ix = ts2impact::ru(r, g + 0x30); sonder = modell == 0xFFFFFFFFu || (ix < 38u && ts2impact::ru(r, 0x004C3818u + 0x240u * ix) == 0xFFFFFFFFu); } }
+                    const W *w = nullptr;
+                    for (const W &k : kWaffen) if (k.modell == modell) { w = &k; break; }
+                    static uint32_t altModell = ~0u;
+                    if (modell != altModell && ego) { altModell = modell; std::fprintf(stderr, "[maus] weapon model %u (%s)%s\n", modell, w ? w->name : "none/unknown", (w && w->scope) ? ": scope weapon, no permanent aim mode" : ""); }
+
+                    // turret / mounted gun (issue #6): no permanent aim mode, so no held L2 and no press edge - with mouse
+                    // aiming the character got off the turret right away. TS2_GESCHUETZ=0 = old behaviour.
+                    { static const bool gAn = [] { const char *e = std::getenv("TS2_GESCHUETZ"); return !(e && *e == '0'); }();
+                      static bool altSonder = false;
+                      if (sonder != altSonder && ego) { altSonder = sonder; std::fprintf(stderr, "[maus] %s\n", sonder ? "mounted gun: no permanent aim mode" : "mounted gun left"); }
+                      if (gAn && sonder) dauer = false;
+                      g_ts2Geschuetz.store(gAn && sonder, std::memory_order_relaxed); }
+
+                    // the game's weapon table 0x4C3818 (0x240 bytes per entry, 38 entries): +0x00 model, +0x08 flags (0x20 = telescopic
+                    // sight), +0x54 field of view while the aim mode is held (60 = no zoom, S47 40, Sniper 17, Vintage Rifle 10).
+                    // While only the port holds the aim mode (mouse aiming, no zoom key) it is kept at 60; the original value comes
+                    // back with the zoom key or a weapon change (TS2_ZIEL_FOV=0 off). Fixes the S47 staying zoomed in.
+                    {
+                        constexpr uint32_t kTab = 0x004C3818u, kGross = 0x240u; constexpr int kAnz = 38;
+                        static const bool fovAn = [] { const char *e = std::getenv("TS2_ZIEL_FOV"); return !(e && *e == '0'); }();
+                        static float orig[kAnz]; static bool origDa = false;
+                        if (!origDa) { for (int i = 0; i < kAnz; ++i) orig[i] = ts2impact::rf(r, kTab + kGross * i + 0x54); origDa = true; }
+                        int e = -1;
+                        if (modell >= 200 && modell < 2000) for (int i = 0; i < kAnz; ++i) if (ts2impact::ru(r, kTab + kGross * i) == modell) { e = i; break; }
+                        bool tabScope = w && w->scope;
+                        if (e >= 0) tabScope = (ts2impact::ru(r, kTab + kGross * e + 8) & 0x20u) != 0;
+                        if (tabAn && tabScope) dauer = false;
+                        static int altE = -1;
+                        if (fovAn)
+                        {
+                            if (altE >= 0 && altE != e) ts2impact::wf(r, kTab + kGross * altE + 0x54, orig[altE]);
+                            if (e >= 0 && orig[e] > 1.f && orig[e] < 60.f && !tabScope)
+                            {
+                                const float soll = (dauer && !zoomt) ? 60.f : orig[e];
+                                if (ts2impact::rf(r, kTab + kGross * e + 0x54) != soll)
+                                {
+                                    ts2impact::wf(r, kTab + kGross * e + 0x54, soll);
+                                    static int lg = 12; if (lg > 0) { --lg; std::fprintf(stderr, "[maus] aim field of view of weapon %u: %.1f (original %.1f)\n", modell, soll, orig[e]); }
+                                }
+                            }
+                            altE = e;
+                        }
+                    }
+
+                    // TS2_WAFFENLOG=1: weapon state every 10 frames ([wlog] lines)
+                    { static const bool wlog = std::getenv("TS2_WAFFENLOG") != nullptr;
+                      if (wlog && ego && pb && tick % 10u == 0u)
+                      { const long long nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                        std::fprintf(stderr, "[wlog] t=%llu m=%u %s fov=%.3f a0=%u a8=%u dauer=%d zoom=%d scope=%d\n", (unsigned long long)tick, modell, w ? w->name : "?",
+                                     ts2impact::rf(r, pb + 0x914), ts2impact::ru(r, pb + 0x8A0), ts2impact::ru(r, pb + 0x8A8), dauer ? 1 : 0, zoomt ? 1 : 0,
+                                     (nowMs - g_ps2xScopeMs.load(std::memory_order_relaxed) < 250) ? 1 : 0); } }
+
+                    // tap to scope (TS2_SCOPE_TIPP=0 off): a tap on the zoom key opens the scope of a scope weapon, the next tap closes
+                    // it; holding the key longer than 20 frames closes it on release like before
+                    {
+                        static const bool tippAn = [] { const char *e = std::getenv("TS2_SCOPE_TIPP"); return !(e && *e == '0'); }();
+                        static bool latch = false, altTaste = false; static uint64_t gedruecktSeit = 0; static uint32_t latchPb = 0, latchModell = 0;
+                        const bool taste = gefangen && ego && zoomTaste;
+                        if (tippAn && tabAn && w && w->scope && gefangen && ego && pb == latchPb && modell == latchModell)
+                        {
+                            if (taste && !altTaste) { latch = !latch; gedruecktSeit = tick; }
+                            if (!taste && altTaste && latch && tick - gedruecktSeit > 20) latch = false;
+                            zoomt = latch || taste || padL2;
+                        }
+                        else latch = false;
+                        latchPb = pb; latchModell = modell; altTaste = taste;
+                    }
+                }
             }
             const bool zielmodus = dauer || zoomt;
             // A held aim mode (L2) never gives the game a new press: with the sniper rifle the scope only opens on an
@@ -2370,6 +2544,8 @@ namespace
             // taken whenever the aim mode is not held (and at the first tick of a new player object); while the aim mode
             // is only held by the port (no zoom key) the scale is put back to that value. The zoom key zooms as before.
             // TS2_ZIEL_ZOOM=1 = old behaviour.
+            // Note (1.1.1): +0x914 turned out to be only the zoom animation (0.91 -> 0 while the scope opens), not the view
+            // scale; the S47 fix that works is the field of view hold on the weapon table above. This part is kept as it is.
             {
                 static const bool alt = [] { const char *e = std::getenv("TS2_ZIEL_ZOOM"); return e && *e == '1'; }();
                 static float normal = 0.f; static uint32_t normalPb = 0; static bool altEgo = false;
@@ -2426,11 +2602,25 @@ namespace
                 alt = std::move(neu); altPb = pb;
             }
             static bool s_aktiv = false; static float s_gier = 0.f, s_nick = 0.f;
-            if (!gefangen || !ego) { s_aktiv = false; g_ts2PunchDP = g_ts2PunchDY = 0.f; return; }
-            // Aim point fixed at the screen centre (no springing back), the mouse turns the camera. Also without aim mode:
-            // otherwise the game's free-aim offset moves the real aim point away from the port's centre crosshair
-            // (it looked precise, but the shots went elsewhere).
-            wf(r, pb + 0x8B8, 0.f);
+            if (!gefangen || !ego) { s_aktiv = false; g_ts2PunchDP = g_ts2PunchDY = 0.f; g_ps2xPadRStickSetzen.store(0u, std::memory_order_relaxed); return; }
+            // On a turret the game turns through the right stick, not through the player's view angles (issue #8): there the
+            // mouse movement becomes right stick input (runtime g_ps2xPadRStickSetzen), view angles and aim point stay with the game.
+            {
+                static float stX = 0.f, stY = 0.f;
+                if (g_ts2Geschuetz.load(std::memory_order_relaxed) && gefangen && !padZiel)
+                {
+                    const float sens = static_cast<float>(::ps2xGsBridgeOption(3, 30)) / 10.f;
+                    const bool invert = ::ps2xGsBridgeOption(4, 0) != 0;
+                    stX = std::clamp(stX * 0.55f + static_cast<float>(dx) * sens * 1.2f, -127.f, 127.f);
+                    stY = std::clamp(stY * 0.55f + static_cast<float>(invert ? -dy : dy) * sens * 1.2f, -127.f, 127.f);
+                    const unsigned rx = static_cast<unsigned>(128.f + stX) & 0xFFu, ry = static_cast<unsigned>(128.f + stY) & 0xFFu;
+                    g_ps2xPadRStickSetzen.store(0x10000u | rx | (ry << 8), std::memory_order_relaxed);
+                    s_aktiv = false;
+                    return;
+                }
+                stX = stY = 0.f; g_ps2xPadRStickSetzen.store(0u, std::memory_order_relaxed);
+            }
+            wf(r, pb + 0x8B8, 0.f);   // aim point fixed at the screen centre (the game's free-aim offset moved it away from the crosshair)
             wf(r, pb + 0x8BC, 0.f);
             // The camera belongs to the mouse: small changes by the game (auto look-ahead pulls the view towards the
             // horizon while walking) are undone, large ones (recoil, script, death) are accepted.
@@ -2722,6 +2912,10 @@ namespace ts2feed {
     }
     struct Platz { uint32_t a; uint32_t kills; bool tot; int tode; uint64_t todSeit; std::string name; int su = 0, serie = 0, best = 0; };
     std::vector<Platz> plaetze; uint64_t naechsterScan = 0; uint32_t basis = 0;
+
+    uint32_t eigenBasis = 0;   // own kills from the hit detection fill the scoreboard when the game's counter stays (TS2_FEED_EIGEN=0 off)
+    const bool eigenAn = [] { const char *e = std::getenv("TS2_FEED_EIGEN"); return !(e && *e == '0'); }();
+    uint32_t eigenKills(const Platz &p) { if (!eigenAn || !p.name.empty()) return p.kills; const uint32_t e = g_ts2EigenKills.load() - eigenBasis; return (e < 1000u && e > p.kills) ? e : p.kills; }
     std::string nameVon(const uint8_t *r, uint32_t a)
     {
         const uint32_t obj = ru(r, a - 0xE8u) & 0x1FFFFFFu;
@@ -2782,6 +2976,7 @@ namespace ts2feed {
             if (t < naechsterScan) return;
             naechsterScan = t + 60;
             suchen(r);
+            for (const auto &p : plaetze) if (p.name.empty()) eigenBasis = g_ts2EigenKills.load() - p.kills;
             if (log && !plaetze.empty()) { std::fprintf(stderr, "[feed] %zu participants at %08x:", plaetze.size(), basis); for (auto &p : plaetze) std::fprintf(stderr, " %s=%u", p.name.empty() ? "YOU" : p.name.c_str(), p.kills); std::fprintf(stderr, "\n"); }
             return;
         }
@@ -2825,6 +3020,28 @@ namespace ts2feed {
             int kIdx = -1;
             for (size_t j = 0; j < killer.size(); ++j) if (killer[j].wer != o.wer && (killer[j].t + 90 >= o.t && o.t + 90 >= killer[j].t)) { kIdx = static_cast<int>(j); break; }
             if (kIdx < 0 && t < o.t + 90) break;   // wait for the counter (it can lag the death by about a second)
+
+            // no killer from the counter: a kill the hit detection saw within 1.5 s counts as the player's kill
+            if (kIdx < 0 && eigenAn && !plaetze[o.wer].name.empty())
+                for (auto &kt : g_ts2EigenKillTick)
+                {
+                    const uint64_t e = kt.load();
+                    if (!e || e + 90 < o.t || o.t + 90 < e) continue;
+                    for (int i = 0; i < static_cast<int>(plaetze.size()); ++i) if (plaetze[i].name.empty()) { killer.push_back({i, e}); kIdx = static_cast<int>(killer.size()) - 1; break; }
+                    if (kIdx >= 0) { kt.store(0); if (log) std::fprintf(stderr, "[feed] tick %llu own kill from the hit detection\n", (unsigned long long)t); }
+                    break;
+                }
+
+            // or a hit by the player at most half a second before the bot died
+            if (kIdx < 0 && eigenAn && !plaetze[o.wer].name.empty())
+                for (auto &ht : g_ts2EigenTrefferTick)
+                {
+                    const uint64_t e = ht.load();
+                    if (!e || e > o.t + 10 || o.t > e + 30) continue;
+                    for (int i = 0; i < static_cast<int>(plaetze.size()); ++i) if (plaetze[i].name.empty()) { killer.push_back({i, e}); kIdx = static_cast<int>(killer.size()) - 1; break; }
+                    if (kIdx >= 0) { ht.store(0); g_ts2EigenKillTick[g_ts2EigenKills.fetch_add(1) & 7u].store(0); if (log) std::fprintf(stderr, "[feed] tick %llu own kill from a hit just before the death\n", (unsigned long long)t); }
+                    break;
+                }
             const Platz &v = plaetze[o.wer];
             std::string zeile; int fl = 0;
             if (kIdx >= 0) { Platz &k = plaetze[killer[kIdx].wer]; zeile = nm(k) + "\t" + nm(v); if (k.name.empty()) fl |= 1; ++k.serie; k.best = std::max(k.best, k.serie); killer.erase(killer.begin() + kIdx); }
@@ -2849,10 +3066,50 @@ namespace ts2feed {
         if (t % 30u == 0u)
         {
             std::string sb;
-            for (const auto &p : plaetze) sb += nm(p) + "\t" + std::to_string(p.kills) + "\t" + std::to_string(p.tode) + "\t" + (p.name.empty() ? "1" : "0") + "\t" +
+            for (const auto &p : plaetze) sb += nm(p) + "\t" + std::to_string(eigenKills(p)) + "\t" + std::to_string(p.tode) + "\t" + (p.name.empty() ? "1" : "0") + "\t" +
                                                 std::to_string(p.su) + "\t" + std::to_string(p.serie) + "\t" + std::to_string(p.best) + "\n";
             ::ps2xGsBridgeText(2, sb.c_str());
         }
+    }
+}
+std::atomic<bool> g_ts2CheatAmmo{false};   // read by the reload wrapper below
+std::atomic<bool> g_ts2OnlineSitzung{false};   // set while the Online+ connection loop runs: no cheats there
+namespace ts2cheat {
+
+    // Optional single player cheats (bridge options 35/36/37 = launcher / in-game menu, or TS2_CHEAT="health,armor,ammo").
+    // Health struct *(player+0x1BC): health +0x19C, max +0x1A0; armor struct *(health+0x124): value +0x10, max +0x14.
+    // Infinite ammo: see the wrapper around the reload function 0x2DBBD0. TS2_CHEATLOG=1 logs.
+    using ts2impact::ru; using ts2impact::rf; using ts2impact::wf;
+    inline void wu(uint8_t *r, uint32_t a, uint32_t v) { std::memcpy(r + (a & 0x1FFFFFCu), &v, 4); }
+    void tick(uint8_t *r, uint64_t t)
+    {
+        if (!r) return;
+        static const std::string env = [] { const char *e = std::getenv("TS2_CHEAT"); return std::string(e ? e : ""); }();
+        static const bool log = std::getenv("TS2_CHEATLOG") != nullptr;
+        static int h = 0, a = 0, m = 0;
+        if (t % 30u == 0u)
+        {
+            h = ::ps2xGsBridgeOption(35, env.find("health") != std::string::npos ? 1 : 0);
+            a = ::ps2xGsBridgeOption(36, env.find("armor") != std::string::npos ? 1 : 0);
+            m = ::ps2xGsBridgeOption(37, env.find("ammo") != std::string::npos ? 1 : 0);
+        }
+        if (g_ts2OnlineSitzung.load(std::memory_order_relaxed)) { h = a = m = 0; }
+        if (!m) g_ts2CheatAmmo.store(false, std::memory_order_relaxed);
+        if (!h && !a && !m && !log) return;
+        const uint32_t pb = ru(r, ts2impact::kSpielerZeiger) & 0x1FFFFFFu;
+        if (pb < 0x100000u || pb > 0x1FFE000u) return;
+        const uint32_t hs = ru(r, pb + 0x1BC) & 0x1FFFFFFu;
+        if (hs < 0x100000u || hs > 0x1FFF000u) return;
+        const float mx = rf(r, hs + 0x1A0), hp = rf(r, hs + 0x19C);
+        const bool lebt = mx >= 0.2f && mx <= 500.f && hp > 0.f && hp <= mx + 0.01f;
+        if (!lebt) { g_ts2CheatAmmo.store(false, std::memory_order_relaxed); return; }
+        if (h && hp < mx) wf(r, hs + 0x19C, mx);
+        const uint32_t as = ru(r, hs + 0x124) & 0x1FFFFFFu;
+        const bool asOk = as >= 0x100000u && as < 0x1FFF000u;
+        if (a && asOk) { const float am = rf(r, as + 0x14), av = rf(r, as + 0x10); if (am > 0.f && am <= 500.f && av >= 0.f && av < am) wf(r, as + 0x10, am); }
+        g_ts2CheatAmmo.store(m != 0, std::memory_order_relaxed);
+        if (log && t % 120u == 0u)
+            std::fprintf(stderr, "[cheat] t=%llu hp %.2f/%.2f armor %s %.2f/%.2f\n", (unsigned long long)t, hp, mx, asOk ? "ok" : "-", asOk ? rf(r, as + 0x10) : 0.f, asOk ? rf(r, as + 0x14) : 0.f);
     }
 }
 namespace ts2botmatch
@@ -2983,15 +3240,40 @@ namespace
             std::fprintf(stderr, "[TS2] Memory Card: %s\n", mc);
         }
         runtime.registerFunction(0x00488DC0u, sceCdLayerSearchFile_0x488dc0);
+        // Infinite ammo cheat: the reload function 0x2DBBD0 takes rounds from the reserve array at a0+0xA3C (one word per
+        // ammo type); while the cheat is on, a reserve that went down is put back.
+        {
+            static PS2Runtime::RecompiledFunction s_reload = runtime.lookupFunction(0x002DBBD0u);
+            if (s_reload)
+                runtime.registerFunction(0x002DBBD0u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
+                    static const bool lg = std::getenv("TS2_CHEATLOG") != nullptr;
+                    const bool an = g_ts2CheatAmmo.load(std::memory_order_relaxed);
+                    const uint32_t b = (GPR_U32(c, 4) & 0x1FFFFFFu) + 0xA3Cu;
+                    uint32_t vor[22]; const bool ok = b >= 0x100000u && b + sizeof(vor) <= 0x2000000u;
+                    if (ok) std::memcpy(vor, r + b, sizeof(vor));
+                    s_reload(r, c, rt);
+                    if (!ok) return;
+                    uint32_t nach[22]; std::memcpy(nach, r + b, sizeof(nach));
+                    for (int i = 0; i < 22; ++i)
+                        if (nach[i] < vor[i])
+                        {
+                            if (lg) std::fprintf(stderr, "[cheat] reload: reserve[%d] %u -> %u%s (base %08x)\n", i, vor[i], nach[i], an ? " put back" : "", b);
+                            if (an && vor[i] <= 9999u) std::memcpy(r + b + 4u * i, &vor[i], 4);
+                        }
+                });
+        }
+
         // Auto-aim off while the mouse aims: 0x2BBBC8 picks the enemy the aim point is pulled to (+0x8B0/+0x8B4 target,
         // smoothed into +0x8B8/+0x8BC = the real shot direction). With the mouse that felt "magnetic" and the shots did not
-        // go where the centre crosshair was. No target -> the aim point stays at the centre. TS2_AUTOAIM=1 keeps it.
+        // go where the centre crosshair was. No target -> the aim point stays at the centre. TS2_AUTOAIM=1 keeps it;
+        // since 1.1.1 also the launcher switch "Auto-aim (mouse)" (bridge option 34).
         {
             static PS2Runtime::RecompiledFunction s_autoAim = runtime.lookupFunction(0x002BBBC8u);
             static const bool autoAimEnv = [] { const char *e = std::getenv("TS2_AUTOAIM"); return e && *e == '1'; }();
             if (s_autoAim && !autoAimEnv)
                 runtime.registerFunction(0x002BBBC8u, [](uint8_t *r, R5900Context *c, PS2Runtime *rt) {
-                    if (g_ts2MausZielt.load(std::memory_order_relaxed))
+
+                    if (g_ts2MausZielt.load(std::memory_order_relaxed) && ::ps2xGsBridgeOption(34, 0) == 0)
                     {
                         uint32_t pl; std::memcpy(&pl, r + 0x0059DC0Cu, 4); pl &= 0x1FFFFFFu;   // *(gp-0x25E0) = player
                         if (pl >= 0x100000u && pl < 0x1FFF000u) { const uint32_t z = 0; std::memcpy(r + pl + 0x8C8u, &z, 4); }
@@ -3104,7 +3386,7 @@ namespace
             for (;;)
             {
                 const uint64_t t = rt->memory().gs().vsyncTick.load();
-                if (t != last) { last = t; ++g_vblankHits; ts2WidescreenTick(rt->memory().getRDRAM()); ts2InputTick(t); maus::tick(rt->memory().getRDRAM(), t); maus::flug(rt->memory().getRDRAM(), t); harnessOnVBlank(rt); { static const bool vt = std::getenv("SOTC_TRACE_VIF") != nullptr; if (vt && t % 100u == 0u) { std::fprintf(stderr, "[VIF-Statistik] tick=%llu\n", (unsigned long long)t); sotc_vif_trace::dump(); } } sotcRamDumpCheck(rt->memory().getRDRAM(), t); ts2Probe(rt->memory().getRDRAM(), t); { uint16_t pt = 0; uint8_t ax[4]; bool f = false; if (g_skriptPadDa) f = (g_skriptPad & 0x0A00u) != 0; else f = ::ps2xGsBridgePad(pt, ax) && (pt & 0x0A00u) != 0; ts2impact::tick(rt->memory().getRDRAM(), t, f); } ts2botmatch::tick(rt->memory().getRDRAM(), t); ts2feed::tick(rt->memory().getRDRAM(), t); }
+                if (t != last) { last = t; ++g_vblankHits; ts2WidescreenTick(rt->memory().getRDRAM()); ts2InputTick(t); maus::tick(rt->memory().getRDRAM(), t); maus::flug(rt->memory().getRDRAM(), t); harnessOnVBlank(rt); { static const bool vt = std::getenv("SOTC_TRACE_VIF") != nullptr; if (vt && t % 100u == 0u) { std::fprintf(stderr, "[VIF-Statistik] tick=%llu\n", (unsigned long long)t); sotc_vif_trace::dump(); } } sotcRamDumpCheck(rt->memory().getRDRAM(), t); ts2Probe(rt->memory().getRDRAM(), t); { uint16_t pt = 0; uint8_t ax[4]; bool f = false; if (g_skriptPadDa) f = (g_skriptPad & 0x0A00u) != 0; else f = ::ps2xGsBridgePad(pt, ax) && (pt & 0x0A00u) != 0; ts2impact::tick(rt->memory().getRDRAM(), t, f); } ts2botmatch::tick(rt->memory().getRDRAM(), t); ts2feed::tick(rt->memory().getRDRAM(), t); ts2cheat::tick(rt->memory().getRDRAM(), t); }
                 std::this_thread::sleep_for(std::chrono::microseconds(500));
             }
         }).detach();
@@ -4086,6 +4368,7 @@ namespace ts2netz
             auto letzteReg = std::chrono::steady_clock::now() - std::chrono::seconds(10);
             auto letzterKeep = std::chrono::steady_clock::now();
             g_opTrefferOffen = 0; g_opKillsOffen = 0;   // only what happens while connected counts on the server
+            struct OnlineMarke { OnlineMarke() { g_ts2OnlineSitzung.store(true); } ~OnlineMarke() { g_ts2OnlineSitzung.store(false); } } onlineMarke;   // cheats stay off while connected
             for (;;)
             {
                 const auto jetzt = std::chrono::steady_clock::now();
