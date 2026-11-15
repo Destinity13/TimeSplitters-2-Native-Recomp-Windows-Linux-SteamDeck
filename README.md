@@ -33,8 +33,8 @@
 
 <table>
 <tr>
+<td width="50%" valign="top"><sub>2026-11-15 · Update</sub><br><b><a href="news/2026-11-15-weapons-and-mouse-aiming.md">Weapons with mouse aiming - we are working on a fix</a></b><br><sub>Some weapons do not behave right with mouse aiming in 1.1.0, most of all the two sniper rifles. We are working on the fix as fast as possible. It will come through the launcher.</sub></td>
 <td width="50%" valign="top"><a href="news/2026-11-14-patch-notes-1-1-0.md"><img src="news/img/compare-11-dam.jpg" width="100%" alt=""></a><br><sub>2026-11-14 · Release</sub><br><b><a href="news/2026-11-14-patch-notes-1-1-0.md">Version 1.1.0 is out - patch notes</a></b><br><sub>New launcher with automatic updates and news, fog, snow, smoke and debris like the original, a picture that fits any screen, rebuilt mouse aiming. If you are on 1.0.x, download 1.1 once by hand - after that the launcher updates the game for you.</sub></td>
-<td width="50%" valign="top"><a href="news/2026-11-14-devlog-road-to-1-1.md"><img src="news/img/compare-11-snow.jpg" width="100%" alt=""></a><br><sub>2026-11-14 · Devlog</sub><br><b><a href="news/2026-11-14-devlog-road-to-1-1.md">Devlog - the road to 1.1</a></b><br><sub>What happened between 1.0.1 and 1.1. A wrong sine in the VU1, a new launcher, a Windows test lab, mouse aiming, Online+, and the things we got wrong on the way.</sub></td>
 </tr>
 </table>
 

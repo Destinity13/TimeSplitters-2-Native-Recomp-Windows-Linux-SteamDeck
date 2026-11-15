@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-15T12:00:00Z",
+    "title": "Weapons with mouse aiming - we are working on a fix",
+    "tag": "Update",
+    "body": "Some weapons do not behave right with mouse aiming in 1.1.0, most of all the two sniper rifles. We are working on the fix as fast as possible. It will come through the launcher.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-15-weapons-and-mouse-aiming.md"
+  },
+  {
     "date": "2026-11-14T12:00:00Z",
     "title": "Version 1.1.0 is out - patch notes",
     "tag": "Release",
