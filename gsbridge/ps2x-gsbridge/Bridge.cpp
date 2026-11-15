@@ -2522,7 +2522,8 @@ static const int kBotSetsN = 9;
 				}
 			}
 			{
-				// Online+ hit marker (white X, 0.22 s) and kill marker (red X, larger, 0.45 s) around the screen centre
+				// Online+ hit marker (white X, 0.32 s) and kill marker (red X, larger, 0.6 s) around the screen centre.
+				// Made bigger, thicker and longer in 1.1.1 (user report: the hit feedback was too weak to notice).
 				bool imp, mk; { std::lock_guard<std::mutex> lk(m); imp = cfg.impact != 0; mk = cfg.impactMarker != 0; }
 				static const bool impEnv = [] { const char* e = std::getenv("TS2_IMPACT"); return e && *e == '1'; }();
 				if (impEnv) { imp = true; mk = true; }
@@ -2531,15 +2532,15 @@ static const int kBotSetsN = 9;
 				{
 					const long long jetzt = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 					const float aT = static_cast<float>(jetzt - ps2xosd::trefferMs.load()) / 1000.0f, aK = static_cast<float>(jetzt - ps2xosd::killMs.load()) / 1000.0f;
-					const bool kill = aK >= 0.0f && aK < 0.45f, treffer = aT >= 0.0f && aT < 0.22f;
+					const bool kill = aK >= 0.0f && aK < 0.6f, treffer = aT >= 0.0f && aT < 0.32f;
 					if (kill || treffer)
 					{
 						ImDrawList* dl = ImGui::GetForegroundDrawList();
 						ps2xImSpiel spiel(dl); const ImVec2 ds = spiel.ds;
 						const float cx = std::floor(ds.x * 0.5f), cy = std::floor(ds.y * 0.5f);
 						const float u = std::max(1.0f, std::round(ds.y / 540.0f));
-						const float t01 = kill ? aK / 0.45f : aT / 0.22f;
-						const float in = (kill ? 9.0f : 7.0f) * u + t01 * 3.0f * u, out = in + (kill ? 10.0f : 7.0f) * u;
+						const float t01 = kill ? aK / 0.6f : aT / 0.32f;
+						const float in = (kill ? 11.0f : 8.0f) * u + t01 * 4.0f * u, out = in + (kill ? 15.0f : 11.0f) * u;
 						const int al = static_cast<int>(255 * (1.0f - t01 * t01));
 						const ImU32 sch = IM_COL32(0, 0, 0, al * 2 / 3), col = kill ? IM_COL32(255, 60, 50, al) : IM_COL32(255, 255, 255, al);
 						const float d = 0.7071f;
@@ -2547,8 +2548,8 @@ static const int kBotSetsN = 9;
 						{
 							const float sx = (q & 1) ? 1.0f : -1.0f, sy = (q & 2) ? 1.0f : -1.0f;
 							const ImVec2 a(cx + sx * in * d, cy + sy * in * d), b(cx + sx * out * d, cy + sy * out * d);
-							dl->AddLine(a, b, sch, u * (kill ? 4.0f : 3.0f));
-							dl->AddLine(a, b, col, u * (kill ? 2.2f : 1.5f));
+							dl->AddLine(a, b, sch, u * (kill ? 5.5f : 4.5f));
+							dl->AddLine(a, b, col, u * (kill ? 3.2f : 2.4f));
 						}
 						if (kill)
 						{
@@ -4946,13 +4947,13 @@ namespace ps2xklang
 			}
 		}
 		if (!st) return;
-		// hit: bright 2.6 kHz tick (35 ms); kill: tick + low thump (120 ms)
-		const int n = kill ? 5760 : 1680; std::vector<float> b(n);
-		const float g = 0.35f * std::clamp(vol, 0, 200) / 100.0f;
+		// hit: bright 2.6 kHz tick with a short 900 Hz body (50 ms); kill: tick + low thump (120 ms). Louder since 1.1.1.
+		const int n = kill ? 5760 : 2400; std::vector<float> b(n);
+		const float g = 0.55f * std::clamp(vol, 0, 200) / 100.0f;
 		for (int i = 0; i < n; ++i)
 		{
 			const float t = i / 48000.0f;
-			float v = std::sin(6.2831853f * 2600.0f * t) * std::exp(-t * 140.0f);
+			float v = std::sin(6.2831853f * 2600.0f * t) * std::exp(-t * 140.0f) + 0.5f * std::sin(6.2831853f * 900.0f * t) * std::exp(-t * 90.0f);
 			if (kill) v = 0.6f * v + std::sin(6.2831853f * (140.0f - 260.0f * t) * t) * std::exp(-t * 22.0f) + 0.4f * std::sin(6.2831853f * 1800.0f * t) * std::exp(-(t - 0.04f) * (t - 0.04f) * 9000.0f);
 			b[i] = std::clamp(v * g, -1.0f, 1.0f);
 		}
