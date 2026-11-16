@@ -2399,6 +2399,7 @@ static void ps2xGifStat(int path, const uint8_t *data, uint32_t size)
 // Remember the render targets (FRAME_1/2.FBP from A+D, all GIF paths): a texture inside one of them is a
 // frame copy (blur, split-screen strips) and not HUD. TBP0 (64 words) vs. FBP (2048 words) -> FBP*32.
 static uint32_t g_ps2xFbSeen[8] = {~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u}; // FBP | FBW << 16
+static uint32_t g_ps2xFrame1Fbp = ~0u;   // FRAME_1.FBP as last set by the game (any path): the current draw target
 static void ps2xFbTrack(const uint8_t *data, uint32_t size)
 {
     uint32_t o = 0;
@@ -2416,6 +2417,7 @@ static void ps2xFbTrack(const uint8_t *data, uint32_t size)
                     const uint32_t ad = data[o + 8];
                     if (ad != 0x4C && ad != 0x4D) continue;
                     uint64_t dlo; std::memcpy(&dlo, data + o, 8); const uint32_t fbp = (dlo & 0x1FF) | (((dlo >> 16) & 0x3F) << 16);
+                    if (ad == 0x4C) g_ps2xFrame1Fbp = dlo & 0x1FF;
                     bool da = false; for (uint32_t k : g_ps2xFbSeen) da |= k == fbp;
                     if (!da) { static uint32_t n = 0; g_ps2xFbSeen[n++ & 7] = fbp; }
                 }
@@ -2914,6 +2916,7 @@ static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint
 // time (ms, steady clock) the scope's zoom feedback sprite was last seen: the mouse aiming in ts2_override
 // uses it to notice "sniper scope is up although no zoom key is held"
 std::atomic<long long> g_ps2xScopeMs{0};
+std::atomic<bool> g_ps2xUplink{false};   // ts2_override.cpp: the player holds the Temporal Uplink (issue #12)
 static bool ps2xScopeKlarFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
 {
     // A frame copy is a direct-colour texture (CT32/CT24/CT16). Palette textures at an address that once was a render
@@ -3311,6 +3314,28 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
         }
     }
     if (nSprKopie && nSprKopie * 2 >= nSpr) return false;   // ueberwiegend Streifenkopien -> Effekt
+    // Temporal Uplink in hand (GitHub issue #12): the view cone and the player dot of its map are 2D sprites. Squeezed
+    // or moved to the edge like the HUD, the dot slid away from the cone. While the uplink is held they keep their
+    // place. TS2_UPLINK_FIX=0 = old behaviour.
+    {
+        extern std::atomic<bool> g_ps2xUplink;
+        static const bool upAn = [] { const char *e = std::getenv("TS2_UPLINK_FIX"); return !(e && *e == '0'); }();
+        const float bx0 = (mn - static_cast<float>(ofx)) / 16.0f, bx1 = (mx - static_cast<float>(ofx)) / 16.0f;
+        const float by0 = (ymn - static_cast<float>(ofy)) / 16.0f, by1 = (ymx - static_cast<float>(ofy)) / 16.0f;
+        // The uplink draws its map (view cone, player dot) as a texture for the device screen. Anything drawn into another
+        // buffer than the picture (target of the full-width 2D passes) while the uplink is held keeps its place.
+        static long lg = [] { const char *e = std::getenv("TS2_UPLINKLOG"); return e ? std::atol(e) : 0L; }();
+        static uint32_t bildFbp = ~0u;
+        if (bx1 - bx0 >= 500.0f && g_ps2xFrame1Fbp != ~0u) bildFbp = g_ps2xFrame1Fbp;
+        const bool halt = g_ps2xUplink.load(std::memory_order_relaxed);
+        // Measured (pc274 log): the map goes into the same buffer as the picture, into its top part (x 192-374, y 0-182),
+        // and is then used as the texture of the device screen. So: while the uplink is held, 2D packets that lie
+        // completely inside that area are map content and keep their place.
+        const bool imKarte = bx0 >= 188.0f && bx1 <= 378.0f && by0 >= -2.0f && by1 <= 186.0f;
+        const bool treffer = upAn && halt && (imKarte || (bildFbp != ~0u && g_ps2xFrame1Fbp != bildFbp));
+        if (lg > 0 && halt) { --lg; std::fprintf(stderr, "[UPLINK] 2D x %.0f-%.0f y %.0f-%.0f n %u prims %03x fbp %x (picture %x) %s\n", bx0, bx1, by0, by1, nVert, primSeen, g_ps2xFrame1Fbp, bildFbp, treffer ? "kept in place" : "normal"); }
+        if (treffer) return false;
+    }
     const float L = static_cast<float>(ofx), Wd = 640.0f * 16.0f;
     const float wpx = (mx - mn) / 16.0f, cpx = ((mn + mx) * 0.5f - L) / 16.0f;
     // Menu detection for TS2_HUD_RAND: menus draw wide 2D areas (background, header); there are none in the

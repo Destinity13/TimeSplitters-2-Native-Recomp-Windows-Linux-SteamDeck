@@ -2,7 +2,7 @@
 
 # Known issues
 
-An honest list, as of 15 November 2026 (release 1.1.1).
+An honest list, as of 15 November 2026 (release 1.2).
 
 ## Not a bug
 
@@ -34,7 +34,7 @@ An honest list, as of 15 November 2026 (release 1.1.1).
 - **Impact smoke at very close range** can show a faint straight edge of the sprite.
 - **Explosions and the fountain water** have not been compared one by one with PCSX2 yet. Smoke, debris, sparks and
   snow have.
-- **Windows setup stopping at 68 %** (issue #4): the link step hung on two PCs (one of them with 16 threads). Since 1.1.1 the
+- **Windows setup stopping at 68 %** (issue #4): the link step hung on two PCs (one of them with 16 threads). Since 1.2 the
   first try is stopped after 15 minutes and the setup tries two more ways (one core with a fresh build cache after
   stopping leftovers of an aborted setup; build cache and output in the temp folder). Each way was forced on the test
   laptop. The cause itself is not found yet; `app/build/setup.log` from an affected PC helps.
@@ -44,11 +44,11 @@ An honest list, as of 15 November 2026 (release 1.1.1).
 - **Windows:** tested on one laptop (Windows 11, GTX 1050 + Intel HD 630) and by one tester, plus the CI runners.
   AMD and Intel graphics are untested. The "fall back to the Windows default graphics card" path has never had to
   run in a test.
-- **Automatic updates** are tested with real packages (old installation, real update files); 1.1.1 is the first update
-  that is downloaded from a real GitHub release; it rebuilds the game once from the remembered disc image. Since 1.1.1 the Linux package also brings the
+- **Automatic updates** are tested with real packages (old installation, real update files); 1.2 is the first update
+  that is downloaded from a real GitHub release; it rebuilds the game once from the remembered disc image. Since 1.2 the Linux package also brings the
   launcher as an AppImage with its own WebKitGTK, so it opens on SteamOS and in Game Mode too. An update that replaces the running
   AppImage was tested with a test update (`--update-from`) in an environment without WebKitGTK; a real download from
-  GitHub on a Deck happens first with the update after 1.1.1.
+  GitHub on a Deck happens first with the update after 1.2.
 - **Some Arcade setup menus** (3D character preview) run at 49–56 FPS; main menus and gameplay run at 59.9 FPS.
 - **Sound:** three bugs in the real-time sound path fixed (`pc069`–`pc073`, see FINDINGS); being verified by
   playing. `TS2_MITSCHNITT=1` records the sound (`ton.wav`) and a screenshot every 30 s for checking.
@@ -73,21 +73,21 @@ An honest list, as of 15 November 2026 (release 1.1.1).
   14–30 FPS at 4× before, 58 FPS on average after (a new graphics driver was installed in between).
 - **Launcher switches could not be turned on or off** (1.1.0, before release): the launcher wrote `true`/`false`, the
   game reads `1`/`0`.
-- **Scope weapons with the mouse** (1.1.1): Sniper Rifle scope coming up after a weapon change, Vintage Rifle scope
+- **Scope weapons with the mouse** (1.2): Sniper Rifle scope coming up after a weapon change, Vintage Rifle scope
   stuck or flickering. The port reads the weapon in hand (player `+0x584` → gun `+8`, model table `0x5410C0`) and the
   scope flag from the game's weapon table (`0x4C3818`, `+8` bit 0x20); tap to scope added.
-- **S47 stayed zoomed with mouse aiming** (1.1.1): the game's weapon table holds the field of view used in aim mode
+- **S47 stayed zoomed with mouse aiming** (1.2): the game's weapon table holds the field of view used in aim mode
   (`+0x54`: S47 40°). While only the port holds the aim mode it is set to 60° and restored when the zoom key is used.
   The 1.1.0 fix held `+0x914`, which turned out to be only the zoom animation.
-- **Online+: own kills missing, small hitch twice a second** (1.1.1): kills taken from the hit detection when the
+- **Online+: own kills missing, small hitch twice a second** (1.2): kills taken from the hit detection when the
   game's counter stays; the memory scan is spread over 30 frames.
-- **Steam Deck: mouse needed a wake-up click** (1.1.1, issue #5).
-- **Turrets could not be used with mouse aiming** (1.1.1, issues #6 and #8): the held aim mode made the character get off,
+- **Steam Deck: mouse needed a wake-up click** (1.2, issue #5).
+- **Turrets could not be used with mouse aiming** (1.2, issues #6 and #8): the held aim mode made the character get off,
   and the mouse did not steer them (the game turns turrets through the right stick).
-- **Mouse crosshair in cutscenes** (1.1.1, issue #8).
-- **Mouse stopped working in Neo Tokyo after being healed** (1.1.1, issue #8): health above the maximum made the port
+- **Mouse crosshair in cutscenes** (1.2, issue #8).
+- **Mouse stopped working in Neo Tokyo after being healed** (1.2, issue #8): health above the maximum made the port
   think the player was not alive. Fixed by reasoning, the spot itself was not replayed.
-- **Steam Deck: launcher did not open, old dialogs and no updates** (1.1.1): SteamOS has no webkit2gtk-4.1; the
+- **Steam Deck: launcher did not open, old dialogs and no updates** (1.2): SteamOS has no webkit2gtk-4.1; the
   package now also ships the launcher as an AppImage with its own copy, and `TS2-SteamDeck.sh` opens it.
 - **Accurate mouse aim only after pressing the zoom key once** (1.1.0): the held aim mode gets a fresh press when it
   starts.

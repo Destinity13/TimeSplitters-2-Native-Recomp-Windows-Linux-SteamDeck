@@ -1,10 +1,10 @@
 [
   {
-    "date": "2026-11-15T12:00:00Z",
-    "title": "Version 1.1.1 - patch notes",
+    "date": "2026-11-16T15:00:00Z",
+    "title": "Version 1.2 - patch notes",
     "tag": "Release",
-    "body": "Scope weapons with the mouse fixed, tap to scope, optional cheats and auto-aim, own kills in Online+, Steam Deck mouse without the wake-up click, safer setup on Windows.",
-    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-15-patch-notes-1-1-1.md"
+    "body": "Clearer picture at high resolutions, scope weapons fixed, mouse speed follows the zoom, Temporal Uplink map fixed, optional cheats, Steam Deck launcher, safer Windows setup.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-16-patch-notes-1-2.md"
   },
   {
     "date": "2026-11-15T12:00:00Z",

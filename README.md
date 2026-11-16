@@ -33,7 +33,7 @@
 
 <table>
 <tr>
-<td width="50%" valign="top"><sub>2026-11-15 · Release</sub><br><b><a href="news/2026-11-15-patch-notes-1-1-1.md">Version 1.1.1 - patch notes</a></b><br><sub>Scope weapons with the mouse fixed, tap to scope, optional cheats and auto-aim, own kills in Online+, Steam Deck mouse without the wake-up click, safer setup on Windows.</sub></td>
+<td width="50%" valign="top"><sub>2026-11-16 · Release</sub><br><b><a href="news/2026-11-16-patch-notes-1-2.md">Version 1.2 - patch notes</a></b><br><sub>Clearer picture at high resolutions, scope weapons fixed, mouse speed follows the zoom, Temporal Uplink map fixed, optional cheats, Steam Deck launcher, safer Windows setup.</sub></td>
 <td width="50%" valign="top"><sub>2026-11-15 · Coming soon</sub><br><b><a href="news/2026-11-15-coming-in-1-1-1.md">Coming soon: update 1.1.1</a></b><br><sub>A quick fix update is almost ready. Weapons with the mouse, optional cheats, Online+ fixes, a second try for the Windows setup and the launcher on the Steam Deck.</sub></td>
 </tr>
 </table>
@@ -42,15 +42,15 @@
 <!-- news:end -->
 
 > [!IMPORTANT]
-> **Version 1.1.1 is out.** On 1.1.0 the launcher updates by itself. **On a Steam Deck or still on 1.0.x, download
-> 1.1.1 once by hand**: before 1.1.1 the launcher did not open on SteamOS, so the Deck could not update itself.
-> [Patch notes 1.1.1](news/2026-11-15-patch-notes-1-1-1.md)
+> **Version 1.2 is out.** On 1.1.0 the launcher updates by itself. **On a Steam Deck or still on 1.0.x, download
+> 1.2 once by hand**: before 1.2 the launcher did not open on SteamOS, so the Deck could not update itself.
+> [Patch notes 1.2](news/2026-11-16-patch-notes-1-2.md)
 >
 > Since 1.1 the launcher checks for new versions when you start it, downloads only the files
 > that changed, backs up your saves first and shows the project news. So after this one download everyone stays on
 > the same version without doing anything.
 >
-> Coming from 1.0.x: extract 1.1.1 into a **new** folder and set it up once with your disc. To keep your saves, copy
+> Coming from 1.0.x: extract 1.2 into a **new** folder and set it up once with your disc. To keep your saves, copy
 > `app/build/spielstand` from the old folder to `savedata` in the new one.
 
 > [!TIP]

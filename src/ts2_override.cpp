@@ -61,6 +61,7 @@ extern std::atomic<unsigned> g_ps2xPadRoh;
 extern std::atomic<unsigned> g_ps2xPadRStickAus;
 extern std::atomic<unsigned> g_ps2xPadRStickSetzen;
 extern std::atomic<unsigned> g_ps2xPadAchsenRoh;
+extern std::atomic<bool> g_ps2xUplink;                       // ps2_memory.cpp: Temporal Uplink held (widescreen HUD squeeze skips its map)
 extern std::atomic<long long> g_ps2xScopeMs;                // ps2_memory.cpp: sniper scope feedback last seen (ms)               // gs_frontend.cpp: additional PS2 buttons for player 1
 
 #include <chrono>
@@ -2259,6 +2260,7 @@ namespace
     static uint16_t g_skriptPad = 0; static uint8_t g_skriptAx[4] = {0x80, 0x80, 0x80, 0x80}; static bool g_skriptPadDa = false; static uint16_t g_skriptPadRoh = 0; static uint8_t g_skriptRStickRoh[2] = {0x80, 0x80};
     std::atomic<bool> g_ts2EigenesZiel{false};   // mouse aim mode active: the game's aim HUD is hidden, the port draws its crosshair
     std::atomic<bool> g_ts2MausZielt{false};     // mouse captured in first-person view: no game auto-aim
+    static uint64_t g_ts2WechselTick = ~0ull >> 1;   // VBlank of the last weapon change (input or held model)
     std::atomic<bool> g_ts2Geschuetz{false};     // player on a turret / mounted gun (set in the weapon block below)
     namespace maus
     {
@@ -2390,6 +2392,7 @@ namespace
                 uint16_t pt = 0; uint8_t ax[4] = {0x80, 0x80, 0x80, 0x80};
                 const bool dreieck = g_skriptPadDa ? (g_skriptPad & 0x00A0u) != 0 : (::ps2xGsBridgePad(pt, ax) && (pt & 0x00A0u) != 0);   // weapon change: D-pad right/left (mouse wheel)
                 if (sperre && (pb != sperrePb || dreieck)) sperre = false;
+                if (dreieck) g_ts2WechselTick = tick;   // weapon change pressed: the aim mode pauses (see below)
 
                 // scope slot memory, off by default (TS2_SCOPE_SLOT=1 on): +0xD48 turned out to be the weapon class, which
                 // several weapons share - the AK stayed zoomed after the sniper rifle (user report 15 Nov)
@@ -2463,6 +2466,17 @@ namespace
                         bool tabScope = w && w->scope;
                         if (e >= 0) tabScope = (ts2impact::ru(r, kTab + kGross * e + 8) & 0x20u) != 0;
                         if (tabAn && tabScope) dauer = false;
+                        // Weapon change (user report 16 Nov: from the pistol to the Sniper Rifle the scope came up at once):
+                        // the permanent aim mode of the old weapon was still held while the game already switched, and with
+                        // a scope weapon a held aim mode IS the scope. While a change is pressed or the held model changes,
+                        // the aim mode pauses for 45 VBlanks; a scope weapon then never gets it, any other weapon gets it
+                        // back with a fresh press edge. TS2_WECHSEL_PAUSE=0 = old behaviour.
+                        {
+                            static const bool wpAn = [] { const char *e = std::getenv("TS2_WECHSEL_PAUSE"); return !(e && *e == '0'); }();
+                            static uint32_t wpModell = 0;
+                            if (modell != wpModell) { if (wpModell != 0) g_ts2WechselTick = tick; wpModell = modell; }
+                            if (wpAn && tick - g_ts2WechselTick < 45u) dauer = false;
+                        }
                         static int altE = -1;
                         if (fovAn)
                         {
@@ -2795,6 +2809,13 @@ namespace
             static const uint16_t orig[7] = {0x40, 0x180, 0x200, 0x40, 0x180, 0x200, 0x1C0};
             static const uint16_t ohne[7] = {0x00, 0x1C0, 0x000, 0x00, 0x000, 0x000, 0x000};
             std::memcpy(rdram + 0x0059e9d0u, balken ? orig : ohne, sizeof(orig));
+        }
+        // Temporal Uplink in hand (issue #12): player = *(0x59DC0C), weapon object +0x584, model +8 (1058 = uplink).
+        // The runtime keeps the uplink's map out of the widescreen HUD squeeze while it is held.
+        {
+            uint32_t pb = 0, g = 0, m = 0; std::memcpy(&pb, rdram + 0x0059DC0Cu, 4); pb &= 0x1FFFFFFu;
+            if (pb >= 0x100000u && pb < 0x1FF0000u) { std::memcpy(&g, rdram + pb + 0x584, 4); g &= 0x1FFFFFFu; if (g >= 0x100000u && g < 0x1FFFF00u) std::memcpy(&m, rdram + g + 8, 4); }
+            g_ps2xUplink.store(m == 1058u, std::memory_order_relaxed);
         }
         if (!an) return;
         static const uint32_t adr[] = {0x005995dc, 0x00598a08, 0x00599664, 0x0059a304, 0x0059a308, 0x0059a39c, 0x0059a3ac, 0x0059ca10};

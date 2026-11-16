@@ -15,9 +15,9 @@ The read-only system stays untouched, and you don't need distrobox or developer 
    Click *Set up* and select the ISO. It checks it, extracts it and builds the game.
    This takes roughly 10–15 minutes on the Deck and only happens once.
 
-SteamOS has no WebKitGTK, so since 1.1.1 the package brings the launcher a second time as `TS2-Launcher.AppImage`
-with its own copy. The start scripts pick it by themselves; nothing needs installing. Before 1.1.1 the launcher did not
-open on the Deck (you got simple dialogs instead) and the game could not update itself, so download 1.1.1 once by hand.
+SteamOS has no WebKitGTK, so since 1.2 the package brings the launcher a second time as `TS2-Launcher.AppImage`
+with its own copy. The start scripts pick it by themselves; nothing needs installing. Before 1.2 the launcher did not
+open on the Deck (you got simple dialogs instead) and the game could not update itself, so download 1.2 once by hand.
 
 ## Add to Steam (Game Mode)
 
