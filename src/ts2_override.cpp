@@ -2475,6 +2475,11 @@ namespace
                             static const bool wpAn = [] { const char *e = std::getenv("TS2_WECHSEL_PAUSE"); return !(e && *e == '0'); }();
                             static uint32_t wpModell = 0;
                             if (modell != wpModell) { if (wpModell != 0) g_ts2WechselTick = tick; wpModell = modell; }
+                            // Player +0x574 = weapon switch state (measured): 1 = weapon held, 2 lowering, 3 lowered,
+                            // 0 empty hands, 5/6 raising. It leaves 1 about 20 VBlanks before the held model changes, also
+                            // when the game switches by itself after a pickup (AK and Sniper Rifle went into their aim view
+                            // on the first pickup, user report 16 Nov). Firing and reloading leave it at 1.
+                            if (pb && ts2impact::ru(r, pb + 0x574) != 1u) g_ts2WechselTick = tick;
                             if (wpAn && tick - g_ts2WechselTick < 45u) dauer = false;
                         }
                         static int altE = -1;
