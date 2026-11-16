@@ -2643,7 +2643,21 @@ namespace
                 // while zooming (right mouse button) additionally the zoom sensitivity in %
                 const float sens = static_cast<float>(::ps2xGsBridgeOption(3, 30)) / 10.f;
                 const bool invert = ::ps2xGsBridgeOption(4, 0) != 0;
-                const float zoom = ::ps2xGsBridgeOption(7, 0) ? static_cast<float>(::ps2xGsBridgeOption(6, 50)) / 100.f : 1.f;
+                float zoom = ::ps2xGsBridgeOption(7, 0) ? static_cast<float>(::ps2xGsBridgeOption(6, 50)) / 100.f : 1.f;
+                // Zoom scaled sensitivity (GitHub issue #13): while the view is zoomed in (aim mode, scope, sniper zoom
+                // steps) the turn per mouse count follows the real field of view, tan(fov/2) / tan(base/2), so the
+                // picture moves the same distance per count at every zoom level. Camera = *(0x59DB7C), +0x324 current
+                // field of view in degrees. The zoom sensitivity from the menu (default 50 %) stays a factor on top.
+                {
+                    uint32_t cam = 0; std::memcpy(&cam, r + 0x0059DB7Cu, 4); cam &= 0x1FFFFFFu;
+                    if (cam >= 0x100000u && cam < 0x1FFF000u)
+                    {
+                        float fov = 0.f; std::memcpy(&fov, r + cam + 0x324, 4);
+                        const float basis = 60.f;
+                        if (fov > 1.f && fov < basis - 0.5f)
+                            zoom = std::tan(fov * 0.008726646f) / std::tan(basis * 0.008726646f) * (static_cast<float>(::ps2xGsBridgeOption(6, 50)) / 50.f);
+                    }
+                }
                 const float k = 0.022f * sens * zoom;
                 gier -= static_cast<float>(dx) * k;
                 nick += static_cast<float>(invert ? dy : -dy) * k;

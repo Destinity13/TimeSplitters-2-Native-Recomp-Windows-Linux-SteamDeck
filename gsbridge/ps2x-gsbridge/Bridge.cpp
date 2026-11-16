@@ -1442,6 +1442,8 @@ namespace ps2xmenu
 			{"Fullscreen", "Vollbild"}, {"V-Sync", "V-Sync"}, {"Show FPS", "FPS-Anzeige"}, {"Open this menu at start", "Menue beim Spielstart zeigen"}, {"Input overlay (debug)", "Eingabe-Anzeige (Debug)"},
 			{"Resolution & filtering", "Aufloesung & Filter"}, {"Window", "Fenster"},
 			{"Original frame blending (ghosting when turning)", "Nachzieheffekt beim Drehen (wie Original)"},
+			{"Original haze overlay (double image in the distance)", "Original-Dunstschleier (Doppelbild in der Ferne)"},
+			{"The PS2 game lays a stretched copy of the picture over the screen. At higher resolutions it looks like a second, shifted image. Off = clear picture.", "Das PS2-Spiel legt eine gestreckte Kopie des Bildes ueber den Schirm. In hoher Aufloesung wirkt das wie ein zweites, verschobenes Bild. Aus = klares Bild."},
 			{"The PS2 game blends the previous frame half over the new one. Off = clear picture.", "Das Original blendet das vorige Bild halb ueber das neue (Geisterbilder). Aus = klares Bild."},
 			{"Anti-aliasing (FXAA)", "Kantenglaettung (FXAA)"}, {"Sharpening (AMD CAS)", "Schaerfe (AMD CAS)"}, {"Sharpening strength", "Schaerfe-Staerke"},
 			{"PS2 dithering", "PS2-Dithering"}, {"TV / CRT filter", "Bildfilter (TV/CRT)"}, {"Colour", "Farbe"}, {"Colour adjustment", "Farbanpassung"},
@@ -1555,7 +1557,7 @@ namespace ps2xmenu
 	struct Cfg
 	{
 		int upscale = 9 /* auto: fits the screen, steps down when the PC cannot hold the frame rate */, aspect = 4, cas = 1, casSharp = 25, tv = 0, filter = 2, aniso = 16, dither = 0;
-		int sbB = 50, sbC = 50, sbS = 50, rumblePct = 100, hz = 50, volume = 100, camBlur = 1, nachzieh = 0;
+		int sbB = 50, sbC = 50, sbS = 50, rumblePct = 100, hz = 50, volume = 100, camBlur = 0, nachzieh = 0;   // camBlur: haze overlay (off = clear picture)
 		bool fxaa = false, shadeboost = false, fullscreen = false, showFps = false, rumble = true, vsync = false, startMenu = false;   // start menu: the launcher already did the setup
 		int tri = 2;             // Trilinear filtering: 0 automatic (PCSX2 default), 1 as PS2, 2 forced (uses the mipmaps of replacement textures)
 		int fx = 0;              // Effects (vkBasalt): 0 off, 1 original-plus, 2 clear, 3 cinematic - applies on the next start
@@ -2927,7 +2929,7 @@ static const int kBotSetsN = 9;
 				ImGui::TextDisabled("%s:", tr("Preset"));
 				ImGui::SameLine();
 				if (ImGui::Button(tr("Remaster (sharp)")))
-				{ c.upscale = 4; c.aniso = 16; c.filter = 2; c.cas = 1; c.casSharp = 25; c.fxaa = false; c.tv = 0; c.shadeboost = false; c.dither = 0; c.camBlur = 1; c.nachzieh = 0; c.scope = 1; c.aspect = 4; }
+				{ c.upscale = 4; c.aniso = 16; c.filter = 2; c.cas = 1; c.casSharp = 25; c.fxaa = false; c.tv = 0; c.shadeboost = false; c.dither = 0; c.camBlur = 0; c.nachzieh = 0; c.scope = 1; c.aspect = 4; }
 				ImGui::SameLine();
 				if (ImGui::Button(tr("Original look")))
 				{ c.upscale = 1; c.aniso = 0; c.filter = 2; c.cas = 0; c.fxaa = false; c.tv = 5; c.shadeboost = false; c.aspect = 2; c.dither = 2; c.camBlur = 1; c.nachzieh = 1; c.scope = 0; c.padModern = 0; c.padSens = 100; c.unlockAll = 0; }
@@ -2970,6 +2972,11 @@ static const int kBotSetsN = 9;
 					bool nz = c.nachzieh != 0;
 					if (ImGui::Checkbox(tr("Original frame blending (ghosting when turning)"), &nz)) c.nachzieh = nz ? 1 : 0;
 					ImGui::TextDisabled("%s", tr("The PS2 game blends the previous frame half over the new one. Off = clear picture."));
+				}
+				{
+					bool dn = c.camBlur != 0;
+					if (ImGui::Checkbox(tr("Original haze overlay (double image in the distance)"), &dn)) c.camBlur = dn ? 1 : 0;
+					ImGui::TextDisabled("%s", tr("The PS2 game lays a stretched copy of the picture over the screen. At higher resolutions it looks like a second, shifted image. Off = clear picture."));
 				}
 				{
 					const char* kScEn[] = {"Original (smeared)", "Clear", "Extra clear"};
