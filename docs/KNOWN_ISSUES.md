@@ -2,7 +2,7 @@
 
 # Known issues
 
-An honest list, as of 15 November 2026 (release 1.2).
+An honest list, as of 16 November 2026 (release 1.2).
 
 ## Not a bug
 
@@ -20,6 +20,13 @@ An honest list, as of 15 November 2026 (release 1.2).
   `pc113` is replaced by the PC-shooter defaults once. Rebind in the Controls tab, it is saved live.
 
 ## Open
+
+- **Siberia dam twin gun with mouse aiming:** the game moves the camera onto the gun without changing the held
+  weapon; the mouse layer takes that for a cutscene and pauses, or turns the character. With a gamepad it works.
+  The probe logs `[waffe]` / `[kamera]` record what changes when you get on the gun.
+- **Steam Deck: short slowdowns while loading** (after the profile screen and when a mission starts, a few seconds
+  at 42 to 56 FPS, music slows with them). Measured the same at 1x and 2x and without texture packs, so it is the
+  CPU while loading, not the picture settings. Everywhere else 60 FPS.
 
 - **Weapons with mouse aiming:** the Sniper Rifle tap-to-scope is checked by the `scopetap` regression case, the
   Vintage Rifle and the S47 by playing. All 10 Arcade weapon sets ran; the other weapons have not been checked one by

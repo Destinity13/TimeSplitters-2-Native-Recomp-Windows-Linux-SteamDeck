@@ -2324,6 +2324,23 @@ namespace
                                      std::fabs(rf(r, cam + 0x284) - rf(r, q + 0x1A8)) > 0.5f;
                     static bool altSeq = false;
                     if (seq != altSeq) { altSeq = seq; std::fprintf(stderr, "[maus] %s\n", seq ? "cutscene camera: mouse layer paused" : "cutscene over"); }
+                    // Turret research (Siberia dam twin gun: the game moves the camera onto the gun, the mouse layer took that
+                    // for a cutscene): camera distance from the player and the small integer words of the player object
+                    // that change during the first 40 VBlanks after the camera leaves the player
+                    {
+                        static uint64_t probeBis = 0; static std::vector<uint32_t> alt;
+                        if (seq && probeBis == 0) { probeBis = tick + 40; alt.clear();
+                            const float dx = rf(r, cam + 0x27C) - rf(r, q + 0x1A0), dy = rf(r, cam + 0x280) - rf(r, q + 0x1A4), dz = rf(r, cam + 0x284) - rf(r, q + 0x1A8);
+                            std::fprintf(stderr, "[kamera] t=%llu off player by %.2f %.2f %.2f (dist %.2f) gun %x state %u\n", (unsigned long long)tick, dx, dy, dz, std::sqrt(dx * dx + dy * dy + dz * dz), ts2impact::ru(r, q + 0x584), ts2impact::ru(r, q + 0x574)); }
+                        if (!seq) probeBis = 0;
+                        if (probeBis && tick <= probeBis + 0)
+                        {
+                            std::vector<uint32_t> neu(0x1000 / 4); for (size_t i = 0; i < neu.size(); ++i) neu[i] = ts2impact::ru(r, q + static_cast<uint32_t>(i * 4));
+                            if (!alt.empty()) { std::string z; int n = 0; for (size_t i = 0; i < neu.size() && n < 30; ++i) if (neu[i] != alt[i] && neu[i] < 0x10000u && alt[i] < 0x10000u) { char b2[40]; std::snprintf(b2, sizeof b2, " +%03zx:%x>%x", i * 4, alt[i], neu[i]); z += b2; ++n; }
+                                if (!z.empty()) std::fprintf(stderr, "[kamera] t=%llu%s\n", (unsigned long long)tick, z.c_str()); }
+                            alt = std::move(neu);
+                        }
+                    }
                     if (seq && !g_ts2Geschuetz.load(std::memory_order_relaxed)) ego = false;
                 }
             }
@@ -2364,6 +2381,7 @@ namespace
             // (hook 0x2E18E8 below), the port's centre crosshair is the only one. TS2_MAUS_ZIELMODUS=0 = old behaviour.
             static const bool immerZiel = [] { const char *e = std::getenv("TS2_MAUS_ZIELMODUS"); return !(e && *e == '0'); }();
             bool dauer = gefangen && ego && (immerZiel || ::ps2xGsBridgeOption(5, 0) != 0);
+            const bool dauerBasis = dauer;   // permanent aim mode wanted (before scope locks / weapon change pauses)
             // TS2_ZIEL_PAUSE=a-b (tests): no permanent aim mode between these ticks (like a short menu / focus loss)
             { static const std::pair<uint64_t, uint64_t> pz = [] { const char *e = std::getenv("TS2_ZIEL_PAUSE"); uint64_t a = 0, b = 0; if (e) std::sscanf(e, "%llu-%llu", reinterpret_cast<unsigned long long *>(&a), reinterpret_cast<unsigned long long *>(&b)); return std::make_pair(a, b); }();
               if (pz.second && tick >= pz.first && tick < pz.second) dauer = false; }
@@ -2442,6 +2460,11 @@ namespace
                     const W *w = nullptr;
                     for (const W &k : kWaffen) if (k.modell == modell) { w = &k; break; }
                     static uint32_t altModell = ~0u;
+                    // Turret research (Siberia dam: the mouse turned the player instead of the turret): every change of
+                    // the held gun object is logged with its model, table index and the switch state.
+                    { static uint32_t altG = 0; uint32_t gg = 0; if (ego && pb) gg = ts2impact::ru(r, pb + 0x584) & 0x1FFFFFFu;
+                      if (ego && gg != altG) { altG = gg; uint32_t ix = 0, tab = 0; if (gg >= 0x100000u && gg < 0x1FFFF00u) { ix = ts2impact::ru(r, gg + 0x30); if (ix < 38u) tab = ts2impact::ru(r, 0x004C3818u + 0x240u * ix); }
+                        std::fprintf(stderr, "[waffe] t=%llu gun %x model %u ix %u tab %x state %u\n", (unsigned long long)tick, gg, modell, ix, tab, ts2impact::ru(r, pb + 0x574)); } }
                     if (modell != altModell && ego) { altModell = modell; std::fprintf(stderr, "[maus] weapon model %u (%s)%s\n", modell, w ? w->name : "none/unknown", (w && w->scope) ? ": scope weapon, no permanent aim mode" : ""); }
 
                     // turret / mounted gun (issue #6): no permanent aim mode, so no held L2 and no press edge - with mouse
@@ -2488,7 +2511,10 @@ namespace
                             if (altE >= 0 && altE != e) ts2impact::wf(r, kTab + kGross * altE + 0x54, orig[altE]);
                             if (e >= 0 && orig[e] > 1.f && orig[e] < 60.f && !tabScope)
                             {
-                                const float soll = (dauer && !zoomt) ? 60.f : orig[e];
+                                // dauerBasis, not dauer: during the short pause of a weapon change the table went back to
+                                // the original aim view (AK 40 degrees) and the game took it as the target when the aim
+                                // mode came back - the AK stayed zoomed in (user report 16 Nov, PC and Steam Deck).
+                                const float soll = (dauerBasis && !zoomt) ? 60.f : orig[e];
                                 if (ts2impact::rf(r, kTab + kGross * e + 0x54) != soll)
                                 {
                                     ts2impact::wf(r, kTab + kGross * e + 0x54, soll);
