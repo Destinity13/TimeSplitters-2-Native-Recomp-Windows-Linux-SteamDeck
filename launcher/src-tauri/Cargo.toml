@@ -1,6 +1,6 @@
 [package]
 name = "ts2-launcher"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 description = "TimeSplitters 2 Native Recomp launcher"
 license = "MIT"
