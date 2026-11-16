@@ -1,5 +1,5 @@
 ---
-title: "Devlog: where 1.1.1 stands"
+title: Devlog - where 1.1.1 stands
 date: 2026-11-16
 tag: Devlog
 order: 1

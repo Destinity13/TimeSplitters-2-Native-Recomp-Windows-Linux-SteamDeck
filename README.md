@@ -33,8 +33,8 @@
 
 <table>
 <tr>
+<td width="50%" valign="top"><sub>2026-11-16 · Devlog</sub><br><b><a href="news/2026-11-16-devlog-after-1-2.md">Devlog - 1.2 is out, what comes next</a></b><br><sub>How the double image got fixed, what we test before every release and what we are working on for the next update.</sub></td>
 <td width="50%" valign="top"><sub>2026-11-16 · Release</sub><br><b><a href="news/2026-11-16-patch-notes-1-2.md">Version 1.2 - patch notes</a></b><br><sub>Clearer picture at high resolutions, scope weapons fixed, mouse speed follows the zoom, Temporal Uplink map fixed, optional cheats, Steam Deck launcher, safer Windows setup.</sub></td>
-<td width="50%" valign="top"><sub>2026-11-15 · Coming soon</sub><br><b><a href="news/2026-11-15-coming-in-1-1-1.md">Coming soon: update 1.1.1</a></b><br><sub>A quick fix update is almost ready. Weapons with the mouse, optional cheats, Online+ fixes, a second try for the Windows setup and the launcher on the Steam Deck.</sub></td>
 </tr>
 </table>
 
