@@ -21,10 +21,10 @@
 [![AI-assisted](https://img.shields.io/badge/AI--assisted-Claude-d97757)](#ai-disclosure)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-[News](news/README.md) · [Play it](#play-it-in-3-minutes) · [Online](#online-multiplayer) · [What makes it different](#what-makes-it-different) · [1.0.1 vs 1.1](#101-vs-11) · [Gallery](#gallery) · [Before / after](#before--after) · [FAQ](#faq) · [Status](#status) · [How it works](#how-it-works) · [Docs](#documentation)
+[News](news/README.md) · [Play it](#play-it-in-3-minutes) · [Online](#online-multiplayer) · [What makes it different](#what-makes-it-different) · [1.1 vs 1.2](#11-vs-12) · [Gallery](#gallery) · [Before / after](#before--after) · [FAQ](#faq) · [Status](#status) · [How it works](#how-it-works) · [Docs](#documentation)
 
-<img src="docs/screenshots/compare_11_dam.gif" width="100%" alt="Siberia dam flyover, release 1.0.1 on the left and 1.1 on the right, with a moving divider">
-<sub>Release 1.0.1 (left) against 1.1 (right), same frames of the Siberia intro. The white haze is gone. Both sides captured from the port, nothing retouched.</sub>
+<img src="docs/screenshots/patch12_haze.jpg" width="100%" alt="Siberia camp fence: 1.1.0 with the haze overlay on the left, 1.2 with a clear picture on the right">
+<sub>1.1.0 (left) against 1.2 (right), same spot in Siberia. The game's haze overlay left a soft double image in the distance at high resolutions, 1.2 turns it off by default. Both sides captured from the port, nothing retouched.</sub>
 
 </div>
 
@@ -189,7 +189,22 @@ Roadmap and technical details: [ONLINE](docs/ONLINE.md)
 </td></tr>
 </table>
 
-## 1.0.1 vs 1.1
+## 1.1 vs 1.2
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/patch12_haze.jpg" width="100%" alt="Haze overlay on in 1.1.0 (left), off in 1.2 (right)"></td>
+<td width="50%"><img src="docs/screenshots/patch12_uplink.jpg" width="100%" alt="Temporal Uplink map: off center in 1.1.0 (left), fixed in 1.2 (right)"></td>
+</tr>
+<tr>
+<td><sub>Clear picture: the double image in the distance is gone. The original overlay can be turned back on in the menu.</sub></td>
+<td><sub>Temporal Uplink map: no longer shifted and doubled, it looks like in PCSX2 now.</sub></td>
+</tr>
+</table>
+<sub>Also in 1.2: scope weapons no longer zoom in by themselves, mouse speed follows the zoom, turrets with the mouse,
+launcher on the Steam Deck, safer Windows setup. All of it in the <a href="news/2026-11-16-patch-notes-1-2.md">patch notes</a>.</sub>
+
+### 1.0.1 vs 1.1
 
 <table>
 <tr>
@@ -216,6 +231,10 @@ comparing with PCSX2. Details in the <a href="news/2026-11-14-devlog-road-to-1-1
 
 <table>
 <tr>
+<td width="50%"><img src="docs/screenshots/gallery12_camp.jpg" width="100%" alt="1.2, Siberia: sniper rifle at the camp, clear picture"></td>
+<td width="50%"><img src="docs/screenshots/gallery12_uplink_tunnel.jpg" width="100%" alt="1.2, Siberia: Temporal Uplink in the tunnel"></td>
+</tr>
+<tr>
 <td width="50%"><img src="docs/screenshots/cutscene_11_intro.gif" width="100%" alt="Story intro cutscene in 1.1, rendered live by the game in 16:9"></td>
 <td width="50%"><img src="docs/screenshots/clip_aztec.gif" width="100%" alt="Aztec Ruins level intro"></td>
 </tr>
@@ -228,7 +247,7 @@ comparing with PCSX2. Details in the <a href="news/2026-11-14-devlog-road-to-1-1
 <td><img src="docs/screenshots/shot_crystal.jpg" alt="Aztec Ruins: the time crystal"></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/gallery_sniper.jpg" alt="Story, Siberia: sniper rifle at the camp fence"></td>
+<td><img src="docs/screenshots/gallery12_dam_gun.jpg" alt="1.2, Siberia: the twin gun on the dam against the helicopter"></td>
 <td><img src="docs/screenshots/gallery_arcade_fight.jpg" alt="Arcade: close combat in the tomb"></td>
 </tr>
 <tr>
@@ -271,11 +290,12 @@ the port's renderer on the author's own disc, no AI upscaling, no texture pack.<
 | | |
 |---|---|
 | ✅ **Already there** | title, profiles, Story (all 10 levels load and play, Siberia played through), Story co-op, Arcade League, Challenge, MapMaker, options, bonus trailer, memory card, sound |
+| 🆕 **New in 1.2** | **clear picture at high resolutions** (haze overlay off by default) · scope weapons no longer zoom in by themselves · mouse speed follows the zoom · Temporal Uplink map fixed · turrets with the mouse · optional cheats · launcher on the Steam Deck · safer Windows setup |
 | 🆕 **New in 1.1** | **launcher with automatic updates and news** · particle effects fixed (fog, snow, smoke, debris) · any aspect ratio · 16:9 menus and HUD · mouse aiming rebuilt · modern gamepad aiming · unlock everything · texture packs · fast graphics card on laptops · English by default · Online+ as an optional experiment |
 | 🆕 **New in 1.0.1** | **Windows release** · HUD at the 16:9 edges · sniper scope correct in 16:9 · co-op split screen fixed in 16:9 · no PCSX2 messages at start |
 | 🆕 **New in 1.0** | online multiplayer with in-game server browser · `ts2-server` in the package · mouse and keyboard play · TS2-style settings menu (EN/DE) · F8 video recording · F7 free camera |
 | 🟡 **Being tested** | mouse play beyond Siberia/Arcade ([open points](docs/MOUSE.md)), Story levels 2–10 by hand (automated runs are clean), Arcade Custom, 3–4 players via multitap, online over the internet |
-| 🛠 **Coming in updates** | sniper scope when switching weapons with mouse aiming · auto-aim switch for the original controls · field-of-view option · Online+ scoreboard and bot match stutter · dedicated server that runs matches without a hosting player |
+| 🛠 **Coming in updates** | field-of-view slider · twin gun at the Siberia dam with the mouse · smoother loading on the Steam Deck · hipfire with modern controls · difficulty menu highlight in widescreen · MapMaker walls · options for hit flash and muzzle flash · dedicated server that runs matches without a hosting player |
 
 Every build: [CHANGELOG](docs/CHANGELOG.md) · open issues: [KNOWN_ISSUES](docs/KNOWN_ISSUES.md) · found a bug?
 [Open an issue](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/issues) and attach `app/build/play.log` and `app/build/bridge.log`.
