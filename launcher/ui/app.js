@@ -42,6 +42,8 @@ const L = {
     "s.tv": "TV-Filter", "s.fx": "Effekte (vkBasalt, Linux)", "s.dith": "Dithering",
     "s.vol": "Lautstärke", "s.rumble": "Vibration", "s.rumble.s": "Rumble am Controller", "s.rumblep": "Vibrationsstärke",
     "s.mouse": "Mauszielen", "s.mouse.s": "Klick ins Fenster fängt die Maus", "s.msens": "Mausempfindlichkeit", "s.minv": "Maus invertiert",
+    "s.chp": "Cheat: unendlich Leben", "s.chp.s": "Nur Einzelspieler und Splitscreen. Aus in Online+ und Online-Partien", "s.car": "Cheat: unendlich Rüstung", "s.car.s": "Nur Einzelspieler und Splitscreen", "s.cam": "Cheat: unendlich Munition", "s.cam.s": "Der Vorrat sinkt beim Nachladen nicht",
+    "s.aaim": "Zielhilfe (Maus)", "s.aaim.s": "Zieht das Ziel wie auf der PS2 zu Gegnern. Aus = Schüsse gehen genau aufs Fadenkreuz",
     "s.padm": "Gamepad: modernes Zielen", "s.padm.s": "Rechter Stick dreht die Sicht, Fadenkreuz fest in der Mitte, L2 zoomt. Aus = Original-PS2-Steuerung", "s.pads": "Gamepad: Drehgeschwindigkeit", "s.unlock": "Alles freischalten", "s.unlock.s": "Level, Charaktere und Cheats offen, solange dies an ist. Eigener Fortschritt bleibt",
     "s.mmode": "Zielmodus immer halten", "s.mmode.s": "Original-Fadenkreuz, aber langsameres Laufen", "s.zoom": "Zoom-Empfindlichkeit", "s.xhair": "Fadenkreuz (Maus)", "s.pitch": "Blick hoch/runter bis (Original 40°)", "s.scope": "Zielfernrohr", "tab.op": "Online+", "s.imp": "Treffer-Effekte (Online+)", "s.imp.s": "Aus = Spiel exakt wie auf der PS2", "s.mark": "Treffer- und Kill-Marker", "s.snd": "Treffer- und Kill-Sound", "s.kick": "Kamerastoß bei Treffern", "s.opnote": "Level, XP und Abschüsse siehst du im Spielmenü (ESC/F1) im Tab Online+.",
     "s.keys": "Tastenbelegung und Controller stellst du direkt im Spiel ein (ESC / F1 / Guide-Taste).",
@@ -92,6 +94,8 @@ const L = {
     "s.tv": "TV filter", "s.fx": "Effects (vkBasalt, Linux)", "s.dith": "Dithering",
     "s.vol": "Volume", "s.rumble": "Vibration", "s.rumble.s": "Controller rumble", "s.rumblep": "Vibration strength",
     "s.mouse": "Mouse aiming", "s.mouse.s": "Click into the window to capture the mouse", "s.msens": "Mouse sensitivity", "s.minv": "Invert mouse",
+    "s.chp": "Cheat: infinite health", "s.chp.s": "Single player and split screen only. Off in Online+ and online matches", "s.car": "Cheat: infinite armor", "s.car.s": "Single player and split screen only", "s.cam": "Cheat: infinite ammo", "s.cam.s": "The reserve does not go down when you reload",
+    "s.aaim": "Auto-aim (mouse)", "s.aaim.s": "Pulls the aim to enemies like on the PS2. Off = shots go exactly to the crosshair",
     "s.padm": "Gamepad: modern aiming", "s.padm.s": "Right stick turns the view, crosshair fixed in the centre, L2 zooms. Off = original PS2 controls", "s.pads": "Gamepad: turn speed", "s.unlock": "Unlock everything", "s.unlock.s": "Levels, characters and cheats open while this is on. Your own progress stays",
     "s.mmode": "Always hold aim mode", "s.mmode.s": "Original crosshair, but slower walking", "s.zoom": "Zoom sensitivity", "s.xhair": "Crosshair (mouse)", "s.pitch": "Look up/down limit (original 40°)", "s.scope": "Sniper scope", "tab.op": "Online+", "s.imp": "Impact effects (Online+)", "s.imp.s": "Off = the game exactly as on the PS2", "s.mark": "Hit and kill markers", "s.snd": "Hit and kill sounds", "s.kick": "Camera kick when hit", "s.opnote": "Level, XP and kills are shown in the game menu (ESC/F1), tab Online+.",
     "s.keys": "Key bindings and controllers are set in game (ESC / F1 / Guide button).",
@@ -119,7 +123,7 @@ const S = {
 };
 const DEF = { aufloesung: "9", bildformat: "4", fxaa: "0", cas: "1", cas_staerke: "25", texturfilter: "2", anisotrop: "16", tv_shader: "0", effekte: "aus",
   vsync: "0", fps_anzeige: "0", hd_text: "1", lautstaerke: "100", maus_zielen: "1", maus_empfindlichkeit: "30", maus_invertiert: "0", maus_zielmodus_dauer: "0",
-  zoom_empfindlichkeit: "50", fadenkreuz: "0", blickwinkel_max: "40", pad_modern: "0", pad_tempo: "100", alles_frei: "0", zielfernrohr: "1", online_plus_effekte: "1", schaden_stoss: "50", treffermarker: "1", treffer_klang: "1", vibration: "1", vibration_staerke: "100", trilinear: "2", dithering: "0" };
+  zoom_empfindlichkeit: "50", fadenkreuz: "0", blickwinkel_max: "40", pad_modern: "0", pad_tempo: "100", auto_ziel: "0", leben_unendlich: "0", ruestung_unendlich: "0", munition_unendlich: "0", alles_frei: "0", zielfernrohr: "1", online_plus_effekte: "1", schaden_stoss: "50", treffermarker: "1", treffer_klang: "1", vibration: "1", vibration_staerke: "100", trilinear: "2", dithering: "0" };
 const DEF_START = { widescreen: true, fullscreen: false, letterbox: false, renderer: "3", editions: "both", edition: "original" };
 const iv = (k) => S.ini[k] ?? DEF[k] ?? "";
 const favs = () => (S.ini.online_favoriten || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -412,9 +416,13 @@ function SETTINGS() {
       { k: "maus_zielmodus_dauer", type: "tog", label: "s.mmode" },
       { k: "fadenkreuz", type: "seg", label: "s.xhair", opts: [["0", opt("Kreuz", "Cross")], ["1", opt("Punkt", "Dot")], ["2", opt("Kreis", "Circle")], ["3", opt("Aus", "Off")]] },
       { k: "blickwinkel_max", type: "range", label: "s.pitch", min: 40, max: 85, unit: "°" },
+      { k: "auto_ziel", type: "tog", label: "s.aaim" },
       { k: "pad_modern", type: "tog", label: "s.padm" },
       { k: "pad_tempo", type: "range", label: "s.pads", min: 20, max: 300, unit: " %" },
       { k: "alles_frei", type: "tog", label: "s.unlock" },
+      { k: "leben_unendlich", type: "tog", label: "s.chp" },
+      { k: "ruestung_unendlich", type: "tog", label: "s.car" },
+      { k: "munition_unendlich", type: "tog", label: "s.cam" },
       { k: "zoom_empfindlichkeit", type: "range", label: "s.zoom", min: 5, max: 200, unit: "%" },
       { type: "note", label: "s.keys" },
     ],
@@ -436,6 +444,19 @@ function SETTINGS() {
 }
 const getV = (k) => (k[0] === "@" ? S.start[k.slice(1)] : iv(k));
 const isOn = (k) => { const v = getV(k); return v === true || v === "1" || v === "true"; };
+// The in-game menu (ESC/F1) writes the same settings file. After the game exits (and when the window gets the focus
+// back) the file is read again, so both always show the same values; settings changed here but not saved yet stay.
+async function reloadSettings() {
+  if (S.running) return;
+  let r; try { r = await API.settingsLoad(); } catch (_) { return; }
+  const fresh = r.ini || {};
+  for (const k of Object.keys(fresh)) { if (fresh[k] === "true") fresh[k] = "1"; else if (fresh[k] === "false") fresh[k] = "0"; }
+  const base = JSON.parse(S.saved || "[{},{}]");
+  for (const k of Object.keys(fresh)) if (S.ini[k] === base[0][k] || !(k in S.ini)) S.ini[k] = fresh[k];
+  S.saved = JSON.stringify([{ ...base[0], ...fresh }, base[1]]);
+  renderSettings(); dirty();
+}
+
 function setV(k, v) {
   if (k[0] === "@") { const n = k.slice(1); S.start[n] = typeof DEF_START[n] === "boolean" ? !!v : v; if (n === "fullscreen") S.ini.vollbild = v ? "1" : "0"; }
   else S.ini[k] = typeof v === "boolean" ? (v ? "1" : "0") : String(v);   // toggles: the settings file uses 1/0 ("true" was read as off)
@@ -523,6 +544,7 @@ function wire() {
   API.on("setup", setupEvent);
   API.on("game", (g) => {
     S.running = g.state === "running"; renderHome();
+    if (g.state === "exited") reloadSettings();
     if (g.state === "exited" && g.code && g.tail) {
       $("#setupBox").innerHTML = `<h3 class="err">${t("toast.exit", { c: g.code })}</h3><div class="logbox" style="max-height:260px">${esc(g.tail)}</div>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn" data-act="log">${t("s.log")}</button><button class="btn hot" id="exOk">OK</button></div>`;
@@ -572,6 +594,7 @@ function installUpdate(u) {
 
 (async function init() {
   wire();
+  window.addEventListener("focus", () => { reloadSettings(); });
   try { const r = await API.settingsLoad(); S.ini = r.ini || {}; for (const k of Object.keys(S.ini)) { if (S.ini[k] === "true") S.ini[k] = "1"; else if (S.ini[k] === "false") S.ini[k] = "0"; } S.start = { ...DEF_START, ...(r.start || {}) }; S.start.editions = "both"; } catch (e) { S.start = { ...DEF_START }; }
   S.start.editions = "both";
   S.saved = JSON.stringify([S.ini, S.start]);

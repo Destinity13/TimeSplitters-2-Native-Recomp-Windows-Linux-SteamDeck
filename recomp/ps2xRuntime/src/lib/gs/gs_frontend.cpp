@@ -319,6 +319,7 @@ extern std::atomic<unsigned> g_ps2xPadMaske;
 extern std::atomic<unsigned> g_ps2xPadRoh;
 extern std::atomic<unsigned> g_ps2xPadRStickAus;
 extern std::atomic<unsigned> g_ps2xPadAchsenRoh;
+extern std::atomic<unsigned> g_ps2xPadRStickSetzen;
 // Input from the PCSX2 game window (keyboard) + SDL3 gamepad. false = bridge without input -> old path (raylib).
 bool ps2xGsBridgePad(uint16_t &pressed, uint8_t axes[4])
 {
@@ -332,6 +333,8 @@ bool ps2xGsBridgePad(uint16_t &pressed, uint8_t axes[4])
     // right stick away from the game
     g_ps2xPadAchsenRoh.store(static_cast<unsigned>(axes[0]) | (static_cast<unsigned>(axes[1]) << 8) | (static_cast<unsigned>(axes[2]) << 16) | (static_cast<unsigned>(axes[3]) << 24), std::memory_order_relaxed);
     if (g_ps2xPadRStickAus.load(std::memory_order_relaxed)) axes[2] = axes[3] = 0x80;
+    // right stick set by the game override (TS2: the mouse steers a turret through the right stick)
+    if (const unsigned rs = g_ps2xPadRStickSetzen.load(std::memory_order_relaxed); rs & 0x10000u) { axes[2] = static_cast<uint8_t>(rs); axes[3] = static_cast<uint8_t>(rs >> 8); }
     p |= static_cast<unsigned short>(g_ps2xPadZusatz.load(std::memory_order_relaxed));
     // released for a few VBlanks so the game sees a fresh press (sniper scope opens only on an L2 edge)
     p &= static_cast<unsigned short>(~g_ps2xPadMaske.load(std::memory_order_relaxed));
@@ -341,6 +344,7 @@ bool ps2xGsBridgePad(uint16_t &pressed, uint8_t axes[4])
 std::atomic<unsigned> g_ps2xPadZusatz{0};   // PS2 buttons additionally pressed by the game override (player 1)
 std::atomic<unsigned> g_ps2xPadMaske{0};    // PS2 buttons the override forces released (player 1), after Zusatz
 std::atomic<unsigned> g_ps2xPadRStickAus{0};        // 1 = the game gets a centred right stick (player 1)
+std::atomic<unsigned> g_ps2xPadRStickSetzen{0};     // 0x10000 | rx | ry << 8 = right stick set by the override (player 1)
 std::atomic<unsigned> g_ps2xPadAchsenRoh{0x80808080u}; // player 1 axes as moved (lx | ly<<8 | rx<<16 | ry<<24)
 std::atomic<unsigned> g_ps2xPadRoh{0};      // player 1 buttons as the player pressed them (without Zusatz/Maske)
 // Mouse aiming: relative mouse movement collected since the last call (only while the game window captures the mouse).

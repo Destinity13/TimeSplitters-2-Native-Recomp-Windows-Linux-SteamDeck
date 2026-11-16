@@ -2399,6 +2399,7 @@ static void ps2xGifStat(int path, const uint8_t *data, uint32_t size)
 // Remember the render targets (FRAME_1/2.FBP from A+D, all GIF paths): a texture inside one of them is a
 // frame copy (blur, split-screen strips) and not HUD. TBP0 (64 words) vs. FBP (2048 words) -> FBP*32.
 static uint32_t g_ps2xFbSeen[8] = {~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u}; // FBP | FBW << 16
+static uint32_t g_ps2xFrame1Fbp = ~0u;   // FRAME_1.FBP as last set by the game (any path): the current draw target
 static void ps2xFbTrack(const uint8_t *data, uint32_t size)
 {
     uint32_t o = 0;
@@ -2416,6 +2417,7 @@ static void ps2xFbTrack(const uint8_t *data, uint32_t size)
                     const uint32_t ad = data[o + 8];
                     if (ad != 0x4C && ad != 0x4D) continue;
                     uint64_t dlo; std::memcpy(&dlo, data + o, 8); const uint32_t fbp = (dlo & 0x1FF) | (((dlo >> 16) & 0x3F) << 16);
+                    if (ad == 0x4C) g_ps2xFrame1Fbp = dlo & 0x1FF;
                     bool da = false; for (uint32_t k : g_ps2xFbSeen) da |= k == fbp;
                     if (!da) { static uint32_t n = 0; g_ps2xFbSeen[n++ & 7] = fbp; }
                 }
@@ -2430,6 +2432,58 @@ static bool ps2xTexIstBild(uint32_t tbp)
     for (uint32_t k : g_ps2xFbSeen)
         if (k != ~0u && tbp >= (k & 0x1FF) * 32u && tbp < (k & 0x1FF) * 32u + (k >> 16) * 448u) return true;   // FBW*64 x 448 px, 32 Bit
     return false;
+}
+
+
+// TS2_KOPIELOG=<tick,...> (diagnosis): every draw that reads a frame copy (texture inside a render target, direct
+// colour) in the listed VBlanks, summed per path / PRIM / ALPHA / texture / target: count, screen box, UV box.
+static void ps2xKopieLog(int path, const uint8_t *data, uint32_t size, uint64_t tick)
+{
+    static const std::vector<uint64_t> ticks = [] { std::vector<uint64_t> v; const char *e = std::getenv("TS2_KOPIELOG");
+        while (e && *e) { char *end; const unsigned long long t = std::strtoull(e, &end, 10); if (end == e) break; v.push_back(t); e = *end ? end + 1 : end; } return v; }();
+    if (ticks.empty()) return;
+    struct Sum { uint32_t n = 0; int32_t x0 = INT32_MAX, x1 = INT32_MIN, y0 = INT32_MAX, y1 = INT32_MIN, u0 = INT32_MAX, u1 = INT32_MIN, v0 = INT32_MAX, v1 = INT32_MIN; };
+    static std::map<std::tuple<int, uint32_t, uint64_t, uint32_t, uint32_t, uint32_t>, Sum> sum; static uint64_t akt = ~0ull;
+    static std::mutex mx; std::lock_guard<std::mutex> lk(mx);
+    if (tick != akt)
+    {
+        for (const auto &[k, v] : sum)
+            std::fprintf(stderr, "[KOPIE] t=%llu path=%d prim=%x ALPHA=%llx TBP=%x PSM=%x FBP=%x n=%u xy %d..%d,%d..%d uv %d..%d,%d..%d\n", (unsigned long long)akt,
+                         std::get<0>(k), std::get<1>(k), (unsigned long long)std::get<2>(k), std::get<3>(k), std::get<4>(k), std::get<5>(k), v.n,
+                         v.x0 / 16, v.x1 / 16, v.y0 / 16, v.y1 / 16, v.u0 / 16, v.u1 / 16, v.v0 / 16, v.v1 / 16);
+        sum.clear(); akt = tick;
+    }
+    if (std::find(ticks.begin(), ticks.end(), tick) == ticks.end()) return;
+    static uint32_t prim = 0, tbp = 0, psm = 0, fbp = 0; static uint64_t alpha = 0; static int32_t cu = 0, cv = 0;
+    uint32_t o = 0;
+    while (o + 16 <= size)
+    {
+        uint64_t lo, hi; std::memcpy(&lo, data + o, 8); std::memcpy(&hi, data + o + 8, 8); o += 16;
+        const uint32_t nloop = lo & 0x7FFF, flg = (lo >> 58) & 3; uint32_t nreg = (lo >> 60) & 0xF; if (!nreg) nreg = 16;
+        if ((lo >> 46) & 1) prim = (lo >> 47) & 0x7FF;
+        if (flg != 0) { o += flg == 1 ? ((nloop * nreg + 1) / 2) * 16 : nloop * 16; if (lo & 0x8000) break; continue; }
+        for (uint32_t i = 0; i < nloop; ++i)
+            for (uint32_t r = 0; r < nreg; ++r, o += 16)
+            {
+                if (o + 16 > size) return;
+                uint32_t reg = (hi >> (4 * r)) & 0xF; uint64_t v; std::memcpy(&v, data + o, 8); bool ad = false;
+                if (reg == 0xE) { reg = data[o + 8]; ad = true; }
+                if (reg == 0x00 && ad) prim = v & 0x7FF;
+                else if (reg == 0x06 || (ad && reg == 0x07)) { tbp = v & 0x3FFF; psm = (v >> 20) & 0x3F; }
+                else if (ad && (reg == 0x42 || reg == 0x43)) alpha = v;
+                else if (ad && (reg == 0x4C || reg == 0x4D)) fbp = v & 0x1FF;
+                else if (reg == 0x03) { if (ad) { cu = v & 0x3FFF; cv = (v >> 16) & 0x3FFF; } else { uint32_t a, b; std::memcpy(&a, data + o, 4); std::memcpy(&b, data + o + 4, 4); cu = a & 0x3FFF; cv = b & 0x3FFF; } }
+                else if (reg == 0x04 || reg == 0x05)
+                {
+                    if (!(prim & 0x10) || psm > 2 || !ps2xTexIstBild(tbp)) continue;
+                    uint16_t x, y; std::memcpy(&x, data + o, 2); std::memcpy(&y, data + o + (ad ? 2 : 4), 2);
+                    Sum &e = sum[{path, prim, alpha & 0xFF, tbp, psm, fbp}]; ++e.n;
+                    e.x0 = std::min<int32_t>(e.x0, x); e.x1 = std::max<int32_t>(e.x1, x); e.y0 = std::min<int32_t>(e.y0, y); e.y1 = std::max<int32_t>(e.y1, y);
+                    e.u0 = std::min(e.u0, cu); e.u1 = std::max(e.u1, cu); e.v0 = std::min(e.v0, cv); e.v1 = std::max(e.v1, cv);
+                }
+            }
+        if (lo & 0x8000) break;
+    }
 }
 
 // TS2_GROSSLOG=<tick,tick,...>: diagnosis for issue #3 (grey smoke wall). For the listed VBlank ticks, sums up per
@@ -2602,15 +2656,27 @@ extern int ps2xGsBridgeOption(int id, int fallback);
 // Scales RGBAQ.A of the vertices and ALPHA.FIX in the packet.
 static bool ps2xDunstFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
 {
-    static const int proz = [] { const char *e = std::getenv("TS2_DUNST"); return e && *e ? std::clamp(std::atoi(e), 0, 100) : 100; }();
-    if (proz >= 100) return false;
+    // Clear picture (16 Nov, user decision): the haze overlay follows the menu option "camera blur" (bridge option 0,
+    // default off = clear picture, on = original haze). TS2_DUNST=<0..100> overrides it (tests).
+    static const int envProz = [] { const char *e = std::getenv("TS2_DUNST"); return e && *e ? std::clamp(std::atoi(e), 0, 100) : -1; }();
+    static uint32_t pakete = 0, naechste = 0; static int proz = 0;
+    if (++pakete >= naechste) { proz = envProz >= 0 ? envProz : (::ps2xGsBridgeOption(0, 0) ? 100 : 0); naechste = pakete + 256; }
+    // Soft haze (default on, TS2_DUNST_WEICH=0 off, =<n> offset in 1/16 texel): on the PS2 the stretched copy comes from a
+    // small, low resolution part of the frame and is smeared by the bilinear filter. At a higher internal resolution
+    // that small part keeps all its detail, so the copy lay over the picture as a sharp, shifted second image (double
+    // vision in the distance, streaks; GitHub issue #9, PCSX2 forum "TimeSplitters 2: Upscaling Problem"). The overlay is
+    // drawn as four copies, shifted by half a source texel each way, with the opacity split so the sum matches the
+    // original: the same haze, but soft like on the PS2.
+    static const int weich = [] { const char *e = std::getenv("TS2_DUNST_WEICH"); return e && *e ? std::clamp(std::atoi(e), 0, 64) : 8; }();
+    if (proz >= 100 && weich <= 0) return false;
     static int32_t ofx = 1728 * 16, ofy = 1824 * 16;
-    std::vector<uint32_t> aOffs, fixOffs; std::vector<bool> aPacked;
+    std::vector<uint32_t> aOffs, fixOffs, uvOffs, tagOffs; std::vector<bool> aPacked, uvAd;
     int32_t mn = INT32_MAX, mx = INT32_MIN, ymn = INT32_MAX, ymx = INT32_MIN; uint32_t umn = 0xFFFF, umx = 0, nV = 0;
     uint32_t prim = 0, curU = 0; bool sprite = false, tme = false, alleSprite = true;
     uint32_t o = 0;
     while (o + 16 <= size)
     {
+        tagOffs.push_back(o);
         uint64_t lo, hi; std::memcpy(&lo, data + o, 8); std::memcpy(&hi, data + o + 8, 8); o += 16;
         const uint32_t nloop = lo & 0x7FFF, flg = (lo >> 58) & 3; uint32_t nreg = (lo >> 60) & 0xF; if (!nreg) nreg = 16;
         if ((lo >> 46) & 1) prim = (lo >> 47) & 0x7FF;
@@ -2624,7 +2690,7 @@ static bool ps2xDunstFix(const uint8_t *data, uint32_t size, std::vector<uint8_t
                 if (reg == 0xE) { reg = data[o + 8]; ad = true; if (reg == 0x00) prim = v & 0x7FF; else if (reg == 0x18) { ofx = v & 0xFFFF; ofy = (v >> 32) & 0xFFFF; } }
                 if (reg == 0x01) { aOffs.push_back(o); aPacked.push_back(!ad); }
                 else if (ad && reg == 0x42) fixOffs.push_back(o);
-                else if (reg == 0x03) curU = ad ? (v & 0x3FFF) : (v & 0x3FFF);
+                else if (reg == 0x03) { curU = ad ? (v & 0x3FFF) : (v & 0x3FFF); uvOffs.push_back(o); uvAd.push_back(ad); }
                 else if (reg == 0x04 || reg == 0x05)
                 {
                     uint16_t x, y; std::memcpy(&x, data + o, 2); std::memcpy(&y, data + o + (ad ? 2 : 4), 2);
@@ -2638,6 +2704,37 @@ static bool ps2xDunstFix(const uint8_t *data, uint32_t size, std::vector<uint8_t
     if (!nV || !alleSprite || nV > 8) return false;
     const float w = (mx - mn) / 16.0f, h = (ymx - ymn) / 16.0f, uw = (umx - umn) / 16.0f;
     if (w < 500.0f || h < 440.0f || uw >= 0.6f * w || uw < 8.0f) return false;   // Vollbild, stark vergroessert
+    if (weich > 0 && !uvOffs.empty() && o <= size)
+    {
+        // four shifted copies; each blends with a' so that (1-a')^4 = 1-a (the same total weight as the single original)
+        const uint32_t ende = o;
+        static const int dx[4] = {-1, 1, -1, 1}, dy[4] = {-1, -1, 1, 1};
+        out.clear(); out.reserve(static_cast<size_t>(ende) * 4 + (size - ende));
+        for (int k = 0; k < 4; ++k)
+        {
+            const size_t basis = out.size();
+            out.insert(out.end(), data, data + ende);
+            uint8_t *q = out.data() + basis;
+            auto teil = [&](uint32_t a) -> uint8_t { const double af = std::min(1.0, (a * proz / 100.0) / 128.0); return static_cast<uint8_t>(std::lround((1.0 - std::pow(1.0 - af, 0.25)) * 128.0)); };
+            for (size_t i = 0; i < aOffs.size(); ++i) { const uint32_t b = aOffs[i] + (aPacked[i] ? 12 : 3); q[b] = teil(q[b]); }
+            for (uint32_t f : fixOffs) q[f + 4] = teil(q[f + 4]);
+            for (size_t i = 0; i < uvOffs.size(); ++i)
+            {
+                uint32_t uu, vv; const uint32_t ou = uvOffs[i], ov = uvOffs[i] + (uvAd[i] ? 0 : 4);
+                std::memcpy(&uu, q + ou, 4); std::memcpy(&vv, q + ov, 4);
+                const int sv = uvAd[i] ? 16 : 0;
+                const int32_t u = static_cast<int32_t>(uu & 0x3FFF) + dx[k] * weich, v = static_cast<int32_t>((vv >> sv) & 0x3FFF) + dy[k] * weich;
+                uu = (uu & ~0x3FFFu) | static_cast<uint32_t>(std::clamp(u, 0, 0x3FFF));
+                if (uvAd[i]) uu = (uu & ~(0x3FFFu << 16)) | (static_cast<uint32_t>(std::clamp(v, 0, 0x3FFF)) << 16); else vv = (vv & ~0x3FFFu) | static_cast<uint32_t>(std::clamp(v, 0, 0x3FFF));
+                std::memcpy(q + ou, &uu, 4); if (!uvAd[i]) std::memcpy(q + ov, &vv, 4);
+            }
+            if (k < 3) for (uint32_t t : tagOffs) q[t + 1] &= 0x7F;   // EOP only on the last copy
+        }
+        out.insert(out.end(), data + ende, data + size);
+        static long logW = [] { const char *e = std::getenv("PS2X_DUNSTLOG"); return e ? std::atol(e) : 0L; }();
+        if (logW > 0) { --logW; std::fprintf(stderr, "[HAZE] soft: 4 copies, offset %d/16 texel, %zu UV, uv width %.0f\n", weich, uvOffs.size(), uw); }
+        return true;
+    }
     out.assign(data, data + size);
     for (size_t i = 0; i < aOffs.size(); ++i)
     {
@@ -2651,6 +2748,95 @@ static bool ps2xDunstFix(const uint8_t *data, uint32_t size, std::vector<uint8_t
     return true;
 }
 
+
+// Diagonal self copy (GitHub issue #9, "double vision", streaks): every frame TS2 draws the finished frame onto itself
+// with 64 px wide triangle strips (PRIM 0x15C, FST, ALPHA 0x44 = (Cs-Cd)*As+Cd, half transparent), UV = XY + 0.5 texel.
+// The PS2 samples at the pixel's top left corner, so +0.5 hits the texel centre: an exact copy. The PC renderer
+// samples at pixel centres; at a higher internal resolution the copy is then read half a PS2 pixel right and down
+// (2 px at 4x) and blended over the picture: a second image diagonally shifted, double edges everywhere, worst in
+// the distance. Measured with TS2_KOPIELOG / TS2_VERSATZLOG in Siberia (16 Nov). The copy is made congruent (UV = XY).
+// TS2_VERSATZ=0 = original.
+static bool ps2xVersatzFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out, bool aendern)
+{
+    static const bool an = [] { const char *e = std::getenv("TS2_VERSATZ"); return !(e && *e == '0'); }();
+    if (!an) return false;
+    static uint32_t prim = 0, tbp = 0, psm = 0, fbp = 0; static uint64_t alpha = 0; static int32_t ofx = 1728 * 16, ofy = 1824 * 16;
+    struct Uv { uint32_t off; bool ad; };
+    std::vector<std::pair<Uv, std::pair<int32_t, int32_t>>> verts;   // UV entry of the vertex, its XY (relative, 1/16)
+    Uv letzt{~0u, false}; bool fremd = false; uint32_t nV = 0;
+    uint32_t o = 0;
+    while (o + 16 <= size)
+    {
+        uint64_t lo, hi; std::memcpy(&lo, data + o, 8); std::memcpy(&hi, data + o + 8, 8); o += 16;
+        const uint32_t nloop = lo & 0x7FFF, flg = (lo >> 58) & 3; uint32_t nreg = (lo >> 60) & 0xF; if (!nreg) nreg = 16;
+        if ((lo >> 46) & 1) prim = (lo >> 47) & 0x7FF;
+        if (flg != 0) { o += flg == 1 ? ((nloop * nreg + 1) / 2) * 16 : nloop * 16; if (lo & 0x8000) break; continue; }
+        for (uint32_t i = 0; i < nloop; ++i)
+            for (uint32_t r = 0; r < nreg; ++r, o += 16)
+            {
+                if (o + 16 > size) return false;
+                uint32_t reg = (hi >> (4 * r)) & 0xF; uint64_t v; std::memcpy(&v, data + o, 8); bool ad = false;
+                if (reg == 0xE) { reg = data[o + 8]; ad = true; }
+                if (reg == 0x00 && ad) prim = v & 0x7FF;
+                else if (ad && reg == 0x18) { ofx = v & 0xFFFF; ofy = (v >> 32) & 0xFFFF; }
+                else if (reg == 0x06 || (ad && reg == 0x07)) { tbp = v & 0x3FFF; psm = (v >> 20) & 0x3F; }
+                else if (ad && (reg == 0x42 || reg == 0x43)) alpha = v;
+                else if (ad && (reg == 0x4C || reg == 0x4D)) fbp = v & 0x1FF;
+                else if (reg == 0x03) letzt = Uv{o, ad};
+                else if (reg == 0x04 || reg == 0x05)
+                {
+                    ++nV;
+                    {
+                        static long logA = [] { const char *e = std::getenv("TS2_VERSATZLOG"); return e ? std::atol(e) * 10 : 0L; }();
+                        if (logA > 0 && aendern && (prim & 0x110) == 0x110 && psm <= 2) { --logA; uint16_t x, y; std::memcpy(&x, data + o, 2); std::memcpy(&y, data + o + (ad ? 2 : 4), 2);
+                            uint32_t ua = 0; if (letzt.off != ~0u) std::memcpy(&ua, data + letzt.off, 4);
+                            std::fprintf(stderr, "[VERSATZ] v prim %x tbp %x psm %u bild %d uvreg %d u %u xy %d,%d of %d\n", prim, tbp, psm, ps2xTexIstBild(tbp) ? 1 : 0, letzt.off != ~0u ? 1 : 0, ua & 0x3FFF, (x - ofx) / 16, (y - ofy) / 16, ofx / 16); }
+                    }
+                    const bool kopie = (prim & 0x150) == 0x150 && (prim & 7) == 4 && psm <= 2 && ps2xTexIstBild(tbp) && letzt.off != ~0u;   // FRAME/ALPHA may come through another path: the small UV offset checked below is the signature
+                    if (!kopie)
+                    {
+                        static long logK = [] { const char *e = std::getenv("TS2_VERSATZLOG"); return e ? std::atol(e) * 4 : 0L; }();
+                        if (logK > 0 && (prim & 0x1FF) == 0x15C) { --logK; std::fprintf(stderr, "[VERSATZ] 0x15C not taken: alpha %llx tbp %x fbp %x psm %u uv %d\n", (unsigned long long)(alpha & 0xFF), tbp, fbp, psm, letzt.off != ~0u ? 1 : 0); }
+                        fremd = true; continue;
+                    }
+                    uint16_t x, y; std::memcpy(&x, data + o, 2); std::memcpy(&y, data + o + (ad ? 2 : 4), 2);
+                    verts.push_back({letzt, {static_cast<int32_t>(x) - ofx, static_cast<int32_t>(y) - ofy}});
+                }
+            }
+        if (lo & 0x8000) break;
+    }
+    (void)fremd; (void)nV;
+    if (!aendern || verts.empty()) return false;   // other paths: only follow the register state (PRIM, TEX0 can come from there)
+    // only vertices whose UV lies up to 2.5 texels away from their XY are changed
+    auto lesen = [&](const Uv &u, int32_t &uu, int32_t &vv) { uint32_t a, b; std::memcpy(&a, data + u.off, 4); std::memcpy(&b, data + u.off + 4, 4);
+        if (u.ad) { uu = a & 0x3FFF; vv = (a >> 16) & 0x3FFF; } else { uu = a & 0x3FFF; vv = b & 0x3FFF; } };
+    std::vector<bool> passt(verts.size(), false); size_t nPasst = 0;
+    for (size_t i = 0; i < verts.size(); ++i)
+    {
+        int32_t uu, vv; lesen(verts[i].first, uu, vv);
+        const int32_t du = uu - verts[i].second.first, dv = vv - verts[i].second.second;
+        const int32_t adu = du < 0 ? -du : du, adv = dv < 0 ? -dv : dv;   // measured: +-8 = half a texel (PS2 samples at the texel corner)
+        if (adu <= 40 && adv <= 40 && (adu | adv)) { passt[i] = true; ++nPasst; }   // seen: (8,8) (8,-8) (24,8): 0.5 to 1.5 texel, varies per strip
+    }
+    static long logD = [] { const char *e = std::getenv("TS2_VERSATZLOG"); return e ? std::atol(e) : 0L; }();
+    if (logD > 0 && !nPasst) { --logD; int32_t uu, vv; lesen(verts[0].first, uu, vv); std::fprintf(stderr, "[VERSATZ] copy strips, no shift: uv %d,%d xy %d,%d (%zu vertices)\n", uu, vv, verts[0].second.first, verts[0].second.second, verts.size()); }
+    if (!nPasst) return false;
+    out.assign(data, data + size);
+    for (size_t i = 0; i < verts.size(); ++i)
+    {
+        if (!passt[i]) continue;
+        const auto &u = verts[i].first; const auto &xy = verts[i].second;
+        uint32_t a, b; std::memcpy(&a, out.data() + u.off, 4); std::memcpy(&b, out.data() + u.off + 4, 4);
+        const uint32_t nu = static_cast<uint32_t>(std::clamp(xy.first, 0, 0x3FFF)), nv = static_cast<uint32_t>(std::clamp(xy.second, 0, 0x3FFF));
+        if (u.ad) a = (a & ~0x3FFF3FFFu) | nu | (nv << 16); else { a = (a & ~0x3FFFu) | nu; b = (b & ~0x3FFFu) | nv; }
+        std::memcpy(out.data() + u.off, &a, 4); if (!u.ad) std::memcpy(out.data() + u.off + 4, &b, 4);
+    }
+    static long logR = [] { const char *e = std::getenv("TS2_VERSATZLOG"); return e ? std::atol(e) : 0L; }();
+    if (logR > 0) { --logR; std::fprintf(stderr, "[VERSATZ] self copy made congruent: %zu of %zu vertices\n", nPasst, verts.size()); }
+    return true;
+}
+
+extern std::atomic<long long> g_ps2xScopeMs;
 static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
 {
     // A frame copy is a direct-colour texture (CT32/CT24/CT16). Palette textures at an address that once was a render
@@ -2662,6 +2848,13 @@ static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint
     static uint32_t pakete = 0, naechste = 0; static int an = 0;
     if (++pakete >= naechste) { an = ps2xGsBridgeOption(1, envFallback); naechste = pakete + 256; }
     if (an) return false;
+    // While the sniper scope is up this pass is part of the scope picture (darker, green, sharper edge of the reticle
+    // field); without it the scope view was about 15 % brighter and milky compared to the original (PCSX2 reference
+    // run, 16 Nov). So it is never removed while the scope shows.
+    {
+        const long long jetzt = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (jetzt - g_ps2xScopeMs.load(std::memory_order_relaxed) < 400) return false;
+    }
     bool geaendert = false;
     // Trail primitive: triangle strip/sprite with texture + alpha (FST), ALPHA 0x44, texture = start of the OTHER frame buffer
     auto treffer = [&]() {
@@ -2723,17 +2916,23 @@ static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint
 // time (ms, steady clock) the scope's zoom feedback sprite was last seen: the mouse aiming in ts2_override
 // uses it to notice "sniper scope is up although no zoom key is held"
 std::atomic<long long> g_ps2xScopeMs{0};
+std::atomic<bool> g_ps2xUplink{false};   // ts2_override.cpp: the player holds the Temporal Uplink (issue #12)
 static bool ps2xScopeKlarFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
 {
     // A frame copy is a direct-colour texture (CT32/CT24/CT16). Palette textures at an address that once was a render
     // target (impact smoke: 8-bit, TBP 0x33e0) are ordinary textures and must stay untouched (GitHub issue #3).
     static uint32_t psm = 0;
-    static const int envFallback = [] { const char *e = std::getenv("TS2_SCOPE_KLAR"); return e && *e ? std::clamp(std::atoi(e), 0, 3) : 1; }();
+    static const int envFallback = [] { const char *e = std::getenv("TS2_SCOPE_KLAR"); return e && *e ? std::clamp(std::atoi(e), 0, 3) : 0; }();
     static uint32_t prim = 0, tbp = 0; static uint64_t alpha = 0;
     static bool anker = false; static uint16_t ax = 0, ay = 0;
     static uint32_t pakete = 0, naechste = 0; static int stufe = 1;
     if (++pakete >= naechste) { stufe = ps2xGsBridgeOption(12, envFallback); naechste = pakete + 256; }
-    if (stufe <= 0) return false;
+    // 0 and 1 = original picture (only the scope is detected, for the mouse layer and the motion trail pass). The
+    // "clear" mode (1) filled the picture edges with strips of an older frame: on 16:9 and wider screens they lay over
+    // the picture as a shifted, doubled copy, and the scope was brighter than on the PS2 (comparison with the original
+    // in PCSX2, 16 Nov). 2 = extra clear stays as an option.
+    if (stufe == 1) stufe = 0;
+    const bool nurErkennen = stufe <= 0;
     bool geaendert = false;
     uint32_t alphaOff = ~0u;   // offset of the ALPHA_1 write (A+D) in this packet
     // Feedback weight of the zoom sprite: Klar 8 %, Extra klar 4 % (original: destination alpha)
@@ -2750,6 +2949,7 @@ static bool ps2xScopeKlarFix(const uint8_t *data, uint32_t size, std::vector<uin
         if (bild && typ == 6 && a == 0x54 && stufe != 3)
         {
             g_ps2xScopeMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(), std::memory_order_relaxed);
+            if (nurErkennen) { anker = false; return; }
             if (nEcken < 2 && uvOff != ~0u) ecken[nEcken++] = {uvOff, o, uvAd, ad};
             // zoom feedback sprite: keep it (it also fills the picture edges), but with a small fixed weight
             if (alphaOff != ~0u) { if (!alphaGesetzt) { kopie(); uint64_t v; std::memcpy(&v, out.data() + alphaOff, 8);
@@ -3114,6 +3314,28 @@ static bool ps2xHudFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> 
         }
     }
     if (nSprKopie && nSprKopie * 2 >= nSpr) return false;   // ueberwiegend Streifenkopien -> Effekt
+    // Temporal Uplink in hand (GitHub issue #12): the view cone and the player dot of its map are 2D sprites. Squeezed
+    // or moved to the edge like the HUD, the dot slid away from the cone. While the uplink is held they keep their
+    // place. TS2_UPLINK_FIX=0 = old behaviour.
+    {
+        extern std::atomic<bool> g_ps2xUplink;
+        static const bool upAn = [] { const char *e = std::getenv("TS2_UPLINK_FIX"); return !(e && *e == '0'); }();
+        const float bx0 = (mn - static_cast<float>(ofx)) / 16.0f, bx1 = (mx - static_cast<float>(ofx)) / 16.0f;
+        const float by0 = (ymn - static_cast<float>(ofy)) / 16.0f, by1 = (ymx - static_cast<float>(ofy)) / 16.0f;
+        // The uplink draws its map (view cone, player dot) as a texture for the device screen. Anything drawn into another
+        // buffer than the picture (target of the full-width 2D passes) while the uplink is held keeps its place.
+        static long lg = [] { const char *e = std::getenv("TS2_UPLINKLOG"); return e ? std::atol(e) : 0L; }();
+        static uint32_t bildFbp = ~0u;
+        if (bx1 - bx0 >= 500.0f && g_ps2xFrame1Fbp != ~0u) bildFbp = g_ps2xFrame1Fbp;
+        const bool halt = g_ps2xUplink.load(std::memory_order_relaxed);
+        // Measured (pc274 log): the map goes into the same buffer as the picture, into its top part (x 192-374, y 0-182),
+        // and is then used as the texture of the device screen. So: while the uplink is held, 2D packets that lie
+        // completely inside that area are map content and keep their place.
+        const bool imKarte = bx0 >= 188.0f && bx1 <= 378.0f && by0 >= -2.0f && by1 <= 186.0f;
+        const bool treffer = upAn && halt && (imKarte || (bildFbp != ~0u && g_ps2xFrame1Fbp != bildFbp));
+        if (lg > 0 && halt) { --lg; std::fprintf(stderr, "[UPLINK] 2D x %.0f-%.0f y %.0f-%.0f n %u prims %03x fbp %x (picture %x) %s\n", bx0, bx1, by0, by1, nVert, primSeen, g_ps2xFrame1Fbp, bildFbp, treffer ? "kept in place" : "normal"); }
+        if (treffer) return false;
+    }
     const float L = static_cast<float>(ofx), Wd = 640.0f * 16.0f;
     const float wpx = (mx - mn) / 16.0f, cpx = ((mn + mx) * 0.5f - L) / 16.0f;
     // Menu detection for TS2_HUD_RAND: menus draw wide 2D areas (background, header); there are none in the
@@ -3281,6 +3503,7 @@ void PS2Memory::submitGifPacket(GifPathId pathId, const uint8_t *data, uint32_t 
     ps2xFbTrack(data, sizeBytes);
     ps2xBlendLog(pathId == GifPathId::Path1 ? 1 : pathId == GifPathId::Path2 ? 2 : 3, data, sizeBytes);
     if (pathId == GifPathId::Path1) ps2xGrossLog(data, sizeBytes, gs().vsyncTick.load(std::memory_order_relaxed));
+    ps2xKopieLog(pathId == GifPathId::Path1 ? 1 : pathId == GifPathId::Path2 ? 2 : 3, data, sizeBytes, gs().vsyncTick.load(std::memory_order_relaxed));
     thread_local std::vector<uint8_t> hudBuf;
     if (pathId == GifPathId::Path1 && ps2xHudFix(data, sizeBytes, hudBuf, gs().vsyncTick.load(std::memory_order_relaxed)))
     {
@@ -3292,6 +3515,12 @@ void PS2Memory::submitGifPacket(GifPathId pathId, const uint8_t *data, uint32_t 
     {
         data = dunstBuf.data();
         sizeBytes = static_cast<uint32_t>(dunstBuf.size());
+    }
+    thread_local std::vector<uint8_t> versatzBuf;
+    if (ps2xVersatzFix(data, sizeBytes, versatzBuf, pathId == GifPathId::Path1))
+    {
+        data = versatzBuf.data();
+        sizeBytes = static_cast<uint32_t>(versatzBuf.size());
     }
     thread_local std::vector<uint8_t> nachziehBuf;
     if (pathId == GifPathId::Path1 && ps2xNachziehFix(data, sizeBytes, nachziehBuf))

@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-16T15:00:00Z",
+    "title": "Version 1.2 - patch notes",
+    "tag": "Release",
+    "body": "Clearer picture at high resolutions, scope weapons fixed, mouse speed follows the zoom, Temporal Uplink map fixed, optional cheats, Steam Deck launcher, safer Windows setup.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-16-patch-notes-1-2.md"
+  },
+  {
     "date": "2026-11-16T09:55:00Z",
     "title": "Devlog: where 1.1.1 stands",
     "tag": "Devlog",

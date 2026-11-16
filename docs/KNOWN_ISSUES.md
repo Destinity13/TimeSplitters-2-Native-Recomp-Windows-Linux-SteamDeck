@@ -2,7 +2,7 @@
 
 # Known issues
 
-An honest list, as of 14 November 2026 (release 1.1.0).
+An honest list, as of 16 November 2026 (release 1.2).
 
 ## Not a bug
 
@@ -21,24 +21,41 @@ An honest list, as of 14 November 2026 (release 1.1.0).
 
 ## Open
 
-- **Mouse aiming: switching back to the sniper rifle** can bring the scope up once for a moment. The port only
-  learns from the rising scope that the weapon is a scope weapon. The weapon slot is found in the player object
-  (`+0xD48`); the fix is planned for the next patch.
-- **Online+ (experimental edition):** the scoreboard does not always count your own kills, and bot matches can
-  stutter. Not reproduced in the scripted bot match yet (59.94 FPS there); needs a log from a real match
-  (`TS2_IMPACT_LOG=1`).
+- **Siberia dam twin gun with mouse aiming:** the game moves the camera onto the gun without changing the held
+  weapon; the mouse layer takes that for a cutscene and pauses, or turns the character. With a gamepad it works.
+  The probe logs `[waffe]` / `[kamera]` record what changes when you get on the gun.
+- **Steam Deck: short slowdowns while loading** (after the profile screen and when a mission starts, a few seconds
+  at 42 to 56 FPS, music slows with them). Measured the same at 1x and 2x and without texture packs, so it is the
+  CPU while loading, not the picture settings. Everywhere else 60 FPS.
+
+- **Weapons with mouse aiming:** the Sniper Rifle tap-to-scope is checked by the `scopetap` regression case, the
+  Vintage Rifle and the S47 by playing. All 10 Arcade weapon sets ran; the other weapons have not been checked one by
+  one yet (that needs an "all weapons" switch, which is planned).
+- **Online+ (experimental edition):** bot matches can stutter. Own kills that the game's counter misses are now taken from the hit detection
+  (a bot dying within half a second after your hit counts as your kill). Not yet confirmed in a scripted match because
+  the scripted player rarely hits a bot. The hit detection no longer scans memory in one go twice a second (3 ms
+  spikes); it is spread over 30 frames (0.2 ms per frame, same figures found).
 - **HUD may move towards the centre for a moment while damage arcs are drawn** (16:9). Since 1.1.0 wide effects that
   reach beyond the screen no longer count as a menu; seen working in a deathmatch frame, but not yet confirmed with
   the arcs on screen in the same frame.
 - **Impact smoke at very close range** can show a faint straight edge of the sprite.
 - **Explosions and the fountain water** have not been compared one by one with PCSX2 yet. Smoke, debris, sparks and
   snow have.
+- **Windows setup stopping at 68 %** (issue #4): the link step hung on two PCs (one of them with 16 threads). Since 1.2 the
+  first try is stopped after 15 minutes and the setup tries two more ways (one core with a fresh build cache after
+  stopping leftovers of an aborted setup; build cache and output in the temp folder). Each way was forced on the test
+  laptop. The cause itself is not found yet; `app/build/setup.log` from an affected PC helps.
+- **High refresh rate screens (144 Hz and more):** the game runs at 60 frames per second; without G-Sync/FreeSync
+  turning can look uneven because 60 does not divide the refresh rate. Turn on VSync in the launcher, use
+  G-Sync/FreeSync, or set the screen to 120 Hz. Reported once (controller, RTX 5070 Ti), not confirmed with a log.
 - **Windows:** tested on one laptop (Windows 11, GTX 1050 + Intel HD 630) and by one tester, plus the CI runners.
   AMD and Intel graphics are untested. The "fall back to the Windows default graphics card" path has never had to
   run in a test.
-- **Automatic updates** are tested with real packages (old installation, real update files), but the download from a
-  real GitHub release runs for the first time with the update after 1.1.0. Steam Deck Game Mode and Linux without
-  WebKitGTK start without the launcher and do not update by themselves.
+- **Automatic updates** are tested with real packages (old installation, real update files); 1.2 is the first update
+  that is downloaded from a real GitHub release; it rebuilds the game once from the remembered disc image. Since 1.2 the Linux package also brings the
+  launcher as an AppImage with its own WebKitGTK, so it opens on SteamOS and in Game Mode too. An update that replaces the running
+  AppImage was tested with a test update (`--update-from`) in an environment without WebKitGTK; a real download from
+  GitHub on a Deck happens first with the update after 1.2.
 - **Some Arcade setup menus** (3D character preview) run at 49–56 FPS; main menus and gameplay run at 59.9 FPS.
 - **Sound:** three bugs in the real-time sound path fixed (`pc069`–`pc073`, see FINDINGS); being verified by
   playing. `TS2_MITSCHNITT=1` records the sound (`ton.wav`) and a screenshot every 30 s for checking.
@@ -63,8 +80,24 @@ An honest list, as of 14 November 2026 (release 1.1.0).
   14–30 FPS at 4× before, 58 FPS on average after (a new graphics driver was installed in between).
 - **Launcher switches could not be turned on or off** (1.1.0, before release): the launcher wrote `true`/`false`, the
   game reads `1`/`0`.
-- **Accurate mouse aim only after pressing the zoom key once; S47 stayed zoomed** (1.1.0): the held aim mode gets a
-  fresh press when it starts, and the view scale (`+0x914`) is held at its normal value while no zoom key is pressed.
+- **Scope weapons with the mouse** (1.2): Sniper Rifle scope coming up after a weapon change, Vintage Rifle scope
+  stuck or flickering. The port reads the weapon in hand (player `+0x584` → gun `+8`, model table `0x5410C0`) and the
+  scope flag from the game's weapon table (`0x4C3818`, `+8` bit 0x20); tap to scope added.
+- **S47 stayed zoomed with mouse aiming** (1.2): the game's weapon table holds the field of view used in aim mode
+  (`+0x54`: S47 40°). While only the port holds the aim mode it is set to 60° and restored when the zoom key is used.
+  The 1.1.0 fix held `+0x914`, which turned out to be only the zoom animation.
+- **Online+: own kills missing, small hitch twice a second** (1.2): kills taken from the hit detection when the
+  game's counter stays; the memory scan is spread over 30 frames.
+- **Steam Deck: mouse needed a wake-up click** (1.2, issue #5).
+- **Turrets could not be used with mouse aiming** (1.2, issues #6 and #8): the held aim mode made the character get off,
+  and the mouse did not steer them (the game turns turrets through the right stick).
+- **Mouse crosshair in cutscenes** (1.2, issue #8).
+- **Mouse stopped working in Neo Tokyo after being healed** (1.2, issue #8): health above the maximum made the port
+  think the player was not alive. Fixed by reasoning, the spot itself was not replayed.
+- **Steam Deck: launcher did not open, old dialogs and no updates** (1.2): SteamOS has no webkit2gtk-4.1; the
+  package now also ships the launcher as an AppImage with its own copy, and `TS2-SteamDeck.sh` opens it.
+- **Accurate mouse aim only after pressing the zoom key once** (1.1.0): the held aim mode gets a fresh press when it
+  starts.
 - **Siberia: pulsing white snow haze, impact smoke as a hard grey patch, oversized debris** (1.1.0): one cause,
   four entries of the VU1 opcode map in the EFU group were on the wrong index (ESIN, EATAN, ERSQRT, EEXP). The
   game's particle program got a wrong sine for the sprite rotation. Checked against PCSX2's opcode table (130
