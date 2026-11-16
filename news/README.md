@@ -4,6 +4,7 @@ Patch notes, dev logs and what we're working on next. The same posts also show u
 
 | Date | Post | Type |
 |---|---|---|
+| 2026-11-16 | [Devlog: where 1.1.1 stands](2026-11-16-devlog-where-1-1-1-stands.md) | Devlog |
 | 2026-11-15 | [Update 1.1.1 takes a little longer](2026-11-15-1-1-1-a-little-longer.md) | Update |
 | 2026-11-15 | [Coming soon: update 1.1.1](2026-11-15-coming-in-1-1-1.md) | Coming soon |
 | 2026-11-15 | [Weapons with mouse aiming - we are working on a fix](2026-11-15-weapons-and-mouse-aiming.md) | Update |
