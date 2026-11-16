@@ -35,7 +35,7 @@ const L = {
     "upd.rebuild": "Update installiert – das Spiel wird jetzt neu verknüpft …", "upd.restart": "Launcher wurde aktualisiert und startet neu …",
     "upd.title": "Neues Update verfügbar", "upd.ask": "Version {v} ist da ({mb}). Du kannst jetzt aktualisieren oder erst mit deiner aktuellen Version spielen.", "upd.playOld": "Ohne Update spielen", "upd.install": "Jetzt updaten",
     "upd.btn": "Update", "upd.btnSub": "{v} verfügbar", "upd.head": "Update auf {v} wird installiert …", "upd.s.backup": "Spielstände sichern", "upd.s.download": "Herunterladen", "upd.s.install": "Installieren",
-    "upd.dl": "Heruntergeladen", "upd.speed": "Tempo", "upd.finTitle": "Fertig!", "upd.fin": "Version {v} ist installiert. Du kannst starten, viel Spaß!", "upd.notes": "Was ist neu",
+    "upd.dl": "Heruntergeladen", "upd.speed": "Tempo", "upd.finTitle": "Fertig!", "upd.fin": "Version {v} ist installiert. Du kannst starten, viel Spaß!", "upd.notes": "Was ist neu", "upd.stale": "Nach dem Update muss das Spiel einmal neu verknüpft werden. Das dauert ein paar Minuten, deine Spielstände bleiben erhalten.", "upd.relink": "Jetzt verknüpfen", "upd.staleTitle": "Noch ein Schritt",
     "upd.s.verify": "Dateien prüfen", "upd.s.finish": "Fertig", "upd.bg": "Im Hintergrund weiter", "upd.files": "{i} von {n} Dateien", "upd.saved": "{n} Einträge gesichert",
     "upd.pkgDelta": "nur geänderte Dateien", "upd.pkgFull": "komplettes Paket", "upd.facts": "Download {dl} · {n} Dateien ändern sich · Spielstände werden vorher gesichert", "upd.left": "noch",
     "upd.what": "Der Launcher sichert zuerst deine Spielstände, lädt dann nur die geänderten Dateien, prüft jede einzelne und tauscht sie erst aus, wenn alles stimmt. Geht etwas schief, bleibt alles wie es war.",
@@ -93,7 +93,7 @@ const L = {
     "upd.rebuild": "Update installed – relinking the game …", "upd.restart": "The launcher was updated and restarts …",
     "upd.title": "New update available", "upd.ask": "Version {v} is here ({mb}). You can update now or play your current version first.", "upd.playOld": "Play without updating", "upd.install": "Update now",
     "upd.btn": "Update", "upd.btnSub": "{v} available", "upd.head": "Installing update {v} …", "upd.s.backup": "Backing up saves", "upd.s.download": "Downloading", "upd.s.install": "Installing",
-    "upd.dl": "Downloaded", "upd.speed": "Speed", "upd.finTitle": "Done!", "upd.fin": "Version {v} is installed. You can start now, have fun!", "upd.notes": "What's new",
+    "upd.dl": "Downloaded", "upd.speed": "Speed", "upd.finTitle": "Done!", "upd.fin": "Version {v} is installed. You can start now, have fun!", "upd.notes": "What's new", "upd.stale": "After the update the game has to be linked once more. This takes a few minutes, your saves are kept.", "upd.relink": "Link now", "upd.staleTitle": "One more step",
     "upd.s.verify": "Checking files", "upd.s.finish": "Done", "upd.bg": "Continue in background", "upd.files": "{i} of {n} files", "upd.saved": "{n} items backed up",
     "upd.pkgDelta": "changed files only", "upd.pkgFull": "full package", "upd.facts": "Download {dl} · {n} files change · saves are backed up first", "upd.left": "left",
     "upd.what": "The launcher backs up your saves first, then downloads only the changed files, checks every single one and replaces them only when all of them are right. If anything goes wrong, nothing changes.",
@@ -241,6 +241,7 @@ const curEd = () => S.start.editions === "onlineplus" ? "onlineplus" : S.start.e
 async function play() {
   if (U.active) { U.dlg = true; renderUpdDlg(); return; }
   if (S.running || P.active) return;
+  if (S.status.ready && S.status.stale) return showStale();
   if (S.updInfo && S.status.ready) return showUpdateDialog(S.updInfo);
   if (!S.status.ready) return openSetup();
   S.start.edition = curEd();
@@ -608,6 +609,22 @@ function showUpdateDialog(u) {
   if (canOld) $("#updOld").onclick = () => { close(); playNow(); };
   $("#updNow").onclick = () => { close(); installUpdate(u); };
 }
+// game code was replaced by an update: link the game again with the disc image of the last setup
+async function startRelink() {
+  const iso = await API.lastIso();
+  if (!iso) { openSetup(); return; }
+  toast(t("upd.rebuild"), 8000); go("home");
+  Object.assign(P, { active: true, pct: 0, step: "", t0: Date.now(), stepT0: Date.now(), failed: "", log: "" });
+  clearInterval(P.timer); P.timer = setInterval(renderHome, 500); renderHome();
+  try { await API.setup(iso); } catch (er) { setupEvent({ kind: "error", value: String(er) }); }
+}
+function showStale() {
+  $("#setupBox").innerHTML = `<h3>${t("upd.staleTitle")}</h3><p>${esc(t("upd.stale"))}</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="stLater">${t("upd.later")}</button><button class="btn hot" id="stGo">${t("upd.relink")}</button></div>`;
+  $("#setup").classList.add("on");
+  $("#stLater").onclick = () => $("#setup").classList.remove("on");
+  $("#stGo").onclick = () => { $("#setup").classList.remove("on"); startRelink(); };
+}
 function showUpdateDone(v) {
   $("#setupBox").innerHTML = `<h3>${t("upd.finTitle")}</h3><p>${esc(t("upd.fin", { v: "v" + v }))}</p>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="finClose">${t("su.close")}</button><button class="btn hot" id="finPlay">${t("play")}</button></div>`;
@@ -666,15 +683,7 @@ async function updateEvent(e) {
     clearInterval(U.timer); U.active = false; U.pct = 100; U.dlg = false; $("#setup").classList.remove("on");
     S.update = ""; S.updInfo = null; await refreshStatus(); renderHome();
     const flags = String(e.value || "");
-    if (flags.includes("rebuild")) {
-      const iso = await API.lastIso();
-      if (iso) { toast(t("upd.rebuild"), 8000); go("home");
-        Object.assign(P, { active: true, pct: 0, step: "", t0: Date.now(), stepT0: Date.now(), failed: "", log: "" });
-        clearInterval(P.timer); P.timer = setInterval(renderHome, 500); renderHome();
-        try { await API.setup(iso); } catch (er) { setupEvent({ kind: "error", value: String(er) }); }
-      } else openSetup();
-      return;
-    }
+    if (flags.includes("rebuild") && !flags.includes("restart")) { await startRelink(); return; }
     if (flags.includes("restart")) {
       try { localStorage.setItem("ts2UpdDone", u.version || ""); } catch (_) {}
       toast(t("upd.restart"), 3000); setTimeout(() => API.restart(), 2500); return;
@@ -701,5 +710,6 @@ async function updateEvent(e) {
   loadNews();
   loadServers();
   let fertig = ""; try { fertig = localStorage.getItem("ts2UpdDone") || ""; localStorage.removeItem("ts2UpdDone"); } catch (_) {}
-  if (fertig) showUpdateDone(fertig); else setTimeout(autoUpdate, 1500);
+  if (S.status.ready && S.status.stale) showStale();
+  else if (fertig) showUpdateDone(fertig); else setTimeout(autoUpdate, 1500);
 })();

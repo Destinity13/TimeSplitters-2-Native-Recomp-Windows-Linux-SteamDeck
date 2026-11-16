@@ -159,6 +159,28 @@ struct Status {
     ready: bool,
     build: String,
     launcher: String,
+    stale: bool,
+}
+
+// files the game binary is linked from; when one of them is newer than the binary (an update replaced it) the game has
+// to be linked again before it is started
+fn is_link_input(p: &str) -> bool {
+    let p = p.replace('\\', "/");
+    ["app/src/", "app/prebuilt/", "app/recomp/", "app/third_party/", "app/ts2_override.cpp"].iter().any(|x| p.starts_with(x))
+}
+fn newest_mtime(dir: &Path, depth: u32) -> Option<std::time::SystemTime> {
+    let md = std::fs::metadata(dir).ok()?;
+    if md.is_file() { return md.modified().ok(); }
+    if depth == 0 { return None; }
+    std::fs::read_dir(dir).ok()?.flatten().filter_map(|e| newest_mtime(&e.path(), depth - 1)).max()
+}
+fn build_stale(root: &Path) -> bool {
+    let Some(n) = current_build(root) else { return false };
+    let bin = root.join("build").join("ts2").join(exe_name(&format!("ps2EntryRunner_{n}")));
+    let Ok(built) = std::fs::metadata(&bin).and_then(|m| m.modified()) else { return false };
+    let src = [root.join("src"), root.join("prebuilt").join("lib"), root.join("ts2_override.cpp")].iter().filter_map(|d| newest_mtime(d, 3)).max();
+    // two minutes of slack: files written by the setup itself right before the link step
+    src.map(|t| t > built + Duration::from_secs(120)).unwrap_or(false)
 }
 
 fn platform() -> String {
@@ -206,6 +228,7 @@ fn status(st: State<Launcher>) -> Status {
         ready: b.is_some(),
         build: b.unwrap_or_default(),
         launcher: env!("CARGO_PKG_VERSION").into(),
+        stale: build_stale(&st.root),
     }
 }
 
@@ -669,7 +692,9 @@ fn upd_install_run(root: &Path, emit: &dyn Fn(&'static str, String)) -> Result<S
     let neu = install_core(&pkg_dir(root), &m, data, &changed, emit)?;
     emit("step", "finish".into());
     emit("pct", "100".into());
-    Ok(format!("{}{}", if m.rebuild || m.critical { "rebuild" } else { "" }, if neu { ",restart" } else { "" }))
+    // relink only when files the game is linked from were replaced (a launcher-only update starts right away)
+    let relink = m.critical || (m.rebuild && changed.iter().any(|f| is_link_input(&f.path)));
+    Ok(format!("{}{}", if relink { "rebuild" } else { "" }, if neu { ",restart" } else { "" }))
 }
 
 // extract + verify everything into a staging folder first (nothing in place is touched if a single file is wrong),
@@ -1172,6 +1197,7 @@ fn main() {
         if a.len() >= 3 && a[1] == "--setup" { std::process::exit(headless_setup(&root, &a[2])); }
         if a.len() >= 4 && a[1] == "--update-from" { std::process::exit(headless_update(&root, &a[2], &a[3])); }
         if a.len() >= 2 && a[1] == "--update-online" { std::process::exit(headless_update_online(&root)); }
+        if a.len() >= 2 && a[1] == "--status" { println!("version={} build={:?} stale={}", game_version(&root), current_build(&root), build_stale(&root)); std::process::exit(0); }
     }
     // leftover of a self-update
     if let Some(e) = self_exe() { let _ = std::fs::remove_file(e.with_extension("old")); }

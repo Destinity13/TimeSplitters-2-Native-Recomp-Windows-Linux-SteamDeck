@@ -4,6 +4,7 @@ Patch notes, dev logs and what we're working on next. The same posts also show u
 
 | Date | Post | Type |
 |---|---|---|
+| 2026-11-16 | [Version 1.2.1 - better updates](2026-11-16-patch-notes-1-2-1.md) | Release |
 | 2026-11-16 | [Devlog - 1.2 is out, what comes next](2026-11-16-devlog-after-1-2.md) | Devlog |
 | 2026-11-16 | [Version 1.2 - patch notes](2026-11-16-patch-notes-1-2.md) | Release |
 | 2026-11-16 | [Devlog - where 1.1.1 stands](2026-11-16-devlog-where-1-1-1-stands.md) | Devlog |

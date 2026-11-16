@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-16T12:00:00Z",
+    "title": "Version 1.2.1 - better updates",
+    "tag": "Release",
+    "body": "The launcher now asks before it updates, shows every step with progress and tells you when you can play.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-16-patch-notes-1-2-1.md"
+  },
+  {
+    "date": "2026-11-16T12:00:00Z",
     "title": "Devlog - 1.2 is out, what comes next",
     "tag": "Devlog",
     "body": "How the double image got fixed, what we test before every release and what we are working on for the next update.",
