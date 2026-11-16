@@ -100,6 +100,7 @@ h1.page { margin: 0 0 2px; font: 700 28px "Saira Condensed", sans-serif; letter-
 .play b { display: block; font: 700 30px/1 "Saira Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; text-shadow: 0 2px 0 rgba(120,40,0,.6); }
 .play small { display: block; margin-top: 4px; font-size: 11.5px; opacity: .9; }
 .play.busy { background: linear-gradient(180deg, #4a5468, #2e3646); border-color: #7b869b; box-shadow: none; cursor: default; }
+.play.upd { background: linear-gradient(180deg, #5fd38a 0, #2fae5f 48%, #1f8d4a 52%, #2a9f57 100%); border-color: #b9f0cc; box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 26px rgba(47,174,95,.35); }
 .play.setup { background: linear-gradient(180deg, #5aa7ff 0, #2f7fe6 48%, #1f63c0 52%, #2a74d6 100%); border-color: #b9d8ff; box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 26px rgba(47,127,230,.35); }
 .led { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
 .led.warn { background: var(--warn); } .led.off { background: var(--bad); }

@@ -33,6 +33,9 @@ const L = {
     "news.open": "Auf GitHub ansehen", "news.update": "Update verfügbar", "news.latest": "Neueste Meldung", "upd.run": "Update wird installiert …", "upd.done": "Update auf {v} installiert. Spielstände wurden vorher gesichert.", "upd.fail": "Update fehlgeschlagen: {e} – nichts wurde verändert.",
     "upd.crit": "Großes Update {v}: Das Spiel muss neu eingerichtet werden (dauert ein paar Minuten). Spielstände bleiben erhalten und werden vorher gesichert.", "upd.now": "Jetzt aktualisieren", "upd.later": "Später",
     "upd.rebuild": "Update installiert – das Spiel wird jetzt neu verknüpft …", "upd.restart": "Launcher wurde aktualisiert und startet neu …",
+    "upd.title": "Neues Update verfügbar", "upd.ask": "Version {v} ist da ({mb}). Du kannst jetzt aktualisieren oder erst mit deiner aktuellen Version spielen.", "upd.playOld": "Ohne Update spielen", "upd.install": "Jetzt updaten",
+    "upd.btn": "Update", "upd.btnSub": "{v} verfügbar", "upd.head": "Update auf {v} wird installiert …", "upd.s.backup": "Spielstände sichern", "upd.s.download": "Herunterladen", "upd.s.install": "Prüfen und installieren",
+    "upd.dl": "Heruntergeladen", "upd.speed": "Tempo", "upd.finTitle": "Fertig!", "upd.fin": "Version {v} ist installiert. Du kannst starten, viel Spaß!", "upd.notes": "Was ist neu",
     "set.title": "Optionen", "set.sub": "Alles, was das Spielmenü auch kann, schon vor dem Start. Änderungen gelten beim nächsten Spielstart.",
     "set.save": "Speichern", "set.reset": "Standard", "set.saved": "Gespeichert ✓", "set.unsaved": "Ungespeicherte Änderungen",
     "tab.gfx": "Grafik", "tab.fx": "Bild", "tab.audio": "Ton & Pad", "tab.input": "Steuerung", "tab.launch": "Start & System",
@@ -85,6 +88,9 @@ const L = {
     "news.open": "View on GitHub", "news.update": "Update available", "news.latest": "Latest", "upd.run": "Installing update …", "upd.done": "Updated to {v}. Your saves were backed up first.", "upd.fail": "Update failed: {e} – nothing was changed.",
     "upd.crit": "Major update {v}: the game has to be set up again (takes a few minutes). Saves are kept and backed up first.", "upd.now": "Update now", "upd.later": "Later",
     "upd.rebuild": "Update installed – relinking the game …", "upd.restart": "The launcher was updated and restarts …",
+    "upd.title": "New update available", "upd.ask": "Version {v} is here ({mb}). You can update now or play your current version first.", "upd.playOld": "Play without updating", "upd.install": "Update now",
+    "upd.btn": "Update", "upd.btnSub": "{v} available", "upd.head": "Installing update {v} …", "upd.s.backup": "Backing up saves", "upd.s.download": "Downloading", "upd.s.install": "Checking and installing",
+    "upd.dl": "Downloaded", "upd.speed": "Speed", "upd.finTitle": "Done!", "upd.fin": "Version {v} is installed. You can start now, have fun!", "upd.notes": "What's new",
     "set.title": "Options", "set.sub": "Everything the in-game menu can do, before you launch. Changes apply on the next launch.",
     "set.save": "Save", "set.reset": "Defaults", "set.saved": "Saved ✓", "set.unsaved": "Unsaved changes",
     "tab.gfx": "Graphics", "tab.fx": "Picture", "tab.audio": "Sound & pad", "tab.input": "Controls", "tab.launch": "Launch & system",
@@ -112,7 +118,7 @@ const L = {
   },
 };
 let lang = "en";
-const t = (k, v = {}) => (L[lang][k] ?? L.en[k] ?? k).replace(/\{(\w)\}/g, (_, x) => v[x] ?? "");
+const t = (k, v = {}) => (L[lang][k] ?? L.en[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => v[x] ?? "");
 
 // ---------------- Zustand ----------------
 const S = {
@@ -162,10 +168,12 @@ function renderHome() {
   const st = S.status;
   const plat = st.platform === "windows" ? "Windows" : st.platform === "steamdeck" ? "Steam Deck" : "Linux";
   const btn = $("#playBtn");
-  btn.classList.toggle("busy", S.running || P.active);
+  const updWait = !!(S.updInfo && !U.active && !P.active && !S.running && st.ready);
+  btn.classList.toggle("busy", S.running || P.active || U.active);
+  btn.classList.toggle("upd", updWait);
   btn.classList.toggle("setup", !st.ready && !P.active);
-  $("#playLabel").textContent = P.active ? t("su.run") : S.running ? t("running") : st.ready ? t("play") : t("setupNeeded");
-  $("#playSub").textContent = P.active ? P.pct + " %" : S.running ? "" : st.ready ? (S.start.editions === "original" ? t("play.sub") : t(curEd() === "onlineplus" ? "ed.op" : "ed.orig")) : t("setup.sub");
+  $("#playLabel").textContent = U.active ? t("upd.btn") : updWait ? t("upd.btn") : P.active ? t("su.run") : S.running ? t("running") : st.ready ? t("play") : t("setupNeeded");
+  $("#playSub").textContent = U.active ? U.pct + " %" : updWait ? t("upd.btnSub", { v: "v" + S.updInfo.version }) : P.active ? P.pct + " %" : S.running ? "" : st.ready ? (S.start.editions === "original" ? t("play.sub") : t(curEd() === "onlineplus" ? "ed.op" : "ed.orig")) : t("setup.sub");
   const sw = $("#edSwitch");
   if (sw) { sw.style.display = st.ready ? "" : "none";   // one build serves both editions: the switch is always there, the classic game stays preselected
     sw.innerHTML = [["original", "Original"], ["onlineplus", "Online+"]].map(([id, k]) => `<button data-edsel="${id}" class="${curEd() === id ? "on" : ""}">${k}</button>`).join(""); }
@@ -177,7 +185,7 @@ function renderHome() {
     : `<span class="led warn"></span>${t("on.loading")}`;
   // Meldungen
   const feed = [];
-  if (S.update) feed.push({ tag: "Update", cls: "upd", title: t("news.update") + ": " + S.update, go: "news" });
+  if (S.update) feed.push({ tag: "Update", cls: "upd", title: t("news.update") + ": " + S.update, go: S.updInfo ? "upd" : "news" });
   for (const n of S.news.slice(0, S.update ? 2 : 3)) feed.push({ tag: n.src === "rel" ? "Release" : n.tag || "News", cls: n.src === "rel" ? "rel" : "", title: n.title, date: fmtDate(n.date), go: "news" });
   const top = live.slice().sort((a, b) => b.players - a.players)[0];
   if (top && top.players > 0) feed.push({ tag: "Online", cls: "", title: `${top.name} · ${top.players}/${top.max}`, addr: top.addr });
@@ -185,7 +193,20 @@ function renderHome() {
     <span class="ti">${esc(f.title)}${f.date ? `<small>${esc(f.date)}</small>` : ""}</span><span class="ar">›</span></div>`).join("");
   // Fortschritt / Zustand unten
   const head = $("#pgHead"), r1 = $("#pgRow1"), r2 = $("#pgRow2"), bar = $("#pgBar"), sbar = $("#pgStepBar");
-  if (P.active) {
+  if (U.active) {
+    const el = (Date.now() - U.t0) / 1000, rest = U.pct > 5 ? el * (100 - U.pct) / U.pct : null;
+    head.textContent = t("upd.head", { v: "v" + U.ver });
+    const stepTxt = U.step ? t("upd.s." + U.step) : "…";
+    let dl = "";
+    if (U.step === "download" && U.dlDone) {
+      const sp = U.dlDone / Math.max(0.5, (Date.now() - U.dlT0) / 1000);
+      dl = `<span>${t("upd.dl")}: <b>${mb(U.dlDone)}${U.dlTotal ? " / " + mb(U.dlTotal) : ""}</b></span><span>${t("upd.speed")}: <b>${mb(sp)}/s</b></span>`;
+    }
+    r1.innerHTML = `<span>${t("pg.step")}: <b>${esc(stepTxt)}</b></span>${dl}`;
+    r2.innerHTML = `<span>${t("pg.total")}: <b>${U.pct} %</b></span><span>${t("pg.elapsed")}: <b>${mmss(el)}</b></span><span>${t("pg.remain")}: <b>${rest == null ? "…" : "~" + mmss(rest)}</b></span>`;
+    sbar.style.display = "none";
+    bar.classList.remove("ok"); bar.firstElementChild.style.width = U.pct + "%";
+  } else if (P.active) {
     const el = (Date.now() - P.t0) / 1000, rest = P.pct > 3 ? el * (100 - P.pct) / P.pct : null;
     head.textContent = t("pg.building");
     r1.innerHTML = `<span>${t("pg.step")}: <b>${esc(P.step || "…")}</b></span>`;
@@ -217,8 +238,14 @@ async function quickToggle(id) {
 
 const curEd = () => S.start.editions === "onlineplus" ? "onlineplus" : S.start.editions === "original" ? "original" : S.start.edition;
 async function play() {
-  if (S.running || P.active) return;
+  if (S.running || P.active || U.active) return;
+  if (S.updInfo && S.status.ready) return showUpdateDialog(S.updInfo);
   if (!S.status.ready) return openSetup();
+  S.start.edition = curEd();
+  await persist(false);
+  await playNow();
+}
+async function playNow() {
   S.start.edition = curEd();
   await persist(false);
   try { await API.play(); } catch (e) { toast(String(e)); }
@@ -502,7 +529,7 @@ function renderAll() { renderHome(); renderOnline(); renderNews(); renderSetting
 
 function wire() {
   document.addEventListener("click", (e) => {
-    const g = e.target.closest("[data-go]"); if (g) { go(g.dataset.go); return; }
+    const g = e.target.closest("[data-go]"); if (g) { if (g.dataset.go === "upd" && S.updInfo) showUpdateDialog(S.updInfo); else go(g.dataset.go); return; }
     const u = e.target.closest("[data-url]"); if (u) { API.openUrl(u.dataset.url); return; }
     const nb = e.target.closest("#nav button[data-view]"); if (nb) { go(nb.dataset.view); return; }
     const q = e.target.closest("#quick .tog"); if (q) { quickToggle(q.dataset.q); return; }
@@ -557,39 +584,72 @@ function wire() {
 // Normal updates install by themselves on start (only changed files, checked by hash, saves backed up first).
 // Updates that need a new setup ("critical") ask first. After a "rebuild" update the game is linked again with the
 // disc image remembered from the last setup.
+const U = { active: false, pct: 0, step: "", t0: 0, ver: "", dlDone: 0, dlTotal: 0, dlT0: 0, timer: 0 };
+const mb = (n) => (n / 1048576).toFixed(n >= 104857600 ? 0 : 1) + " MB";
+let updListener = false;
 async function autoUpdate() {
   let u; try { u = await API.updateCheck(); } catch (_) { return; }
-  if (!u || !u.available || S.running || P.active) return;
-  S.update = "v" + u.version; renderHome();
-  if (u.critical) {
-    $("#setupBox").innerHTML = `<h3>${t("news.update")}</h3><p>${esc(t("upd.crit", { v: u.version }))}</p>${u.notes ? `<div class="body">${md(u.notes)}</div>` : ""}
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="updLater">${t("upd.later")}</button><button class="btn hot" id="updNow">${t("upd.now")}</button></div>`;
-    $("#setup").classList.add("on");
-    $("#updLater").onclick = () => $("#setup").classList.remove("on");
-    $("#updNow").onclick = () => { $("#setup").classList.remove("on"); installUpdate(u); };
-    return;
-  }
-  installUpdate(u);
+  if (!u || !u.available || S.running || P.active || U.active) return;
+  S.update = "v" + u.version; S.updInfo = u; renderHome();
+  showUpdateDialog(u);
+}
+// pop-up: update now or play the current version first (a critical update can still be put off, but not skipped when playing)
+function showUpdateDialog(u) {
+  const txt = u.critical ? t("upd.crit", { v: u.version }) : t("upd.ask", { v: u.version, mb: mb(u.bytes || 0) });
+  const canOld = S.status.ready;
+  $("#setupBox").innerHTML = `<h3>${t("upd.title")}: v${esc(u.version)}</h3><p>${esc(txt)}</p>${u.notes ? `<div class="sub" style="margin-top:8px"><b>${t("upd.notes")}</b></div><div class="body" style="max-height:240px;overflow:auto">${md(u.notes)}</div>` : ""}
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="updLater">${t("upd.later")}</button>${canOld ? `<button class="btn" id="updOld">${t("upd.playOld")}</button>` : ""}<button class="btn hot" id="updNow">${t("upd.install")}</button></div>`;
+  $("#setup").classList.add("on");
+  const close = () => $("#setup").classList.remove("on");
+  $("#updLater").onclick = close;
+  if (canOld) $("#updOld").onclick = () => { close(); playNow(); };
+  $("#updNow").onclick = () => { close(); installUpdate(u); };
+}
+function showUpdateDone(v) {
+  $("#setupBox").innerHTML = `<h3>${t("upd.finTitle")}</h3><p>${esc(t("upd.fin", { v: "v" + v }))}</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="finClose">${t("su.close")}</button><button class="btn hot" id="finPlay">${t("play")}</button></div>`;
+  $("#setup").classList.add("on");
+  $("#finClose").onclick = () => $("#setup").classList.remove("on");
+  $("#finPlay").onclick = () => { $("#setup").classList.remove("on"); play(); };
 }
 function installUpdate(u) {
-  toast(t("upd.run"), 60000);
-  API.on("update", async (e) => {
-    if (e.kind === "done") {
-      toast(t("upd.done", { v: u.version }), 7000);
-      S.update = ""; await refreshStatus(); renderHome();
-      const flags = String(e.value || "");
-      if (flags.includes("rebuild")) {
-        const iso = await API.lastIso();
-        if (iso) { toast(t("upd.rebuild"), 8000); go("home");
-          Object.assign(P, { active: true, pct: 0, step: "", t0: Date.now(), stepT0: Date.now(), failed: "", log: "" });
-          clearInterval(P.timer); P.timer = setInterval(renderHome, 500); renderHome();
-          try { await API.setup(iso); } catch (er) { setupEvent({ kind: "error", value: String(er) }); }
-        } else openSetup();
-      }
-      if (flags.includes("restart") && !flags.includes("rebuild")) { toast(t("upd.restart"), 3000); setTimeout(() => API.restart(), 2500); }
-    } else if (e.kind === "error") toast(t("upd.fail", { e: e.value }), 9000);
-  });
-  API.updateInstall().catch((er) => toast(t("upd.fail", { e: String(er) }), 9000));
+  if (U.active) return;
+  go("home");
+  Object.assign(U, { active: true, pct: 0, step: "backup", t0: Date.now(), ver: u.version, dlDone: 0, dlTotal: 0, dlT0: 0 });
+  clearInterval(U.timer); U.timer = setInterval(renderHome, 500); renderHome();
+  const stop = () => { clearInterval(U.timer); U.active = false; renderHome(); };
+  if (!updListener) { updListener = true; API.on("update", (e) => updateEvent(e)); }
+  U.u = u;
+  API.updateInstall().catch((er) => { stop(); toast(t("upd.fail", { e: String(er) }), 9000); });
+}
+async function updateEvent(e) {
+  const u = U.u || {};
+  if (e.kind === "step") { U.step = e.value; if (e.value === "download") U.dlT0 = Date.now(); }
+  else if (e.kind === "pct") U.pct = Math.max(U.pct, Math.min(100, parseInt(e.value, 10) || 0));
+  else if (e.kind === "dl") { const [d, tot] = String(e.value).split("/").map(Number); U.dlDone = d || 0; U.dlTotal = tot || 0; }
+  else if (e.kind === "done") {
+    clearInterval(U.timer); U.active = false; U.pct = 100;
+    S.update = ""; S.updInfo = null; await refreshStatus(); renderHome();
+    const flags = String(e.value || "");
+    if (flags.includes("rebuild")) {
+      const iso = await API.lastIso();
+      if (iso) { toast(t("upd.rebuild"), 8000); go("home");
+        Object.assign(P, { active: true, pct: 0, step: "", t0: Date.now(), stepT0: Date.now(), failed: "", log: "" });
+        clearInterval(P.timer); P.timer = setInterval(renderHome, 500); renderHome();
+        try { await API.setup(iso); } catch (er) { setupEvent({ kind: "error", value: String(er) }); }
+      } else openSetup();
+      return;
+    }
+    if (flags.includes("restart")) {
+      try { localStorage.setItem("ts2UpdDone", u.version || ""); } catch (_) {}
+      toast(t("upd.restart"), 3000); setTimeout(() => API.restart(), 2500); return;
+    }
+    showUpdateDone(u.version || "");
+  } else if (e.kind === "error") {
+    clearInterval(U.timer); U.active = false; renderHome();
+    toast(t("upd.fail", { e: e.value }), 9000);
+  }
+  if (U.active) renderHome();
 }
 
 (async function init() {
@@ -605,5 +665,6 @@ function installUpdate(u) {
   applyLang();
   loadNews();
   loadServers();
-  setTimeout(autoUpdate, 1500);
+  let fertig = ""; try { fertig = localStorage.getItem("ts2UpdDone") || ""; localStorage.removeItem("ts2UpdDone"); } catch (_) {}
+  if (fertig) showUpdateDone(fertig); else setTimeout(autoUpdate, 1500);
 })();

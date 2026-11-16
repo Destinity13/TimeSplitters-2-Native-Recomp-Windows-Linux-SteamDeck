@@ -479,7 +479,10 @@ static UPD: Mutex<UpdState> = Mutex::new(UpdState { manifest: None, zip_url: Str
 
 fn upd_plat() -> &'static str { if cfg!(windows) { "windows" } else { "linux" } }
 
-fn http_get(url: &str, limit: u64) -> Result<Vec<u8>, String> {
+fn http_get(url: &str, limit: u64) -> Result<Vec<u8>, String> { http_get_cb(url, limit, &|_, _| {}) }
+
+// same as http_get, reports (bytes so far, total bytes or 0) while downloading
+fn http_get_cb(url: &str, limit: u64, cb: &dyn Fn(u64, u64)) -> Result<Vec<u8>, String> {
     let ok = url.starts_with(&format!("https://api.github.com/repos/{REPO_NAME}/"))
         || url.starts_with(&format!("https://github.com/{REPO_NAME}/releases/download/"));
     if !ok { return Err("url not allowed".into()); }
@@ -491,9 +494,20 @@ fn http_get(url: &str, limit: u64) -> Result<Vec<u8>, String> {
         .set("Accept", if url.contains("api.github.com") { "application/vnd.github+json" } else { "application/octet-stream" })
         .call()
         .map_err(|e| e.to_string())?;
-    let mut v = Vec::new();
+    let total: u64 = r.header("Content-Length").and_then(|x| x.parse().ok()).unwrap_or(0);
+    let mut v = Vec::with_capacity(total.min(limit) as usize);
     use std::io::Read;
-    r.into_reader().take(limit).read_to_end(&mut v).map_err(|e| e.to_string())?;
+    let mut rd = r.into_reader().take(limit);
+    let mut buf = vec![0u8; 256 * 1024];
+    let mut last = std::time::Instant::now();
+    cb(0, total);
+    loop {
+        let n = rd.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 { break; }
+        v.extend_from_slice(&buf[..n]);
+        if last.elapsed() >= Duration::from_millis(250) { cb(v.len() as u64, total); last = std::time::Instant::now(); }
+    }
+    cb(v.len() as u64, total);
     Ok(v)
 }
 
@@ -624,9 +638,14 @@ fn update_install(app: AppHandle, st: State<Launcher>) -> Result<(), String> {
         let r = (|| -> Result<bool, String> {
             emit("step", "backup".into());
             backup_saves(&root)?;
+            emit("pct", "3".into());
             emit("step", "download".into());
-            let data = http_get(&zip_url, 2_000_000_000)?;
+            let data = http_get_cb(&zip_url, 2_000_000_000, &|done, total| {
+                emit("dl", format!("{done}/{total}"));
+                if total > 0 { emit("pct", format!("{}", 5 + 55 * done.min(total) / total)); }
+            })?;
             emit("pct", "60".into());
+            emit("step", "install".into());
             install_core(&pkg_dir(&root), &m, data, &changed, &|k, v| emit(k, v))
         })();
         match r {

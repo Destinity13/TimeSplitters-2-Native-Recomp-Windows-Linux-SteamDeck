@@ -93,8 +93,14 @@
     open: async () => true,
     openUrl: async (u) => window.open(u, "_blank"),
     shortcut: async () => true,
-    updateCheck: async () => ({ available: false }),
-    updateInstall: async () => true,
+    updateCheck: async () => /upd/.test(location.search) ? { available: true, version: "1.2.1", critical: false, rebuild: false, changed: 12, bytes: 9_000_000, notes: "* Update pop-up in the launcher\n* Download progress" } : { available: false },
+    updateInstall: async () => {   // preview only: fake progress
+      const em = (kind, value) => (listeners.update || []).forEach((cb) => cb({ kind, value }));
+      em("step", "backup"); let d = 0; const tot = 9_000_000;
+      setTimeout(() => { em("pct", "5"); em("step", "download");
+        const iv = setInterval(() => { d = Math.min(tot, d + 600_000); em("dl", d + "/" + tot); em("pct", String(5 + Math.floor(55 * d / tot)));
+          if (d >= tot) { clearInterval(iv); em("step", "install"); em("pct", "80"); setTimeout(() => { em("pct", "100"); em("done", ""); }, 1200); } }, 300); }, 800);
+      return true; },
     lastIso: async () => "",
     restart: async () => true,
     on: (ev, cb) => { (listeners[ev] = listeners[ev] || []).push(cb); },
