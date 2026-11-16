@@ -2544,7 +2544,13 @@ namespace
                     altDauer = dauer; altDauerPb = pb;
                 }
                 altZoom = zoomt; altL2 = roh; altGehalten = zielmodus || roh;
-                g_ps2xPadMaske.store(loslassen > 0 ? 0x0100u : 0u, std::memory_order_relaxed);
+                // D-pad up/down zoom the view in steps while the aim mode is held (the game's own control). With the
+                // permanent aim mode they zoomed in whenever the D-pad was touched while switching weapons (Steam Deck
+                // video 16 Nov: AK zoomed in after cycling with the D-pad). They only pass while the zoom key is held.
+                // TS2_DPAD_ZOOM=1 = old behaviour.
+                static const bool dpadAlt = [] { const char *e = std::getenv("TS2_DPAD_ZOOM"); return e && *e == '1'; }();
+                const uint32_t dpadMaske = (!dpadAlt && dauer && !zoomt) ? 0x0050u : 0u;   // PS2 pad: 0x10 up, 0x40 down
+                g_ps2xPadMaske.store((loslassen > 0 ? 0x0100u : 0u) | dpadMaske, std::memory_order_relaxed);
                 if (loslassen > 0) --loslassen;
             }
             ::ps2xGsBridgeOption(9, (gefangen && ego && !padL2) ? 1 : 0);   // while zooming with the gamepad the game shows its own aim HUD / scope
