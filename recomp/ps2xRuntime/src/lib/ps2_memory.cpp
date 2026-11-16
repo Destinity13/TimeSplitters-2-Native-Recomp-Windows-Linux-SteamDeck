@@ -2651,6 +2651,7 @@ static bool ps2xDunstFix(const uint8_t *data, uint32_t size, std::vector<uint8_t
     return true;
 }
 
+extern std::atomic<long long> g_ps2xScopeMs;
 static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint8_t> &out)
 {
     // A frame copy is a direct-colour texture (CT32/CT24/CT16). Palette textures at an address that once was a render
@@ -2662,6 +2663,13 @@ static bool ps2xNachziehFix(const uint8_t *data, uint32_t size, std::vector<uint
     static uint32_t pakete = 0, naechste = 0; static int an = 0;
     if (++pakete >= naechste) { an = ps2xGsBridgeOption(1, envFallback); naechste = pakete + 256; }
     if (an) return false;
+    // While the sniper scope is up this pass is part of the scope picture (darker, green, sharper edge of the reticle
+    // field); without it the scope view was about 15 % brighter and milky compared to the original (PCSX2 reference
+    // run, 16 Nov). So it is never removed while the scope shows.
+    {
+        const long long jetzt = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (jetzt - g_ps2xScopeMs.load(std::memory_order_relaxed) < 400) return false;
+    }
     bool geaendert = false;
     // Trail primitive: triangle strip/sprite with texture + alpha (FST), ALPHA 0x44, texture = start of the OTHER frame buffer
     auto treffer = [&]() {
@@ -2728,12 +2736,17 @@ static bool ps2xScopeKlarFix(const uint8_t *data, uint32_t size, std::vector<uin
     // A frame copy is a direct-colour texture (CT32/CT24/CT16). Palette textures at an address that once was a render
     // target (impact smoke: 8-bit, TBP 0x33e0) are ordinary textures and must stay untouched (GitHub issue #3).
     static uint32_t psm = 0;
-    static const int envFallback = [] { const char *e = std::getenv("TS2_SCOPE_KLAR"); return e && *e ? std::clamp(std::atoi(e), 0, 3) : 1; }();
+    static const int envFallback = [] { const char *e = std::getenv("TS2_SCOPE_KLAR"); return e && *e ? std::clamp(std::atoi(e), 0, 3) : 0; }();
     static uint32_t prim = 0, tbp = 0; static uint64_t alpha = 0;
     static bool anker = false; static uint16_t ax = 0, ay = 0;
     static uint32_t pakete = 0, naechste = 0; static int stufe = 1;
     if (++pakete >= naechste) { stufe = ps2xGsBridgeOption(12, envFallback); naechste = pakete + 256; }
-    if (stufe <= 0) return false;
+    // 0 and 1 = original picture (only the scope is detected, for the mouse layer and the motion trail pass). The
+    // "clear" mode (1) filled the picture edges with strips of an older frame: on 16:9 and wider screens they lay over
+    // the picture as a shifted, doubled copy, and the scope was brighter than on the PS2 (comparison with the original
+    // in PCSX2, 16 Nov). 2 = extra clear stays as an option.
+    if (stufe == 1) stufe = 0;
+    const bool nurErkennen = stufe <= 0;
     bool geaendert = false;
     uint32_t alphaOff = ~0u;   // offset of the ALPHA_1 write (A+D) in this packet
     // Feedback weight of the zoom sprite: Klar 8 %, Extra klar 4 % (original: destination alpha)
@@ -2750,6 +2763,7 @@ static bool ps2xScopeKlarFix(const uint8_t *data, uint32_t size, std::vector<uin
         if (bild && typ == 6 && a == 0x54 && stufe != 3)
         {
             g_ps2xScopeMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(), std::memory_order_relaxed);
+            if (nurErkennen) { anker = false; return; }
             if (nEcken < 2 && uvOff != ~0u) ecken[nEcken++] = {uvOff, o, uvAd, ad};
             // zoom feedback sprite: keep it (it also fills the picture edges), but with a small fixed weight
             if (alphaOff != ~0u) { if (!alphaGesetzt) { kopie(); uint64_t v; std::memcpy(&v, out.data() + alphaOff, 8);

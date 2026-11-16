@@ -2384,23 +2384,23 @@ namespace
             // aim mode is switched off until the weapon changes (D-pad left/right = mouse wheel) or the player respawns.
             // The zoom key still brings the scope up and takes it down again.
             {
-                static bool sperre = false; static uint32_t sperrePb = 0;
+                static bool sperre = false; static uint32_t sperrePb = 0, sperreModell = 0;
                 const long long jetztMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
                 const bool scope = jetztMs - g_ps2xScopeMs.load(std::memory_order_relaxed) < 250;
                 uint16_t pt = 0; uint8_t ax[4] = {0x80, 0x80, 0x80, 0x80};
                 const bool dreieck = g_skriptPadDa ? (g_skriptPad & 0x00A0u) != 0 : (::ps2xGsBridgePad(pt, ax) && (pt & 0x00A0u) != 0);   // weapon change: D-pad right/left (mouse wheel)
                 if (sperre && (pb != sperrePb || dreieck)) sperre = false;
 
-                // scope slot memory (TS2_SCOPE_SLOT=0 off): a weapon slot that brought the scope up without the zoom key never
-                // gets the permanent aim mode again, until the player respawns
-                static const bool slotAn = [] { const char *e = std::getenv("TS2_SCOPE_SLOT"); return !(e && *e == '0'); }();
+                // scope slot memory, off by default (TS2_SCOPE_SLOT=1 on): +0xD48 turned out to be the weapon class, which
+                // several weapons share - the AK stayed zoomed after the sniper rifle (user report 15 Nov)
+                static const bool slotAn = [] { const char *e = std::getenv("TS2_SCOPE_SLOT"); return e && *e == '1'; }();
                 static uint64_t scopeSlots = 0; static uint32_t slotsPb = 0; static uint64_t zoomSeit = 0;
                 if (pb != slotsPb) { scopeSlots = 0; slotsPb = pb; }
                 const uint32_t slot = (ego && pb) ? ts2impact::ru(r, pb + 0xD48) : 64u;
                 const bool slotOk = slotAn && slot < 64u;
                 if (!sperre && dauer && !zoomt && scope)
                 {
-                    sperre = true; sperrePb = pb;
+                    sperre = true; sperrePb = pb; sperreModell = 0;
                     if (slotOk) scopeSlots |= (1ull << slot);
                     std::fprintf(stderr, "[maus] scope weapon (slot %u): permanent aim mode off until weapon change\n", slot);
                 }
@@ -2434,6 +2434,8 @@ namespace
                     bool sonder = false;
                     if (ego && pb) { const uint32_t g = ts2impact::ru(r, pb + 0x584) & 0x1FFFFFFu; if (g >= 0x100000u && g < 0x1FFFF00u) { modell = ts2impact::ru(r, g + 8);
                         const uint32_t ix = ts2impact::ru(r, g + 0x30); sonder = modell == 0xFFFFFFFFu || (ix < 38u && ts2impact::ru(r, 0x004C3818u + 0x240u * ix) == 0xFFFFFFFFu); } }
+                    // the scope lock ends with any weapon change, also one the pad check above did not see (mouse wheel)
+                    if (sperre && ego && modell != 0u) { if (!sperreModell) sperreModell = modell; else if (modell != sperreModell) { sperre = false; std::fprintf(stderr, "[maus] weapon changed: scope lock released\n"); } }
                     const W *w = nullptr;
                     for (const W &k : kWaffen) if (k.modell == modell) { w = &k; break; }
                     static uint32_t altModell = ~0u;
