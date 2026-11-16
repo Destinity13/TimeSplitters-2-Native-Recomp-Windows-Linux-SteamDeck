@@ -34,8 +34,11 @@ const L = {
     "upd.crit": "Großes Update {v}: Das Spiel muss neu eingerichtet werden (dauert ein paar Minuten). Spielstände bleiben erhalten und werden vorher gesichert.", "upd.now": "Jetzt aktualisieren", "upd.later": "Später",
     "upd.rebuild": "Update installiert – das Spiel wird jetzt neu verknüpft …", "upd.restart": "Launcher wurde aktualisiert und startet neu …",
     "upd.title": "Neues Update verfügbar", "upd.ask": "Version {v} ist da ({mb}). Du kannst jetzt aktualisieren oder erst mit deiner aktuellen Version spielen.", "upd.playOld": "Ohne Update spielen", "upd.install": "Jetzt updaten",
-    "upd.btn": "Update", "upd.btnSub": "{v} verfügbar", "upd.head": "Update auf {v} wird installiert …", "upd.s.backup": "Spielstände sichern", "upd.s.download": "Herunterladen", "upd.s.install": "Prüfen und installieren",
+    "upd.btn": "Update", "upd.btnSub": "{v} verfügbar", "upd.head": "Update auf {v} wird installiert …", "upd.s.backup": "Spielstände sichern", "upd.s.download": "Herunterladen", "upd.s.install": "Installieren",
     "upd.dl": "Heruntergeladen", "upd.speed": "Tempo", "upd.finTitle": "Fertig!", "upd.fin": "Version {v} ist installiert. Du kannst starten, viel Spaß!", "upd.notes": "Was ist neu",
+    "upd.s.verify": "Dateien prüfen", "upd.s.finish": "Fertig", "upd.bg": "Im Hintergrund weiter", "upd.files": "{i} von {n} Dateien", "upd.saved": "{n} Einträge gesichert",
+    "upd.pkgDelta": "nur geänderte Dateien", "upd.pkgFull": "komplettes Paket", "upd.facts": "Download {dl} · {n} Dateien ändern sich · Spielstände werden vorher gesichert", "upd.left": "noch",
+    "upd.what": "Der Launcher sichert zuerst deine Spielstände, lädt dann nur die geänderten Dateien, prüft jede einzelne und tauscht sie erst aus, wenn alles stimmt. Geht etwas schief, bleibt alles wie es war.",
     "set.title": "Optionen", "set.sub": "Alles, was das Spielmenü auch kann, schon vor dem Start. Änderungen gelten beim nächsten Spielstart.",
     "set.save": "Speichern", "set.reset": "Standard", "set.saved": "Gespeichert ✓", "set.unsaved": "Ungespeicherte Änderungen",
     "tab.gfx": "Grafik", "tab.fx": "Bild", "tab.audio": "Ton & Pad", "tab.input": "Steuerung", "tab.launch": "Start & System",
@@ -89,8 +92,11 @@ const L = {
     "upd.crit": "Major update {v}: the game has to be set up again (takes a few minutes). Saves are kept and backed up first.", "upd.now": "Update now", "upd.later": "Later",
     "upd.rebuild": "Update installed – relinking the game …", "upd.restart": "The launcher was updated and restarts …",
     "upd.title": "New update available", "upd.ask": "Version {v} is here ({mb}). You can update now or play your current version first.", "upd.playOld": "Play without updating", "upd.install": "Update now",
-    "upd.btn": "Update", "upd.btnSub": "{v} available", "upd.head": "Installing update {v} …", "upd.s.backup": "Backing up saves", "upd.s.download": "Downloading", "upd.s.install": "Checking and installing",
+    "upd.btn": "Update", "upd.btnSub": "{v} available", "upd.head": "Installing update {v} …", "upd.s.backup": "Backing up saves", "upd.s.download": "Downloading", "upd.s.install": "Installing",
     "upd.dl": "Downloaded", "upd.speed": "Speed", "upd.finTitle": "Done!", "upd.fin": "Version {v} is installed. You can start now, have fun!", "upd.notes": "What's new",
+    "upd.s.verify": "Checking files", "upd.s.finish": "Done", "upd.bg": "Continue in background", "upd.files": "{i} of {n} files", "upd.saved": "{n} items backed up",
+    "upd.pkgDelta": "changed files only", "upd.pkgFull": "full package", "upd.facts": "Download {dl} · {n} files change · saves are backed up first", "upd.left": "left",
+    "upd.what": "The launcher backs up your saves first, then downloads only the changed files, checks every single one and replaces them only when all of them are right. If anything goes wrong, nothing changes.",
     "set.title": "Options", "set.sub": "Everything the in-game menu can do, before you launch. Changes apply on the next launch.",
     "set.save": "Save", "set.reset": "Defaults", "set.saved": "Saved ✓", "set.unsaved": "Unsaved changes",
     "tab.gfx": "Graphics", "tab.fx": "Picture", "tab.audio": "Sound & pad", "tab.input": "Controls", "tab.launch": "Launch & system",
@@ -196,16 +202,11 @@ function renderHome() {
   if (U.active) {
     const el = (Date.now() - U.t0) / 1000, rest = U.pct > 5 ? el * (100 - U.pct) / U.pct : null;
     head.textContent = t("upd.head", { v: "v" + U.ver });
-    const stepTxt = U.step ? t("upd.s." + U.step) : "…";
-    let dl = "";
-    if (U.step === "download" && U.dlDone) {
-      const sp = U.dlDone / Math.max(0.5, (Date.now() - U.dlT0) / 1000);
-      dl = `<span>${t("upd.dl")}: <b>${mb(U.dlDone)}${U.dlTotal ? " / " + mb(U.dlTotal) : ""}</b></span><span>${t("upd.speed")}: <b>${mb(sp)}/s</b></span>`;
-    }
-    r1.innerHTML = `<span>${t("pg.step")}: <b>${esc(stepTxt)}</b></span>${dl}`;
+    r1.innerHTML = `<span>${t("pg.step")}: <b>${esc(t("upd.s." + (U.step || "backup")))}</b></span><span>${esc(updDetail(U.step))}</span>`;
     r2.innerHTML = `<span>${t("pg.total")}: <b>${U.pct} %</b></span><span>${t("pg.elapsed")}: <b>${mmss(el)}</b></span><span>${t("pg.remain")}: <b>${rest == null ? "…" : "~" + mmss(rest)}</b></span>`;
     sbar.style.display = "none";
     bar.classList.remove("ok"); bar.firstElementChild.style.width = U.pct + "%";
+    if (U.dlg) renderUpdDlg();
   } else if (P.active) {
     const el = (Date.now() - P.t0) / 1000, rest = P.pct > 3 ? el * (100 - P.pct) / P.pct : null;
     head.textContent = t("pg.building");
@@ -238,7 +239,8 @@ async function quickToggle(id) {
 
 const curEd = () => S.start.editions === "onlineplus" ? "onlineplus" : S.start.editions === "original" ? "original" : S.start.edition;
 async function play() {
-  if (S.running || P.active || U.active) return;
+  if (U.active) { U.dlg = true; renderUpdDlg(); return; }
+  if (S.running || P.active) return;
   if (S.updInfo && S.status.ready) return showUpdateDialog(S.updInfo);
   if (!S.status.ready) return openSetup();
   S.start.edition = curEd();
@@ -595,9 +597,10 @@ async function autoUpdate() {
 }
 // pop-up: update now or play the current version first (a critical update can still be put off, but not skipped when playing)
 function showUpdateDialog(u) {
-  const txt = u.critical ? t("upd.crit", { v: u.version }) : t("upd.ask", { v: u.version, mb: mb(u.bytes || 0) });
+  const txt = u.critical ? t("upd.crit", { v: u.version }) : t("upd.ask", { v: u.version, mb: mb(u.download || u.bytes || 0) });
+  const facts = t("upd.facts", { dl: mb(u.download || u.bytes || 0) + " (" + t(u.delta ? "upd.pkgDelta" : "upd.pkgFull") + ")", n: u.changed || 0 });
   const canOld = S.status.ready;
-  $("#setupBox").innerHTML = `<h3>${t("upd.title")}: v${esc(u.version)}</h3><p>${esc(txt)}</p>${u.notes ? `<div class="sub" style="margin-top:8px"><b>${t("upd.notes")}</b></div><div class="body" style="max-height:240px;overflow:auto">${md(u.notes)}</div>` : ""}
+  $("#setupBox").innerHTML = `<h3>${t("upd.title")}: v${esc(u.version)}</h3><p>${esc(txt)}</p><p class="sub" style="margin:6px 0 0">${esc(facts)}</p><p class="sub" style="margin:6px 0 0">${esc(t("upd.what"))}</p>${u.notes ? `<div class="sub" style="margin-top:8px"><b>${t("upd.notes")}</b></div><div class="body" style="max-height:240px;overflow:auto">${md(u.notes)}</div>` : ""}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="updLater">${t("upd.later")}</button>${canOld ? `<button class="btn" id="updOld">${t("upd.playOld")}</button>` : ""}<button class="btn hot" id="updNow">${t("upd.install")}</button></div>`;
   $("#setup").classList.add("on");
   const close = () => $("#setup").classList.remove("on");
@@ -612,10 +615,40 @@ function showUpdateDone(v) {
   $("#finClose").onclick = () => $("#setup").classList.remove("on");
   $("#finPlay").onclick = () => { $("#setup").classList.remove("on"); play(); };
 }
+const UPD_STEPS = ["backup", "download", "verify", "install", "finish"];
+function updDetail(st) {
+  if (st === "backup") return U.backupN != null ? t("upd.saved", { n: U.backupN }) : "";
+  if (st === "download") {
+    if (!U.dlDone) return t(U.delta ? "upd.pkgDelta" : "upd.pkgFull");
+    const sec = Math.max(0.5, (Date.now() - U.dlT0) / 1000), sp = U.dlDone / sec;
+    const left = U.dlTotal && sp > 0 ? (U.dlTotal - U.dlDone) / sp : null;
+    return `${mb(U.dlDone)}${U.dlTotal ? " / " + mb(U.dlTotal) : ""} · ${mb(sp)}/s${left != null ? " · " + t("upd.left") + " ~" + mmss(left) : ""}`;
+  }
+  if (st === "verify" || st === "install") return U.fileI ? `${t("upd.files", { i: U.fileI, n: U.fileN })} · ${U.file}` : "";
+  return "";
+}
+function renderUpdDlg() {
+  if (!U.dlg) return;
+  const cur = UPD_STEPS.indexOf(U.step || "backup");
+  const rows = UPD_STEPS.map((st, i) => {
+    const done = i < cur || (st === "finish" && !U.active), now = i === cur && U.active;
+    const icon = done ? "✓" : now ? "●" : "○";
+    const det = now || (done && st === "backup") ? updDetail(st) : done && st === "download" && U.dlTotal ? mb(U.dlTotal) : done && (st === "verify" || st === "install") && U.fileN ? t("upd.files", { i: U.fileN, n: U.fileN }) : "";
+    return `<div class="ustep ${done ? "done" : now ? "now" : ""}"><span class="ui">${icon}</span><span class="un">${esc(t("upd.s." + st))}</span><span class="ud">${esc(det)}</span></div>`;
+  }).join("");
+  const el = (Date.now() - U.t0) / 1000, rest = U.pct > 5 ? el * (100 - U.pct) / U.pct : null;
+  $("#setupBox").innerHTML = `<h3>${esc(t("upd.head", { v: "v" + U.ver }))}</h3><div class="usteps">${rows}</div>
+    <div class="pbar" style="margin-top:12px"><i style="width:${U.pct}%"></i></div>
+    <div class="sub" style="display:flex;gap:18px;margin-top:6px"><span>${t("pg.total")}: <b>${U.pct} %</b></span><span>${t("pg.elapsed")}: <b>${mmss(el)}</b></span><span>${t("pg.remain")}: <b>${rest == null ? "…" : "~" + mmss(rest)}</b></span></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="updBg">${t("upd.bg")}</button></div>`;
+  $("#setup").classList.add("on");
+  $("#updBg").onclick = () => { U.dlg = false; $("#setup").classList.remove("on"); };
+}
 function installUpdate(u) {
   if (U.active) return;
   go("home");
-  Object.assign(U, { active: true, pct: 0, step: "backup", t0: Date.now(), ver: u.version, dlDone: 0, dlTotal: 0, dlT0: 0 });
+  Object.assign(U, { active: true, pct: 0, step: "backup", t0: Date.now(), ver: u.version, dlDone: 0, dlTotal: 0, dlT0: 0, backupN: null, fileI: 0, fileN: 0, file: "", delta: !!u.delta, dlg: true });
+  renderUpdDlg();
   clearInterval(U.timer); U.timer = setInterval(renderHome, 500); renderHome();
   const stop = () => { clearInterval(U.timer); U.active = false; renderHome(); };
   if (!updListener) { updListener = true; API.on("update", (e) => updateEvent(e)); }
@@ -624,11 +657,13 @@ function installUpdate(u) {
 }
 async function updateEvent(e) {
   const u = U.u || {};
-  if (e.kind === "step") { U.step = e.value; if (e.value === "download") U.dlT0 = Date.now(); }
+  if (e.kind === "step") { U.step = e.value; if (e.value === "download") U.dlT0 = Date.now(); if (e.value === "verify" || e.value === "install") { U.fileI = 0; U.file = ""; } }
   else if (e.kind === "pct") U.pct = Math.max(U.pct, Math.min(100, parseInt(e.value, 10) || 0));
+  else if (e.kind === "file") { const m = String(e.value).match(/^(\d+)\/(\d+)\/(.*)$/); if (m) { U.fileI = +m[1]; U.fileN = +m[2]; U.file = m[3].split("/").pop(); } }
+  else if (e.kind === "info") { const v = String(e.value); if (v.startsWith("backup:")) U.backupN = +v.slice(7); }
   else if (e.kind === "dl") { const [d, tot] = String(e.value).split("/").map(Number); U.dlDone = d || 0; U.dlTotal = tot || 0; }
   else if (e.kind === "done") {
-    clearInterval(U.timer); U.active = false; U.pct = 100;
+    clearInterval(U.timer); U.active = false; U.pct = 100; U.dlg = false; $("#setup").classList.remove("on");
     S.update = ""; S.updInfo = null; await refreshStatus(); renderHome();
     const flags = String(e.value || "");
     if (flags.includes("rebuild")) {
@@ -646,7 +681,7 @@ async function updateEvent(e) {
     }
     showUpdateDone(u.version || "");
   } else if (e.kind === "error") {
-    clearInterval(U.timer); U.active = false; renderHome();
+    clearInterval(U.timer); U.active = false; U.dlg = false; $("#setup").classList.remove("on"); renderHome();
     toast(t("upd.fail", { e: e.value }), 9000);
   }
   if (U.active) renderHome();

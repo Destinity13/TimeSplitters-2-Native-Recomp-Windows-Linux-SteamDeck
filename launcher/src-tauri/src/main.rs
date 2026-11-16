@@ -472,7 +472,7 @@ struct UpdManifest {
     files: Vec<UpdFile>,
 }
 #[derive(Serialize, Default)]
-struct UpdInfo { available: bool, version: String, critical: bool, rebuild: bool, changed: usize, bytes: u64, notes: String, error: String }
+struct UpdInfo { available: bool, version: String, critical: bool, rebuild: bool, changed: usize, bytes: u64, download: u64, delta: bool, notes: String, error: String }
 
 struct UpdState { manifest: Option<UpdManifest>, zip_url: String, delta_url: String, changed: Vec<UpdFile> }
 static UPD: Mutex<UpdState> = Mutex::new(UpdState { manifest: None, zip_url: String::new(), delta_url: String::new(), changed: Vec::new() });
@@ -551,18 +551,25 @@ fn pkg_dir(root: &Path) -> PathBuf { root.parent().map(Path::to_path_buf).unwrap
 #[tauri::command]
 async fn update_check(st: State<'_, Launcher>) -> Result<UpdInfo, String> {
     let root = st.root.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || upd_check_core(&root)).await.map_err(|e| e.to_string())
+}
+
+fn upd_check_core(root: &Path) -> UpdInfo {
+    {
+        let root = root.to_path_buf();
         let mut info = UpdInfo::default();
         let rel = match http_get(&format!("https://api.github.com/repos/{REPO_NAME}/releases/latest"), 4_000_000) {
             Ok(v) => v, Err(e) => { info.error = e; return info; }
         };
         let rel: serde_json::Value = match serde_json::from_slice(&rel) { Ok(v) => v, Err(e) => { info.error = e.to_string(); return info; } };
         let (mut man_url, mut zip_url, mut delta_url) = (String::new(), String::new(), String::new());
+        let (mut zip_size, mut delta_size) = (0u64, 0u64);
         if let Some(a) = rel["assets"].as_array() {
             for x in a {
                 let n = x["name"].as_str().unwrap_or("");
                 let u = x["browser_download_url"].as_str().unwrap_or("").to_string();
-                if n == format!("update-{}.json", upd_plat()) { man_url = u; } else if n == format!("update-{}.zip", upd_plat()) { zip_url = u; } else if n == format!("update-{}-delta.zip", upd_plat()) { delta_url = u; }
+                let sz = x["size"].as_u64().unwrap_or(0);
+                if n == format!("update-{}.json", upd_plat()) { man_url = u; } else if n == format!("update-{}.zip", upd_plat()) { zip_url = u; zip_size = sz; } else if n == format!("update-{}-delta.zip", upd_plat()) { delta_url = u; delta_size = sz; }
             }
         }
         if man_url.is_empty() || zip_url.is_empty() { info.error = "no update package in the latest release".into(); return info; }
@@ -584,10 +591,11 @@ async fn update_check(st: State<'_, Launcher>) -> Result<UpdInfo, String> {
         let mut u = UPD.lock().unwrap();
         // the small delta package is enough when every file this installation needs is in it
         let delta_reicht = !delta_url.is_empty() && changed.iter().all(|f| m.delta.contains(&f.path));
-        if delta_reicht { info.bytes = info.bytes.min(changed.iter().map(|f| f.size).sum()); }
+        info.delta = delta_reicht;
+        info.download = if delta_reicht { delta_size } else { zip_size };
         u.manifest = Some(m); u.zip_url = if delta_reicht { delta_url } else { zip_url }; u.delta_url = String::new(); u.changed = changed;
         info
-    }).await.map_err(|e| e.to_string())
+    }
 }
 
 fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
@@ -629,31 +637,39 @@ struct UpdEv { kind: &'static str, value: String }
 fn update_install(app: AppHandle, st: State<Launcher>) -> Result<(), String> {
     let root = st.root.clone();
     if *st.game.lock().unwrap() { return Err("game is running".into()); }
+    if UPD.lock().unwrap().manifest.is_none() { return Err("no update checked".into()); }
+    std::thread::spawn(move || {
+        let emit = |kind: &'static str, value: String| { let _ = app.emit("update", UpdEv { kind, value }); };
+        match upd_install_run(&root, &emit) { Ok(flags) => emit("done", flags), Err(e) => emit("error", e) }
+    });
+    Ok(())
+}
+
+// the whole update after a check: backup, download (with progress), verify, install. Returns the flags for the UI.
+// Events: step backup|download|verify|install|finish, pct 0-100, dl "done/total", file "i/n path", info text
+fn upd_install_run(root: &Path, emit: &dyn Fn(&'static str, String)) -> Result<String, String> {
     let (m, zip_url, changed) = {
         let u = UPD.lock().unwrap();
         (u.manifest.clone().ok_or("no update checked")?, u.zip_url.clone(), u.changed.clone())
     };
-    std::thread::spawn(move || {
-        let emit = |kind: &'static str, value: String| { let _ = app.emit("update", UpdEv { kind, value }); };
-        let r = (|| -> Result<bool, String> {
-            emit("step", "backup".into());
-            backup_saves(&root)?;
-            emit("pct", "3".into());
-            emit("step", "download".into());
-            let data = http_get_cb(&zip_url, 2_000_000_000, &|done, total| {
-                emit("dl", format!("{done}/{total}"));
-                if total > 0 { emit("pct", format!("{}", 5 + 55 * done.min(total) / total)); }
-            })?;
-            emit("pct", "60".into());
-            emit("step", "install".into());
-            install_core(&pkg_dir(&root), &m, data, &changed, &|k, v| emit(k, v))
-        })();
-        match r {
-            Ok(neu) => emit("done", format!("{}{}", if m.rebuild || m.critical { "rebuild" } else { "" }, if neu { ",restart" } else { "" })),
-            Err(e) => emit("error", e),
-        }
-    });
-    Ok(())
+    emit("step", "backup".into());
+    emit("pct", "1".into());
+    let dst = backup_saves(root)?;
+    let n = std::fs::read_dir(&dst).map(|r| r.count()).unwrap_or(0);
+    emit("info", format!("backup:{n}"));
+    emit("pct", "4".into());
+    emit("step", "download".into());
+    let name = zip_url.rsplit('/').next().unwrap_or("").to_string();
+    emit("info", format!("package:{name}"));
+    let data = http_get_cb(&zip_url, 2_000_000_000, &|done, total| {
+        emit("dl", format!("{done}/{total}"));
+        if total > 0 { emit("pct", format!("{}", 5 + 55 * done.min(total) / total)); }
+    })?;
+    emit("pct", "60".into());
+    let neu = install_core(&pkg_dir(root), &m, data, &changed, emit)?;
+    emit("step", "finish".into());
+    emit("pct", "100".into());
+    Ok(format!("{}{}", if m.rebuild || m.critical { "rebuild" } else { "" }, if neu { ",restart" } else { "" }))
 }
 
 // extract + verify everything into a staging folder first (nothing in place is touched if a single file is wrong),
@@ -662,6 +678,8 @@ fn install_core(pkg: &Path, m: &UpdManifest, data: Vec<u8>, changed: &[UpdFile],
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
     let stage = pkg.join(".update_staging");
     let _ = std::fs::remove_dir_all(&stage);
+    emit("step", "verify".into());
+    let n = changed.len().max(1);
     for (i, f) in changed.iter().enumerate() {
         if !upd_path_ok(&f.path) { return Err(format!("path not allowed: {}", f.path)); }
         let mut e = z.by_name(&f.path).map_err(|_| format!("missing in package: {}", f.path))?;
@@ -678,11 +696,15 @@ fn install_core(pkg: &Path, m: &UpdManifest, data: Vec<u8>, changed: &[UpdFile],
             let mode = if f.mode != 0 { f.mode } else { e.unix_mode().unwrap_or(0o644) };
             let _ = std::fs::set_permissions(&t, std::fs::Permissions::from_mode(mode & 0o777));
         }
-        emit("pct", format!("{}", 60 + 30 * (i + 1) / changed.len().max(1)));
+        emit("file", format!("{}/{}/{}", i + 1, changed.len(), f.path));
+        emit("pct", format!("{}", 60 + 25 * (i + 1) / n));
     }
+    emit("step", "install".into());
     let exe = self_exe();
     let mut launcher_neu = false;
-    for f in changed {
+    for (i, f) in changed.iter().enumerate() {
+        emit("file", format!("{}/{}/{}", i + 1, changed.len(), f.path));
+        emit("pct", format!("{}", 85 + 14 * (i + 1) / n));
         let src = stage.join(&f.path);
         let dst = pkg.join(&f.path);
         if let Some(d) = dst.parent() { std::fs::create_dir_all(d).map_err(|e| e.to_string())?; }
@@ -1116,12 +1138,40 @@ fn headless_update(root: &Path, js: &str, zp: &str) -> i32 {
     code
 }
 
+// `TS2-Launcher --update-online` (tests): the real update path of the Update button (GitHub check, backup, download with
+// progress, verify, install) without the window; every event goes to stdout and app/build/launcher_update_online.txt
+fn headless_update_online(root: &Path) -> i32 {
+    use std::io::Write;
+    let _ = std::fs::create_dir_all(root.join("build"));
+    let logf = std::sync::Mutex::new(std::fs::File::create(root.join("build").join("launcher_update_online.txt")).ok());
+    let last_dl = std::sync::Mutex::new(std::time::Instant::now() - Duration::from_secs(5));
+    let log = |kind: &str, value: &str| {
+        if kind == "dl" || kind == "pct" || kind == "file" {
+            let mut l = last_dl.lock().unwrap();
+            if l.elapsed() < Duration::from_secs(1) { return; }
+            *l = std::time::Instant::now();
+        }
+        let line = format!("{kind} {value}");
+        println!("{line}");
+        if let Some(f) = logf.lock().unwrap().as_mut() { let _ = writeln!(f, "{line}"); }
+    };
+    let info = upd_check_core(root);
+    log("check", &format!("available={} version={} changed={} bytes={} download={} delta={} error={}", info.available, info.version, info.changed, info.bytes, info.download, info.delta, info.error));
+    if !info.available { return if info.error.is_empty() { 0 } else { 1 }; }
+    let r = upd_install_run(root, &|k, v| log(k, &v));
+    match r {
+        Ok(flags) => { log("done", &flags); let after = upd_check_core(root); log("recheck", &format!("available={} version={}", after.available, after.version)); if after.available { 1 } else { 0 } }
+        Err(e) => { log("error", &e); 1 }
+    }
+}
+
 fn main() {
     let root = find_root();
     {
         let a: Vec<String> = std::env::args().collect();
         if a.len() >= 3 && a[1] == "--setup" { std::process::exit(headless_setup(&root, &a[2])); }
         if a.len() >= 4 && a[1] == "--update-from" { std::process::exit(headless_update(&root, &a[2], &a[3])); }
+        if a.len() >= 2 && a[1] == "--update-online" { std::process::exit(headless_update_online(&root)); }
     }
     // leftover of a self-update
     if let Some(e) = self_exe() { let _ = std::fs::remove_file(e.with_extension("old")); }

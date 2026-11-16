@@ -93,13 +93,14 @@
     open: async () => true,
     openUrl: async (u) => window.open(u, "_blank"),
     shortcut: async () => true,
-    updateCheck: async () => /upd/.test(location.search) ? { available: true, version: "1.2.1", critical: false, rebuild: false, changed: 12, bytes: 9_000_000, notes: "* Update pop-up in the launcher\n* Download progress" } : { available: false },
+    updateCheck: async () => /upd/.test(location.search) ? { available: true, version: "1.2.1", critical: false, rebuild: false, changed: 12, bytes: 9_000_000, download: 9_000_000, delta: true, notes: "* Update pop-up in the launcher\n* Download progress" } : { available: false },
     updateInstall: async () => {   // preview only: fake progress
       const em = (kind, value) => (listeners.update || []).forEach((cb) => cb({ kind, value }));
-      em("step", "backup"); let d = 0; const tot = 9_000_000;
+      em("step", "backup"); em("info", "backup:4"); let d = 0; const tot = 9_000_000;
       setTimeout(() => { em("pct", "5"); em("step", "download");
         const iv = setInterval(() => { d = Math.min(tot, d + 600_000); em("dl", d + "/" + tot); em("pct", String(5 + Math.floor(55 * d / tot)));
-          if (d >= tot) { clearInterval(iv); em("step", "install"); em("pct", "80"); setTimeout(() => { em("pct", "100"); em("done", ""); }, 1200); } }, 300); }, 800);
+          if (d >= tot) { clearInterval(iv); em("step", "verify"); let i = 0; const fv = setInterval(() => { i++; em("file", i + "/12/app/gs/file" + i + ".dll"); em("pct", String(60 + 2 * i));
+            if (i >= 12) { clearInterval(fv); em("step", "install"); em("file", "5/12/app/gs/libps2xgs.dll"); em("pct", "92"); setTimeout(() => { em("step", "finish"); em("pct", "100"); em("done", ""); }, 1500); } }, 200); } }, 300); }, 800);
       return true; },
     lastIso: async () => "",
     restart: async () => true,

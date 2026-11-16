@@ -245,3 +245,10 @@ table.srv .pl { white-space: nowrap; font-variant-numeric: tabular-nums; }
 ol.top { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
 ol.top li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
 ol.top li span { opacity: .75; }
+
+.usteps { display: grid; gap: 6px; margin-top: 10px; }
+.ustep { display: grid; grid-template-columns: 22px 170px 1fr; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; background: rgba(255,255,255,.03); color: #8d96a8; font-size: 13px; }
+.ustep .ui { text-align: center; font-weight: 700; }
+.ustep .ud { font-size: 12px; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ustep.done { color: #cfe9d8; } .ustep.done .ui { color: #4fd18b; }
+.ustep.now { color: #fff; background: rgba(255,140,40,.12); box-shadow: inset 3px 0 0 #ff8a2a; } .ustep.now .ui { color: #ff8a2a; }
