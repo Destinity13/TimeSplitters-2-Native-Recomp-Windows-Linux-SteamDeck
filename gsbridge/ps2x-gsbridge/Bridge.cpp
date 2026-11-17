@@ -1177,6 +1177,8 @@ namespace ps2xosd { std::atomic<u32> btns{0}, axes{0x80808080u}, keyBtns{0}; std
 	std::atomic<long long> trefferMs{0}, killMs{0}; std::atomic<int> trefferN{0}, killN{0};
 	// Online+ arcade layer: damage edge flash, multi-kill / streak announcer
 	std::atomic<long long> schadenMs{0}; std::atomic<int> schadenStaerke{0}, todN{0};
+	// low stimulus: time of the last hard camera cut reported by the game (soft cuts overlay)
+	std::atomic<long long> schnittMs{0};
 	std::mutex am; std::string ansText; long long ansMs = 0; int ansStufe = 0; int kette = 0, serie = 0; long long letzterKillMs = 0;
 	long long jetztMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); } }
 // Online+ fonts (SIL OFL, shipped in resources/fonts): Michroma = wide arcade headline face, Rajdhani = compact text face.
@@ -1443,6 +1445,11 @@ namespace ps2xmenu
 			{"Resolution & filtering", "Aufloesung & Filter"}, {"Window", "Fenster"},
 			{"Original frame blending (ghosting when turning)", "Nachzieheffekt beim Drehen (wie Original)"},
 			{"Original haze overlay (double image in the distance)", "Original-Dunstschleier (Doppelbild in der Ferne)"},
+			{"Red tint when hit", "Rote Tönung bei Treffern"},
+			{"Health arc when hit", "Lebensbogen bei Treffern"},
+			{"Soft scene cuts", "Weiche Szenenwechsel"},
+			{"Hard camera cuts fade in from dark over a moment instead of jumping in one frame (low stimulus).", "Harte Kameraschnitte blenden kurz aus dem Dunklen ein, statt in einem Bild zu springen (reizarm)."},
+			{"0 % = no red flash over the picture when you get hit (calmer, low stimulus). 100 % = original.", "0 % = kein roter Schleier über dem Bild bei Treffern (ruhiger, reizarm). 100 % = Original."},
 			{"The PS2 game lays a stretched copy of the picture over the screen. At higher resolutions it looks like a second, shifted image. Off = clear picture.", "Das PS2-Spiel legt eine gestreckte Kopie des Bildes ueber den Schirm. In hoher Aufloesung wirkt das wie ein zweites, verschobenes Bild. Aus = klares Bild."},
 			{"The PS2 game blends the previous frame half over the new one. Off = clear picture.", "Das Original blendet das vorige Bild halb ueber das neue (Geisterbilder). Aus = klares Bild."},
 			{"Anti-aliasing (FXAA)", "Kantenglaettung (FXAA)"}, {"Sharpening (AMD CAS)", "Schaerfe (AMD CAS)"}, {"Sharpening strength", "Schaerfe-Staerke"},
@@ -1557,7 +1564,7 @@ namespace ps2xmenu
 	struct Cfg
 	{
 		int upscale = 9 /* auto: fits the screen, steps down when the PC cannot hold the frame rate */, aspect = 4, cas = 1, casSharp = 25, tv = 0, filter = 2, aniso = 16, dither = 0;
-		int sbB = 50, sbC = 50, sbS = 50, rumblePct = 100, hz = 50, volume = 100, camBlur = 0, nachzieh = 0;   // camBlur: haze overlay (off = clear picture)
+		int sbB = 50, sbC = 50, sbS = 50, rumblePct = 100, hz = 50, volume = 100, camBlur = 0, nachzieh = 0, reizarm = 100, lebensbogen = 100, weichSchnitt = 0;   // camBlur: haze overlay (off = clear picture)
 		bool fxaa = false, shadeboost = false, fullscreen = false, showFps = false, rumble = true, vsync = false, startMenu = false;   // start menu: the launcher already did the setup
 		int tri = 2;             // Trilinear filtering: 0 automatic (PCSX2 default), 1 as PS2, 2 forced (uses the mipmaps of replacement textures)
 		int fx = 0;              // Effects (vkBasalt): 0 off, 1 original-plus, 2 clear, 3 cinematic - applies on the next start
@@ -1624,7 +1631,7 @@ namespace ps2xmenu
 		{"aufloesung", "resolution"}, {"bildformat", "aspect"}, {"cas_staerke", "cas_strength"}, {"farbe", "color_adjust"},
 		{"helligkeit", "brightness"}, {"kontrast", "contrast"}, {"saettigung", "saturation"}, {"texturfilter", "texture_filter"},
 		{"anisotrop", "anisotropic"}, {"vollbild", "fullscreen"}, {"fps_anzeige", "show_fps"}, {"vibration_staerke", "vibration_strength"},
-		{"startmenue", "start_menu"}, {"bildrate", "refresh_rate"}, {"lautstaerke", "volume"}, {"kamera_unschaerfe", "camera_blur"},
+		{"startmenue", "start_menu"}, {"bildrate", "refresh_rate"}, {"lautstaerke", "volume"}, {"kamera_unschaerfe", "camera_blur"}, {"treffer_toenung", "hit_tint"}, {"lebensbogen", "health_arc"}, {"weiche_schnitte", "soft_cuts"},
 		{"nachzieheffekt", "motion_trail"}, {"maus_zielen", "mouse_aim"}, {"maus_empfindlichkeit", "mouse_sensitivity"},
 		{"maus_invertiert", "mouse_invert"}, {"maus_zielmodus_dauer", "aim_mode_hold"}, {"sprache", "language"},
 		{"eingabeanzeige", "show_input"}, {"zoom_empfindlichkeit", "zoom_sensitivity"}, {"belegung_version", "bindings_version"},
@@ -1698,6 +1705,9 @@ namespace ps2xmenu
 			else if (k == "bildrate") cfg.hz = (v == 60 && std::getenv("SOTC_60HZ_EXPERIMENT")) ? 60 : 50; // 60 Hz: character physics still faulty
 			else if (k == "lautstaerke") cfg.volume = std::clamp(v, 0, 200);
 			else if (k == "kamera_unschaerfe") cfg.camBlur = v != 0 ? 1 : 0;
+			else if (k == "treffer_toenung") cfg.reizarm = std::clamp(v, 0, 100);
+			else if (k == "lebensbogen") cfg.lebensbogen = std::clamp(v, 0, 100);
+			else if (k == "weiche_schnitte") cfg.weichSchnitt = v != 0 ? 1 : 0;
 			else if (k == "nachzieheffekt") cfg.nachzieh = v != 0 ? 1 : 0;
 			else if (k == "hd_text") cfg.hdText = v != 0;
 			else if (k == "maus_zielen") cfg.maus = v != 0;
@@ -1767,7 +1777,7 @@ namespace ps2xmenu
 		  << "\ncas_staerke=" << c.casSharp << "\ndithering=" << c.dither << "\ntv_shader=" << c.tv << "\nfarbe=" << c.shadeboost << "\nhelligkeit=" << c.sbB
 		  << "\nkontrast=" << c.sbC << "\nsaettigung=" << c.sbS << "\ntexturfilter=" << c.filter << "\nanisotrop=" << c.aniso
 		  << "\nvollbild=" << c.fullscreen << "\nfps_anzeige=" << c.showFps << "\nvibration=" << c.rumble
-		  << "\nvibration_staerke=" << c.rumblePct << "\nvsync=" << c.vsync << "\nbildrate=" << c.hz << "\nlautstaerke=" << c.volume << "\nkamera_unschaerfe=" << c.camBlur << "\nnachzieheffekt=" << c.nachzieh << "\nstartmenue=" << c.startMenu << "\neffekte=" << (c.fx == 1 ? "original-plus" : c.fx == 2 ? "klar" : c.fx == 3 ? "filmisch" : "aus") << "\ntrilinear=" << c.tri << "\nhd_text=" << c.hdText << "\nmaus_zielen=" << c.maus << "\nmaus_empfindlichkeit=" << c.mausSens << "\nmaus_invertiert=" << c.mausInvert << "\nmaus_zielmodus_dauer=" << c.mausZielmodus << "\nsprache=" << c.lang << "\neingabeanzeige=" << c.showInput << "\nbelegung_version=" << c.belVersion << "\nzoom_empfindlichkeit=" << c.zoomSens << "\nfadenkreuz=" << c.fadenkreuz << "\nzielfernrohr=" << c.scope << "\nonline_plus_effekte=" << c.impact << "\nschaden_stoss=" << c.impactKick << "\ntreffermarker=" << c.impactMarker << "\ntreffer_klang=" << c.impactSound << "\nrueckstoss=" << c.impactRecoil << "\nansager=" << c.impactAnsage << "\nschaden_rand=" << c.impactRand << "\nblickwinkel_max=" << c.nickMax << "\nalles_frei=" << c.unlockAll << "\npad_modern=" << c.padModern << "\npad_tempo=" << c.padSens << "\nauto_ziel=" << c.autoAim << "\nleben_unendlich=" << c.cheatHealth << "\nruestung_unendlich=" << c.cheatArmor << "\nmunition_unendlich=" << c.cheatAmmo << "\nsichtfeld=" << c.fov << "\ntexturpakete=" << c.packs << "\nonline_server=" << c.onlineServer << "\nonline_name=" << c.onlineName << "\nonline_passwort=" << c.onlinePw << "\nonline_favoriten=" << c.onlineFavs << "\n";
+		  << "\nvibration_staerke=" << c.rumblePct << "\nvsync=" << c.vsync << "\nbildrate=" << c.hz << "\nlautstaerke=" << c.volume << "\nkamera_unschaerfe=" << c.camBlur << "\nnachzieheffekt=" << c.nachzieh << "\ntreffer_toenung=" << c.reizarm << "\nlebensbogen=" << c.lebensbogen << "\nweiche_schnitte=" << c.weichSchnitt << "\nstartmenue=" << c.startMenu << "\neffekte=" << (c.fx == 1 ? "original-plus" : c.fx == 2 ? "klar" : c.fx == 3 ? "filmisch" : "aus") << "\ntrilinear=" << c.tri << "\nhd_text=" << c.hdText << "\nmaus_zielen=" << c.maus << "\nmaus_empfindlichkeit=" << c.mausSens << "\nmaus_invertiert=" << c.mausInvert << "\nmaus_zielmodus_dauer=" << c.mausZielmodus << "\nsprache=" << c.lang << "\neingabeanzeige=" << c.showInput << "\nbelegung_version=" << c.belVersion << "\nzoom_empfindlichkeit=" << c.zoomSens << "\nfadenkreuz=" << c.fadenkreuz << "\nzielfernrohr=" << c.scope << "\nonline_plus_effekte=" << c.impact << "\nschaden_stoss=" << c.impactKick << "\ntreffermarker=" << c.impactMarker << "\ntreffer_klang=" << c.impactSound << "\nrueckstoss=" << c.impactRecoil << "\nansager=" << c.impactAnsage << "\nschaden_rand=" << c.impactRand << "\nblickwinkel_max=" << c.nickMax << "\nalles_frei=" << c.unlockAll << "\npad_modern=" << c.padModern << "\npad_tempo=" << c.padSens << "\nauto_ziel=" << c.autoAim << "\nleben_unendlich=" << c.cheatHealth << "\nruestung_unendlich=" << c.cheatArmor << "\nmunition_unendlich=" << c.cheatAmmo << "\nsichtfeld=" << c.fov << "\ntexturpakete=" << c.packs << "\nonline_server=" << c.onlineServer << "\nonline_name=" << c.onlineName << "\nonline_passwort=" << c.onlinePw << "\nonline_favoriten=" << c.onlineFavs << "\n";
 		for (int i = 0; i < kAnzAktionen; ++i)
 			f << "taste_" << i << "=" << c.bel[i][0] << "," << c.bel[i][1] << "   # " << kAktionen[i].name << "\n";
 		std::ofstream aus(iniPath(), std::ios::trunc);
@@ -1834,7 +1844,7 @@ namespace ps2xmenu
 	{
 		return a.upscale == b.upscale && a.aspect == b.aspect && a.cas == b.cas && a.casSharp == b.casSharp && a.tv == b.tv && a.filter == b.filter &&
 		       a.aniso == b.aniso && a.dither == b.dither && a.sbB == b.sbB && a.sbC == b.sbC && a.sbS == b.sbS && a.rumblePct == b.rumblePct &&
-		       a.hz == b.hz && a.volume == b.volume && a.camBlur == b.camBlur && a.nachzieh == b.nachzieh && a.fxaa == b.fxaa && a.shadeboost == b.shadeboost &&
+		       a.hz == b.hz && a.volume == b.volume && a.camBlur == b.camBlur && a.nachzieh == b.nachzieh && a.reizarm == b.reizarm && a.lebensbogen == b.lebensbogen && a.weichSchnitt == b.weichSchnitt && a.fxaa == b.fxaa && a.shadeboost == b.shadeboost &&
 		       a.fullscreen == b.fullscreen && a.showFps == b.showFps && a.rumble == b.rumble && a.vsync == b.vsync && a.startMenu == b.startMenu &&
 		       a.hdText == b.hdText && a.unlockAll == b.unlockAll && a.padModern == b.padModern && a.padSens == b.padSens && a.autoAim == b.autoAim && a.cheatHealth == b.cheatHealth && a.cheatArmor == b.cheatArmor && a.cheatAmmo == b.cheatAmmo && a.fov == b.fov && a.maus == b.maus && a.mausSens == b.mausSens && a.mausInvert == b.mausInvert && a.mausZielmodus == b.mausZielmodus && a.fadenkreuz == b.fadenkreuz && a.scope == b.scope && a.impact == b.impact && a.impactKick == b.impactKick && a.impactMarker == b.impactMarker && a.impactSound == b.impactSound && a.impactRecoil == b.impactRecoil && a.impactAnsage == b.impactAnsage && a.impactRand == b.impactRand && a.nickMax == b.nickMax && a.lang == b.lang && a.showInput == b.showInput &&
 		       a.zoomSens == b.zoomSens && std::memcmp(a.bel, b.bel, sizeof(a.bel)) == 0 && a.packs == b.packs && a.fx == b.fx && a.tri == b.tri &&
@@ -2490,6 +2500,17 @@ static const int kBotSetsN = 9;
 			static const auto s_t0 = std::chrono::steady_clock::now();
 			const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - s_t0).count();
 			{
+				// Low stimulus "soft cuts": after a hard camera cut the picture fades in from dark over 250 ms instead of
+				// changing its whole brightness in one frame (option weiche_schnitte, the game reports cuts via option 42)
+				int ws; { std::lock_guard<std::mutex> lk(m); ws = cfg.weichSchnitt; }
+				const long long dt = ps2xosd::jetztMs() - ps2xosd::schnittMs.load();
+				if (ws && !open.load() && dt >= 0 && dt < 250)
+				{
+					const int a = static_cast<int>(200.0f * (1.0f - static_cast<float>(dt) / 250.0f));
+					ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), ImGui::GetIO().DisplaySize, IM_COL32(0, 0, 0, a));
+				}
+			}
+			{
 				// Input display (debug option, default off): what the game currently gets from the pad/keyboard
 				bool show; { std::lock_guard<std::mutex> lk(m); show = cfg.showInput; }
 				if (show)
@@ -2985,6 +3006,16 @@ static const int kBotSetsN = 9;
 					bool dn = c.camBlur != 0;
 					if (ImGui::Checkbox(tr("Original haze overlay (double image in the distance)"), &dn)) c.camBlur = dn ? 1 : 0;
 					ImGui::TextDisabled("%s", tr("The PS2 game lays a stretched copy of the picture over the screen. At higher resolutions it looks like a second, shifted image. Off = clear picture."));
+				}
+				{
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14);
+					ImGui::SliderInt(tr("Red tint when hit"), &c.reizarm, 0, 100, "%d %%");
+					ImGui::TextDisabled("%s", tr("0 % = no red flash over the picture when you get hit (calmer, low stimulus). 100 % = original."));
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14);
+					ImGui::SliderInt(tr("Health arc when hit"), &c.lebensbogen, 0, 100, "%d %%");
+					bool ws = c.weichSchnitt != 0;
+					if (ImGui::Checkbox(tr("Soft scene cuts"), &ws)) c.weichSchnitt = ws ? 1 : 0;
+					ImGui::TextDisabled("%s", tr("Hard camera cuts fade in from dark over a moment instead of jumping in one frame (low stimulus)."));
 				}
 				{
 					const char* kScEn[] = {"Original (smeared)", "Clear", "Extra clear"};
@@ -4600,7 +4631,7 @@ PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, 
 		s_settings_interface.SetIntValue("EmuCore/GS", "UserHacks_HalfPixelOffset", 5);
 		s_settings_interface.SetIntValue("EmuCore/GS", "UserHacks_native_scaling", 3);
 	}
-	else if (std::string_view(ser) == "SLUS-20314") // TimeSplitters 2 (GameIndex.yaml): "Fixes slight texture misalignment"
+	else if (std::string_view(ser) == "SLUS-20314" || std::string_view(ser) == "SLES-50877") // TimeSplitters 2 USA + PAL (GameIndex.yaml): "Fixes slight texture misalignment"
 	{
 		s_settings_interface.SetBoolValue("EmuCore/GS", "UserHacks", true);
 		s_settings_interface.SetIntValue("EmuCore/GS", "UserHacks_HalfPixelOffset", 2);
@@ -5148,6 +5179,11 @@ PS2XGS_API int ps2xgs_option(int id, int fallback)
 	if (id == 26) return ps2xstats::kills();
 	if (id == 27) { const int lv = ps2xstats::level(); return lv >= 50 ? static_cast<int>(std::min<long long>(ps2xstats::xp(), 2000000000LL)) : static_cast<int>(ps2xstats::xpFuer(lv + 1)); }
 	if (id == 23) { std::lock_guard<std::mutex> lk(ps2xmenu::m); return ps2xmenu::onlinePlus() ? ps2xmenu::cfg.impactAnsage : 0; } // announcer through the game's messages
+	if (id == 42) // low stimulus soft cuts: the game reports a hard camera cut (fallback 1), reads the setting (fallback 0)
+	{
+		if (fallback > 0) { ps2xosd::schnittMs.store(ps2xosd::jetztMs()); static int n = 0; if (n++ < 50) std::fprintf(stderr, "[ps2xgs] soft cut fade\n"); }
+		std::lock_guard<std::mutex> lk(ps2xmenu::m); return ps2xmenu::cfg.weichSchnitt;
+	}
 	if (id == 22) return ps2xmenu::onlinePlus() ? 1 : fallback; // Online+ edition: killfeed / scoreboard tracking on
 	if (id == 17) return 0; // main menu item "Online+": the game opens its own network menu now (no overlay window)
 	if (id == 18) { const int c = ps2xmenu::botAnfrage.exchange(0); return c ? c : fallback; } // quick bot match
@@ -5186,6 +5222,8 @@ PS2XGS_API int ps2xgs_option(int id, int fallback)
 	switch (id)
 	{
 		case 0: return ps2xmenu::cfg.camBlur;
+		case 41: return ps2xmenu::cfg.lebensbogen;   // health arc opacity when hit (low stimulus), 100 = original
+		case 40: return ps2xmenu::cfg.reizarm;   // red screen tint when hit (low stimulus), 100 = original
 		case 1: return ps2xmenu::cfg.nachzieh;
 		case 2: return ps2xmenu::cfg.maus ? 1 : 0;
 		case 3: return ps2xmenu::cfg.mausSens;
