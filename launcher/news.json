@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-17T12:00:00Z",
+    "title": "Devlog - coming in 1.2.2",
+    "tag": "Devlog",
+    "body": "MapMaker walls are back, controller zoom is fixed, new low stimulus options and a first look at the PAL version. What is done and what is still open before 1.2.2.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-17-devlog-coming-in-1-2-2.md"
+  },
+  {
     "date": "2026-11-16T12:00:00Z",
     "title": "Version 1.2.1 - better updates",
     "tag": "Release",

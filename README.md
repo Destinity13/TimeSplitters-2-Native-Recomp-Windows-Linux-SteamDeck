@@ -33,8 +33,8 @@
 
 <table>
 <tr>
+<td width="50%" valign="top"><a href="news/2026-11-17-devlog-coming-in-1-2-2.md"><img src="news/img/mapmaker-before-after.jpg" width="100%" alt=""></a><br><sub>2026-11-17 · Devlog</sub><br><b><a href="news/2026-11-17-devlog-coming-in-1-2-2.md">Devlog - coming in 1.2.2</a></b><br><sub>MapMaker walls are back, controller zoom is fixed, new low stimulus options and a first look at the PAL version. What is done and what is still open before 1.2.2.</sub></td>
 <td width="50%" valign="top"><sub>2026-11-16 · Release</sub><br><b><a href="news/2026-11-16-patch-notes-1-2-1.md">Version 1.2.1 - better updates</a></b><br><sub>The launcher now asks before it updates, shows every step with progress and tells you when you can play.</sub></td>
-<td width="50%" valign="top"><sub>2026-11-16 · Devlog</sub><br><b><a href="news/2026-11-16-devlog-after-1-2.md">Devlog - 1.2 is out, what comes next</a></b><br><sub>How the double image got fixed, what we test before every release and what we are working on for the next update.</sub></td>
 </tr>
 </table>
 
