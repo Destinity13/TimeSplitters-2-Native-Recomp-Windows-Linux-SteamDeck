@@ -1605,7 +1605,7 @@ namespace ps2xmenu
 		int autoAim = 0;         // TS2 mouse aiming: keep the game's auto-aim (pulls the aim to enemies); off = shots go to the crosshair
 		int padModern = 0;       // TS2: modern gamepad aiming (right stick turns the view, crosshair fixed in the centre)
 		int unlockAll = 0;       // TS2: everything unlocked while the option is on (levels, characters, cheats)
-		int leichtPlus = 0;      // TS2: Extended Easy Mode, full levels on Easy (port reads it as option 42)
+		int leichtPlus = 0;      // TS2: Extended Easy Mode, full levels on Easy (port reads it as option 44)
 		int fruehStimmen = 0;    // TS2: earlier voice takes found on the disc (Louie Bignose), port reads it as option 43
 		int nickMax = 40;        // Mouse: how far up/down you can look (degrees, original 40)
 		int bel[32][2] = {};     // bindings per action (2 keys), defaults in kAktionen
@@ -5299,7 +5299,7 @@ PS2XGS_API int ps2xgs_option(int id, int fallback)
 		case 8: return ps2xhot::freecam.load() ? 1 : 0;
 		case 11: return ps2xmenu::cfg.nickMax;
 		case 31: return ps2xmenu::cfg.unlockAll;
-		case 42: return ps2xmenu::cfg.leichtPlus;
+		case 44: return ps2xmenu::cfg.leichtPlus;   // Extended Easy (42 is answered above as the soft scene cuts)
 		case 43: return ps2xmenu::cfg.fruehStimmen;
 		case 32: return ps2xmenu::cfg.padModern;
 		case 33: return ps2xmenu::cfg.padSens;

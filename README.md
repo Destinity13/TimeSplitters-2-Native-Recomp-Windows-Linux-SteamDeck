@@ -276,7 +276,7 @@ the port's renderer on the author's own disc, no AI upscaling, no texture pack.<
 |---|---|
 | **Does it run on Windows?** | Yes, since 1.0.1: Windows 10 and 11, 64-bit, with Direct3D 11 (Vulkan as fallback). The package brings everything it needs, including the compiler that builds your copy. Windows may warn about an unsigned app the first time – "More info" → "Run anyway". |
 | **Do I need PCSX2 installed?** | No. The package brings the small GS/SPU2 bridge it needs. Nothing else is installed on your system. |
-| **Which disc works?** | The **USA** release, `SLUS-203.14`, as an `.iso` dump of your own disc. PAL and Japanese discs are different builds and will not work (yet). |
+| **Which disc works?** | The **USA** release (`SLUS-20314`) and the **European PAL** release (`SLES-50877`), as an `.iso` dump of your own disc. The setup detects which one you have. Both turn into the same port: PAL runs at 60 Hz, starts in English and plays exactly like USA. The Japanese disc is not supported. |
 | **Is it an emulator with extra steps?** | No. The game's CPU code is translated to C++ once and compiled for your PC. At runtime there is no MIPS interpreter or JIT, only the GS/SPU2 (graphics and sound) from PCSX2. That is why it holds 60 FPS on a Steam Deck. |
 | **Why does it compile on my PC?** | Because the translated game code is derived from your disc and must not be distributed. Your PC turns your disc into your build, once, with the compiler that ships in the package. |
 | **Controller, mouse or both?** | Both, at the same time. Gamepads through SDL3 (any modern pad, rumble, pressure buttons), mouse look with the game's own crosshair, all keys and buttons rebindable in the menu. Mouse play is the newest part and [not finished](docs/MOUSE.md). |
@@ -327,7 +327,7 @@ reverse engineering, implementation and measurement. See [AI disclosure](#ai-dis
 
 ```mermaid
 flowchart LR
-    ISO["your disc image"] --> E["SLUS_203.14"]
+    ISO["your disc image"] --> E["SLUS_203.14 or SLES_508.77"]
     E --> R["PS2Recomp fork<br/>R5900 → C++"]
     E --> V["VU1 microcode → C++/SSE"]
     R --> B["native executable"]

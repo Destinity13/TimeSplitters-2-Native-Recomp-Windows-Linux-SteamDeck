@@ -10,7 +10,7 @@ The read-only system stays untouched, and you don't need distrobox or developer 
 
 1. Switch to Desktop Mode: hold the power button, then pick *Switch to Desktop*.
 2. Download the release `.tar.xz` and extract it, for example to `~/Games/TS2-Recomp/`. You need about 5 GB free.
-3. Copy your **TimeSplitters 2 (USA)** ISO onto the Deck.
+3. Copy your **TimeSplitters 2** ISO onto the Deck (USA or European PAL release).
 4. Double-click `TS2-Recomp.sh` (or `TS2-SteamDeck.sh`). The launcher opens, the same one as on every other PC.
    Click *Set up* and select the ISO. It checks it, extracts it and builds the game.
    This takes roughly 10–15 minutes on the Deck and only happens once.

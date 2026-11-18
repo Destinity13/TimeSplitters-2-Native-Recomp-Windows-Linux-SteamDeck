@@ -27,7 +27,7 @@ The Windows package follows the same zero-install idea as the Linux package. You
 | Part | Windows build |
 |---|---|
 | Launcher | `TS2-Recomp.bat` opens a PowerShell/WinForms launcher. It asks for the ISO, shows the setup progress, then gives you Play / Settings / desktop shortcut. |
-| Setup | Bundled embedded Python 3.12 runs the same steps as on Linux: check the ISO (SHA-1 of `SLUS_203.14`), extract it, recompile it, build in two passes (VU1 microcode is decoded by the runtime in between). |
+| Setup | Bundled embedded Python 3.12 runs the same steps as on Linux: check the ISO (SHA-1 of `SLUS_203.14` or `SLES_508.77`), extract it, recompile it, build in two passes (VU1 microcode is decoded by the runtime in between). |
 | Compiler | Bundled Zig 0.17.1 for Windows, trimmed to the MinGW parts (`x86_64-windows-gnu`). |
 | Recompiler tools | `ps2_recomp.exe` / `ps2_analyzer.exe`, cross-built with Zig. They include the COP0 `Count` fix. |
 | Runtime, IOP, raylib, FFmpeg (MPEG-1/2 only) | Prebuilt static libraries. Only the code generated from your own disc is compiled on your PC. |

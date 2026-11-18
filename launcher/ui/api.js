@@ -45,10 +45,10 @@
   const listeners = {};
   const emit = (ev, p) => (listeners[ev] || []).forEach((cb) => cb(p));
   let ini = { aufloesung: "4", bildformat: "4", fxaa: "0", cas: "1", cas_staerke: "25", texturfilter: "2", anisotrop: "16", tv_shader: "0",
-    effekte: "aus", vsync: "0", fps_anzeige: "0", hd_text: "1", lautstaerke: "100", maus_zielen: "1", maus_empfindlichkeit: "30",
+    effekte: "aus", vsync: "0", fps_anzeige: "0", hd_text: "1", treffer_toenung: "100", lebensbogen: "100", weiche_schnitte: "0", lautstaerke: "100", maus_zielen: "1", maus_empfindlichkeit: "30",
     maus_invertiert: "0", maus_zielmodus_dauer: "0", zoom_empfindlichkeit: "50", vibration: "1", vibration_staerke: "100", sprache: "-1",
     trilinear: "2", dithering: "0", vollbild: "0", online_name: "", online_server: "", online_favoriten: "" };
-  let start = { widescreen: true, fullscreen: false, letterbox: false, renderer: "3" };
+  let start = { widescreen: true, fullscreen: false, letterbox: false, renderer: "3", game_lang: "en" };
   const fakeSrv = {
     "ts2.example.net": { name: "Siberia Night Club", players: 7, max: 16, pw: false, motd: "Deathmatch rotation · EU", ping: 24 },
     "eu1.timesplit.example": { name: "Chicago Arcade [EU]", players: 12, max: 16, pw: false, motd: "Bots on, monkeys welcome", ping: 41 },
@@ -59,12 +59,12 @@
   let hosting = false;
   window.API = {
     real: false, URLS,
-    status: async () => ({ platform: /Win/.test(navigator.platform) ? "windows" : "linux", version: "1.0.1", ready: true, iso: "TimeSplitters 2 (USA).iso", build: "pc034" }),
+    status: async () => ({ platform: /Win/.test(navigator.platform) ? "windows" : "linux", version: "1.2.0", ready: true, iso: "TimeSplitters 2 (USA).iso", build: "game" }),
     settingsLoad: async () => ({ ini: { ...ini }, start: { ...start } }),
     settingsSave: async (i, s) => { ini = { ...ini, ...i }; start = { ...start, ...s }; return true; },
     pickIso: async () => "TimeSplitters 2 (USA).iso",
     setup: async () => {
-      const steps = ["Disc prüfen (SLUS-203.14)", "Dateien entpacken", "ELF rekompilieren", "Laufzeit bauen", "Fertig"];
+      const steps = ["Disc prüfen (SLUS-20314 / SLES-50877)", "Dateien entpacken", "ELF rekompilieren", "Laufzeit bauen", "Fertig"];
       let p = 0;
       const t = setInterval(() => {
         p += 4; emit("setup", { kind: "pct", value: String(Math.min(p, 100)) });
@@ -79,6 +79,8 @@
       return addrs.map((a) => fakeSrv[a] ? { addr: a, ok: true, proto: 1, ...fakeSrv[a], ping: fakeSrv[a].ping + Math.round(Math.random() * 8) } : { addr: a, ok: false }); },
     fetchText: async (url) => {
       if (url === URLS.servers) return Object.keys(fakeSrv).join("\n") + "\nold.example.net\n";
+      if (url === URLS.news && window.__MOCK_NEWS) return JSON.stringify(window.__MOCK_NEWS);
+      if (url === URLS.releases && window.__MOCK_NEWS) return "[]";
       if (url === URLS.news) return JSON.stringify([{ date: "2026-11-12", title: "Neuer Launcher", tag: "Launcher", body: "Komplett neuer Start-Launcher mit Serverbrowser, News und allen Einstellungen an einem Ort." }]);
       if (url === URLS.releases) return JSON.stringify([
         { tag_name: "v1.0.1", name: "1.0.1 – Windows is here", published_at: "2026-11-11T10:00:00Z", html_url: URLS.repo + "/releases/tag/v1.0.1",

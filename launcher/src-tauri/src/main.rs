@@ -101,11 +101,11 @@ const KEYMAP: &[(&str, &str)] = &[
     ("aufloesung", "resolution"), ("bildformat", "aspect"), ("cas_staerke", "cas_strength"), ("farbe", "color_adjust"),
     ("helligkeit", "brightness"), ("kontrast", "contrast"), ("saettigung", "saturation"), ("texturfilter", "texture_filter"),
     ("anisotrop", "anisotropic"), ("vollbild", "fullscreen"), ("fps_anzeige", "show_fps"), ("vibration_staerke", "vibration_strength"),
-    ("startmenue", "start_menu"), ("bildrate", "refresh_rate"), ("lautstaerke", "volume"), ("kamera_unschaerfe", "camera_blur"),
+    ("startmenue", "start_menu"), ("bildrate", "refresh_rate"), ("lautstaerke", "volume"), ("kamera_unschaerfe", "camera_blur"), ("treffer_toenung", "hit_tint"), ("lebensbogen", "health_arc"), ("weiche_schnitte", "soft_cuts"),
     ("nachzieheffekt", "motion_trail"), ("maus_zielen", "mouse_aim"), ("maus_empfindlichkeit", "mouse_sensitivity"),
     ("maus_invertiert", "mouse_invert"), ("maus_zielmodus_dauer", "aim_mode_hold"), ("sprache", "language"),
     ("eingabeanzeige", "show_input"), ("zoom_empfindlichkeit", "zoom_sensitivity"), ("belegung_version", "bindings_version"),
-    ("effekte", "effects"), ("alles_frei", "unlock_all"), ("pad_modern", "modern_gamepad_aim"), ("pad_tempo", "gamepad_aim_speed"), ("auto_ziel", "auto_aim"), ("leben_unendlich", "infinite_health"), ("ruestung_unendlich", "infinite_armor"), ("munition_unendlich", "infinite_ammo"), ("fadenkreuz", "crosshair"), ("zielfernrohr", "scope"), ("online_plus_effekte", "impact_effects"), ("schaden_stoss", "damage_kick"), ("treffermarker", "hit_markers"), ("treffer_klang", "hit_sound"), ("blickwinkel_max", "pitch_limit"), ("texturpakete", "texture_packs"), ("online_passwort", "online_password"), ("online_favoriten", "online_favorites"),
+    ("effekte", "effects"), ("alles_frei", "unlock_all"), ("leicht_plus", "extended_easy"), ("pad_modern", "modern_gamepad_aim"), ("pad_tempo", "gamepad_aim_speed"), ("auto_ziel", "auto_aim"), ("leben_unendlich", "infinite_health"), ("ruestung_unendlich", "infinite_armor"), ("munition_unendlich", "infinite_ammo"), ("fadenkreuz", "crosshair"), ("zielfernrohr", "scope"), ("online_plus_effekte", "impact_effects"), ("schaden_stoss", "damage_kick"), ("treffermarker", "hit_markers"), ("treffer_klang", "hit_sound"), ("blickwinkel_max", "pitch_limit"), ("texturpakete", "texture_packs"), ("online_passwort", "online_password"), ("online_favoriten", "online_favorites"),
 ];
 const FXMAP: &[(&str, &str)] = &[("aus", "off"), ("klar", "clear"), ("filmisch", "cinematic")];
 
@@ -160,6 +160,7 @@ struct Status {
     build: String,
     launcher: String,
     stale: bool,
+    region: String,
 }
 
 // files the game binary is linked from; when one of them is newer than the binary (an update replaced it) the game has
@@ -219,6 +220,13 @@ fn current_build(root: &Path) -> Option<String> {
     bin.is_file().then_some(n)
 }
 
+// region of the set-up disc ("USA" or "PAL"), written by the setup to build/region.txt; empty before the first setup
+fn disc_region(root: &Path) -> String {
+    std::fs::read_to_string(root.join("build").join("region.txt")).ok()
+        .and_then(|s| s.lines().next().map(|l| l.trim().to_string()))
+        .filter(|r| r == "USA" || r == "PAL").unwrap_or_default()
+}
+
 #[tauri::command]
 fn status(st: State<Launcher>) -> Status {
     let b = current_build(&st.root);
@@ -229,6 +237,7 @@ fn status(st: State<Launcher>) -> Status {
         build: b.unwrap_or_default(),
         launcher: env!("CARGO_PKG_VERSION").into(),
         stale: build_stale(&st.root),
+        region: disc_region(&st.root),
     }
 }
 
@@ -238,7 +247,7 @@ fn status(st: State<Launcher>) -> Status {
 const KEYS: &[&str] = &[
     "aufloesung", "bildformat", "bildformat_v2", "alles_frei", "pad_modern", "pad_tempo", "auto_ziel", "leben_unendlich", "ruestung_unendlich", "munition_unendlich", "fxaa", "cas", "cas_staerke", "dithering", "tv_shader", "farbe", "helligkeit", "kontrast",
     "saettigung", "texturfilter", "anisotrop", "vollbild", "fps_anzeige", "vibration", "vibration_staerke", "vsync",
-    "lautstaerke", "kamera_unschaerfe", "nachzieheffekt", "startmenue", "effekte", "trilinear", "hd_text", "maus_zielen",
+    "lautstaerke", "kamera_unschaerfe", "treffer_toenung", "lebensbogen", "weiche_schnitte", "nachzieheffekt", "startmenue", "effekte", "trilinear", "hd_text", "maus_zielen",
     "maus_empfindlichkeit", "maus_invertiert", "maus_zielmodus_dauer", "sprache", "eingabeanzeige", "zoom_empfindlichkeit", "fadenkreuz", "blickwinkel_max",
     "zielfernrohr", "online_plus_effekte", "schaden_stoss", "treffermarker", "treffer_klang",
     "texturpakete", "online_server", "online_name", "online_passwort", "online_favoriten",
@@ -255,8 +264,14 @@ struct StartOpts {
     editions: String,
     #[serde(default = "ed_default")]
     edition: String,
+    // game language for the PAL disc (en, fr, de, es, it); the USA disc is English only. Kept in launcher.conf,
+    // the in-game menu rewrites the settings file with its own keys only.
+    #[serde(default = "gl_default")]
+    game_lang: String,
 }
 fn ed_default() -> String { "original".into() }
+fn gl_default() -> String { "en".into() }
+fn gl_ok(v: &str) -> bool { ["en", "fr", "de", "es", "it"].contains(&v) }
 
 #[derive(Serialize)]
 struct Settings {
@@ -296,6 +311,7 @@ fn read_start(root: &Path) -> StartOpts {
         renderer,
         editions: kv.get("TS2_EDITIONEN").map(|v| v.trim().to_string()).filter(|v| v == "original" || v == "onlineplus" || v == "both").unwrap_or_else(ed_default),
         edition: kv.get("TS2_EDITION").map(|v| v.trim().to_string()).filter(|v| v == "original" || v == "onlineplus").unwrap_or_else(ed_default),
+        game_lang: kv.get("TS2_GAME_LANGUAGE").map(|v| v.trim().to_string()).filter(|v| gl_ok(v)).unwrap_or_else(gl_default),
     }
 }
 
@@ -356,12 +372,13 @@ fn settings_save(st: State<Launcher>, ini: BTreeMap<String, String>, start: Star
     write_atomic(
         &cfg_dir().join("launcher.conf"),
         &format!(
-            "TS2_WIDESCREEN={}\nPS2XGS_FULLSCREEN={}\nTS2_LETTERBOX={}\nTS2_EDITIONEN={}\nTS2_EDITION={}\n",
+            "TS2_WIDESCREEN={}\nPS2XGS_FULLSCREEN={}\nTS2_LETTERBOX={}\nTS2_EDITIONEN={}\nTS2_EDITION={}\nTS2_GAME_LANGUAGE={}\n",
             b(start.widescreen),
             b(start.fullscreen),
             b(start.letterbox),
             if ["original", "onlineplus", "both"].contains(&start.editions.as_str()) { start.editions.as_str() } else { "original" },
-            if start.edition == "onlineplus" { "onlineplus" } else { "original" }
+            if start.edition == "onlineplus" { "onlineplus" } else { "original" },
+            if gl_ok(&start.game_lang) { start.game_lang.as_str() } else { "en" }
         ),
     )?;
     if cfg!(windows) && (start.renderer == "3" || start.renderer == "14") {
@@ -378,7 +395,7 @@ async fn pick_iso(app: AppHandle) -> Option<String> {
     let f = app
         .dialog()
         .file()
-        .set_title("TimeSplitters 2 (USA) – SLUS-20314")
+        .set_title("TimeSplitters 2 – USA (SLUS-20314) or Europe (SLES-50877)")
         .add_filter("PS2 disc image (*.iso)", &["iso", "ISO"])
         .blocking_pick_file()?;
     f.into_path().ok().map(|p| p.to_string_lossy().to_string())
@@ -809,6 +826,7 @@ fn play(app: AppHandle, st: State<Launcher>) -> Result<(), String> {
         .env("TS2_LETTERBOX", b(start.letterbox))
         .env("TS2_EDITION", if start.edition == "onlineplus" && start.editions != "original" { "onlineplus" } else { "original" })
         .env("TS2_LAUNCHER", "1")
+        .env("TS2_GAME_LANGUAGE", if gl_ok(&start.game_lang) { start.game_lang.as_str() } else { "en" })
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

@@ -51,13 +51,13 @@ const L = {
     "s.chp": "Cheat: unendlich Leben", "s.chp.s": "Nur Einzelspieler und Splitscreen. Aus in Online+ und Online-Partien", "s.car": "Cheat: unendlich Rüstung", "s.car.s": "Nur Einzelspieler und Splitscreen", "s.cam": "Cheat: unendlich Munition", "s.cam.s": "Der Vorrat sinkt beim Nachladen nicht",
     "s.aaim": "Zielhilfe (Maus)", "s.aaim.s": "Zieht das Ziel wie auf der PS2 zu Gegnern. Aus = Schüsse gehen genau aufs Fadenkreuz",
     "s.padm": "Gamepad: modernes Zielen", "s.padm.s": "Rechter Stick dreht die Sicht, Fadenkreuz fest in der Mitte, L2 zoomt. Aus = Original-PS2-Steuerung", "s.pads": "Gamepad: Drehgeschwindigkeit", "s.unlock": "Alles freischalten", "s.unlock.s": "Level, Charaktere und Cheats offen, solange dies an ist. Eigener Fortschritt bleibt",
-    "s.mmode": "Zielmodus immer halten", "s.mmode.s": "Original-Fadenkreuz, aber langsameres Laufen", "s.zoom": "Zoom-Empfindlichkeit", "s.xhair": "Fadenkreuz (Maus)", "s.pitch": "Blick hoch/runter bis (Original 40°)", "s.scope": "Zielfernrohr", "tab.op": "Online+", "s.imp": "Treffer-Effekte (Online+)", "s.imp.s": "Aus = Spiel exakt wie auf der PS2", "s.mark": "Treffer- und Kill-Marker", "s.snd": "Treffer- und Kill-Sound", "s.kick": "Kamerastoß bei Treffern", "s.opnote": "Level, XP und Abschüsse siehst du im Spielmenü (ESC/F1) im Tab Online+.",
+    "s.mmode": "Zielmodus immer halten", "s.mmode.s": "Original-Fadenkreuz, aber langsameres Laufen", "s.zoom": "Zoom-Empfindlichkeit", "s.xhair": "Fadenkreuz (Maus)", "s.pitch": "Blick hoch/runter bis (Original 40°)", "s.scope": "Zielfernrohr", "tab.op": "Online+", "s.imp": "Treffer-Effekte (Online+)", "s.imp.s": "Aus = Spiel exakt wie auf der PS2", "s.mark": "Treffer- und Kill-Marker", "s.snd": "Treffer- und Kill-Sound", "s.kick": "Kamerastoß bei Treffern", "s.cuts": "Weiche Szenenwechsel", "s.cuts.s": "Harte Kameraschnitte blenden kurz aus dem Dunklen ein (reizarm)", "s.arc": "Lebensbogen bei Treffern", "s.arc.s": "Deckkraft des gelb-roten Bogens links, der bei Treffern aufploppt (100 % = Original)", "s.tint": "Rote Tönung bei Treffern", "s.tint.s": "0 % = kein roter Schleier bei Treffern (reizarm), 100 % = Original", "s.opnote": "Level, XP und Abschüsse siehst du im Spielmenü (ESC/F1) im Tab Online+.",
     "s.keys": "Tastenbelegung und Controller stellst du direkt im Spiel ein (ESC / F1 / Guide-Taste).",
-    "s.lang": "Sprache (Launcher + Spielmenü)", "s.renderer": "Grafik-API (Windows)",
+    "s.lang": "Sprache (Launcher + Spielmenü)", "s.gamelang": "Spielsprache (PAL-Disc, ab dem nächsten Start)", "s.renderer": "Grafik-API (Windows)",
     "s.setupAgain": "Neu einrichten", "s.setupAgain.s": "Andere Disc oder nach einem Update neu bauen",
     "s.shortcut": "Verknüpfung anlegen", "s.folder": "Spielordner", "s.log": "Protokoll", "s.cfg": "Einstellungsordner",
     "su.title": "Ersteinrichtung", "su.intro": "Dieser Port enthält keine Spieldaten. Der Spielcode wird einmalig aus deiner eigenen Disc gebaut.",
-    "su.1": "Disc-Abbild wählen: TimeSplitters 2, USA, SLUS-20314", "su.2": "Prüfen und entpacken (die ISO wird nur gelesen)", "su.3": "Rekompilieren und bauen, ca. 5–20 Minuten",
+    "su.1": "Disc-Abbild wählen: TimeSplitters 2, USA (SLUS-20314) oder Europa (SLES-50877)", "su.2": "Prüfen und entpacken (die ISO wird nur gelesen)", "su.3": "Rekompilieren und bauen, ca. 5–20 Minuten",
     "su.pick": "ISO auswählen", "su.run": "Baue", "su.done": "Fertig! Viel Spaß.", "su.fail": "Einrichtung fehlgeschlagen", "su.close": "Schließen",
     "toast.saved": "Einstellungen gespeichert", "toast.exit": "Das Spiel hat sich beendet (Code {c}). Protokoll: app/build/play.log",
     "toast.join": "Server gesetzt: {s}. Spiel startet …", "toast.noName": "Bitte erst einen Spielernamen eingeben.",
@@ -109,13 +109,13 @@ const L = {
     "s.chp": "Cheat: infinite health", "s.chp.s": "Single player and split screen only. Off in Online+ and online matches", "s.car": "Cheat: infinite armor", "s.car.s": "Single player and split screen only", "s.cam": "Cheat: infinite ammo", "s.cam.s": "The reserve does not go down when you reload",
     "s.aaim": "Auto-aim (mouse)", "s.aaim.s": "Pulls the aim to enemies like on the PS2. Off = shots go exactly to the crosshair",
     "s.padm": "Gamepad: modern aiming", "s.padm.s": "Right stick turns the view, crosshair fixed in the centre, L2 zooms. Off = original PS2 controls", "s.pads": "Gamepad: turn speed", "s.unlock": "Unlock everything", "s.unlock.s": "Levels, characters and cheats open while this is on. Your own progress stays",
-    "s.mmode": "Always hold aim mode", "s.mmode.s": "Original crosshair, but slower walking", "s.zoom": "Zoom sensitivity", "s.xhair": "Crosshair (mouse)", "s.pitch": "Look up/down limit (original 40°)", "s.scope": "Sniper scope", "tab.op": "Online+", "s.imp": "Impact effects (Online+)", "s.imp.s": "Off = the game exactly as on the PS2", "s.mark": "Hit and kill markers", "s.snd": "Hit and kill sounds", "s.kick": "Camera kick when hit", "s.opnote": "Level, XP and kills are shown in the game menu (ESC/F1), tab Online+.",
+    "s.mmode": "Always hold aim mode", "s.mmode.s": "Original crosshair, but slower walking", "s.zoom": "Zoom sensitivity", "s.xhair": "Crosshair (mouse)", "s.pitch": "Look up/down limit (original 40°)", "s.scope": "Sniper scope", "tab.op": "Online+", "s.imp": "Impact effects (Online+)", "s.imp.s": "Off = the game exactly as on the PS2", "s.mark": "Hit and kill markers", "s.snd": "Hit and kill sounds", "s.kick": "Camera kick when hit", "s.cuts": "Soft scene cuts", "s.cuts.s": "Hard camera cuts fade in from dark for a moment (low stimulus)", "s.arc": "Health arc when hit", "s.arc.s": "Opacity of the yellow/red arc on the left that pops up when you get hit (100 % = original)", "s.tint": "Red tint when hit", "s.tint.s": "0 % = no red flash when you get hit (low stimulus), 100 % = original", "s.opnote": "Level, XP and kills are shown in the game menu (ESC/F1), tab Online+.",
     "s.keys": "Key bindings and controllers are set in game (ESC / F1 / Guide button).",
-    "s.lang": "Language (launcher + in-game menu)", "s.renderer": "Graphics API (Windows)",
+    "s.lang": "Language (launcher + in-game menu)", "s.gamelang": "Game language (PAL disc, from the next start)", "s.renderer": "Graphics API (Windows)",
     "s.setupAgain": "Set up again", "s.setupAgain.s": "Rebuild from another disc or after an update",
     "s.shortcut": "Add shortcut", "s.folder": "Game folder", "s.log": "Log", "s.cfg": "Settings folder",
     "su.title": "First-time setup", "su.intro": "This port contains no game data. The game code is built once from your own disc.",
-    "su.1": "Select your disc image: TimeSplitters 2, USA, SLUS-20314", "su.2": "Verify and extract (the ISO is only read)", "su.3": "Recompile and build, about 5–20 minutes",
+    "su.1": "Select your disc image: TimeSplitters 2, USA (SLUS-20314) or Europe (SLES-50877)", "su.2": "Verify and extract (the ISO is only read)", "su.3": "Recompile and build, about 5–20 minutes",
     "su.pick": "Choose ISO", "su.run": "Building", "su.done": "Done! Have fun.", "su.fail": "Setup failed", "su.close": "Close",
     "toast.saved": "Settings saved", "toast.exit": "The game exited (code {c}). Log: app/build/play.log",
     "toast.join": "Server set: {s}. Launching …", "toast.noName": "Please enter a player name first.",
@@ -135,8 +135,8 @@ const S = {
 };
 const DEF = { aufloesung: "9", bildformat: "4", fxaa: "0", cas: "1", cas_staerke: "25", texturfilter: "2", anisotrop: "16", tv_shader: "0", effekte: "aus",
   vsync: "0", fps_anzeige: "0", hd_text: "1", lautstaerke: "100", maus_zielen: "1", maus_empfindlichkeit: "30", maus_invertiert: "0", maus_zielmodus_dauer: "0",
-  zoom_empfindlichkeit: "50", fadenkreuz: "0", blickwinkel_max: "40", pad_modern: "0", pad_tempo: "100", auto_ziel: "0", leben_unendlich: "0", ruestung_unendlich: "0", munition_unendlich: "0", alles_frei: "0", zielfernrohr: "1", online_plus_effekte: "1", schaden_stoss: "50", treffermarker: "1", treffer_klang: "1", vibration: "1", vibration_staerke: "100", trilinear: "2", dithering: "0" };
-const DEF_START = { widescreen: true, fullscreen: false, letterbox: false, renderer: "3", editions: "both", edition: "original" };
+  zoom_empfindlichkeit: "50", fadenkreuz: "0", blickwinkel_max: "40", pad_modern: "0", pad_tempo: "100", auto_ziel: "0", leben_unendlich: "0", ruestung_unendlich: "0", munition_unendlich: "0", alles_frei: "0", zielfernrohr: "1", online_plus_effekte: "1", schaden_stoss: "50", treffer_toenung: "100", lebensbogen: "100", weiche_schnitte: "0", treffermarker: "1", treffer_klang: "1", vibration: "1", vibration_staerke: "100", trilinear: "2", dithering: "0" };
+const DEF_START = { widescreen: true, fullscreen: false, letterbox: false, renderer: "3", editions: "both", edition: "original", game_lang: "en" };
 const iv = (k) => S.ini[k] ?? DEF[k] ?? "";
 const favs = () => (S.ini.online_favoriten || "").split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -183,7 +183,7 @@ function renderHome() {
   const sw = $("#edSwitch");
   if (sw) { sw.style.display = st.ready ? "" : "none";   // one build serves both editions: the switch is always there, the classic game stays preselected
     sw.innerHTML = [["original", "Original"], ["onlineplus", "Online+"]].map(([id, k]) => `<button data-edsel="${id}" class="${curEd() === id ? "on" : ""}">${k}</button>`).join(""); }
-  $("#sbVer").textContent = `v${st.version} · ${plat}` + (S.update ? ` · ${t("news.update")}: ${S.update}` : "");
+  $("#sbVer").textContent = `v${st.version} · ${plat}` + (st.region ? ` · ${st.region === "PAL" ? "PAL" : "USA"}` : "") + (S.update ? ` · ${t("news.update")}: ${S.update}` : "");
   // Serverstatus oben rechts
   const live = S.servers.filter((s) => s.ok), pl = live.reduce((n, s) => n + s.players, 0);
   $("#srvStat").innerHTML = S.servers.length
@@ -430,6 +430,9 @@ function SETTINGS() {
       { k: "cas_staerke", type: "range", label: "s.cass", min: 0, max: 100, unit: "%" },
       { k: "fxaa", type: "tog", label: "s.fxaa" },
       { k: "tv_shader", type: "seg", label: "s.tv", opts: [["0", opt("Kein", "None")], ["1", "Scanlines"], ["2", "Diagonal"], ["3", opt("Dreieck", "Triangular")], ["4", opt("Welle", "Wave")], ["5", "CRT"], ["6", "4x RGSS"], ["7", "NxAGSS"]] },
+      { k: "treffer_toenung", type: "range", label: "s.tint", min: 0, max: 100, unit: "%" },
+      { k: "lebensbogen", type: "range", label: "s.arc", min: 0, max: 100, unit: "%" },
+      { k: "weiche_schnitte", type: "tog", label: "s.cuts" },
       { k: "zielfernrohr", type: "seg", label: "s.scope", opts: [["0", "Original"], ["1", opt("Klar", "Clear")], ["2", opt("Extra klar", "Extra clear")]] },
       { k: "dithering", type: "seg", label: "s.dith", opts: [["0", opt("Aus", "Off")], ["1", opt("Skaliert", "Scaled")], ["2", "Original"]] },
       ...(win ? [] : [{ k: "effekte", type: "seg", label: "s.fx", opts: [["aus", opt("Aus", "Off")], ["original-plus", "Original+"], ["klar", opt("Klar", "Clear")], ["filmisch", opt("Filmisch", "Cinematic")]] }]),
@@ -467,6 +470,7 @@ function SETTINGS() {
       { k: "@widescreen", type: "tog", label: "q.ws" }, { k: "@fullscreen", type: "tog", label: "q.fs" }, { k: "@letterbox", type: "tog", label: "q.lb" },
       { k: "fps_anzeige", type: "tog", label: "q.fps" },
       { k: "sprache", type: "seg", label: "s.lang", opts: [["-1", "Default"], ["0", "English"], ["1", "Deutsch"]] },
+      ...(S.status.region === "PAL" ? [{ k: "@game_lang", type: "seg", label: "s.gamelang", opts: [["en", "English"], ["fr", "Français"], ["de", "Deutsch"], ["es", "Español"], ["it", "Italiano"]] }] : []),
       ...(win ? [{ k: "@renderer", type: "seg", label: "s.renderer", opts: [["3", "Direct3D 11"], ["14", "Vulkan"]] }] : []),
       { type: "actions" },
     ],
@@ -511,8 +515,8 @@ function field(f) {
     return `<div class="tog ${isOn(f.k) ? "on" : ""}" data-k="${f.k}"><span class="t">${t(f.label)}${sub}</span><span class="sw"></span></div>`; }
   if (f.type === "seg") { const v = String(getV(f.k));
     return `<div class="field"><div class="lab"><span>${t(f.label)}</span></div><div class="seg" data-k="${f.k}">${f.opts.map(([a, b]) => `<button data-v="${a}" class="${a === v ? "on" : ""}">${esc(b)}</button>`).join("")}</div></div>`; }
-  if (f.type === "range") { const v = parseInt(getV(f.k), 10) || 0;
-    return `<div class="field"><div class="lab"><span>${t(f.label)}</span></div><div class="range"><input type="range" min="${f.min}" max="${f.max}" value="${v}" data-k="${f.k}" data-div="${f.div || 1}" data-unit="${f.unit}"><output>${fmtR(v, f.div || 1, f.unit)}</output></div></div>`; }
+  if (f.type === "range") { const v = parseInt(getV(f.k), 10) || 0; const sub = L[lang][f.label + ".s"] ? `<small class="note">${t(f.label + ".s")}</small>` : "";
+    return `<div class="field"><div class="lab"><span>${t(f.label)}</span></div>${sub}<div class="range"><input type="range" min="${f.min}" max="${f.max}" value="${v}" data-k="${f.k}" data-div="${f.div || 1}" data-unit="${f.unit}"><output>${fmtR(v, f.div || 1, f.unit)}</output></div></div>`; }
   return "";
 }
 const fmtR = (v, d, u) => (d > 1 ? (v / d).toFixed(1) : v) + u;
