@@ -1152,6 +1152,20 @@ static std::atomic<bool> s_shutdown_requested{false};
 
 // ---- ps2x: game menu (ImGui in the game window, gamepad/keyboard/mouse), settings in ~/.config/<name> ----
 #include "imgui.h"
+#include "imgui_internal.h"
+
+// Per-window text scale for the settings menu. Newer Dear ImGui (1.92, Linux build) drops SetWindowFontScale when
+// obsolete functions are disabled, so set the window field directly there.
+static void menuFontScale(float s)
+{
+#if IMGUI_VERSION_NUM >= 19200
+	ImGuiWindow* w = ImGui::GetCurrentWindow();
+	w->FontWindowScale = s;
+	ImGui::UpdateCurrentFontSize(0.0f);
+#else
+	ImGui::SetWindowFontScale(s);
+#endif
+}
 #include "common/HTTPDownloader.h"
 #ifdef _WIN32
 #include <winsock2.h>
@@ -2776,7 +2790,7 @@ static const int kBotSetsN = 9;
 		// Ultrawide and other short screens: the window is capped at 80 % of the height, but the content is laid out for
 		// the full UI scale, so the lower rows were cut off. Shrink the text so everything fits the capped window.
 		const float menuFit = std::min(1.0f, std::min(h / (820.0f * ImGuiManager::GetGlobalScale()), w / (980.0f * ImGuiManager::GetGlobalScale())));
-		if (menuFit < 0.999f) ImGui::SetWindowFontScale(menuFit);
+		if (menuFit < 0.999f) menuFontScale(menuFit);
 
 		Cfg c;
 		{ std::lock_guard<std::mutex> lk(m); c = cfg; }
@@ -2834,7 +2848,7 @@ static const int kBotSetsN = 9;
 			}
 			ImGui::Spacing();
 			const float fussH = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2;
-			ImGui::BeginChild("##hub", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground); if (menuFit < 0.999f) ImGui::SetWindowFontScale(menuFit);
+			ImGui::BeginChild("##hub", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground); if (menuFit < 0.999f) menuFontScale(menuFit);
 			if (seite == 0)
 			{
 				static int modus = 0, karte = 0, botSet = 0;
@@ -2950,7 +2964,7 @@ static const int kBotSetsN = 9;
 		const auto head = [](const char* t) { ImGui::SeparatorText(t); };
 		// The content scrolls in its own area, the footer always stays visible
 		const float fussH = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2;
-		ImGui::BeginChild("##inhalt", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground); if (menuFit < 0.999f) ImGui::SetWindowFontScale(menuFit);
+		ImGui::BeginChild("##inhalt", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground); if (menuFit < 0.999f) menuFontScale(menuFit);
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_FittingPolicyScroll))
 		{
 			if (ImGui::BeginTabItem(tr("Display")))
