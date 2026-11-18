@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-18T12:00:00Z",
+    "title": "Devlog - one download for both discs",
+    "tag": "Devlog",
+    "body": "The PAL version is now part of the port. One download works with the USA and the European disc, both play the same and can meet online. Plus rumble, number keys for weapons and a lot of fixes.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-18-devlog-one-download-both-discs.md"
+  },
+  {
     "date": "2026-11-17T12:00:00Z",
     "title": "Devlog - coming in 1.2.2",
     "tag": "Devlog",
