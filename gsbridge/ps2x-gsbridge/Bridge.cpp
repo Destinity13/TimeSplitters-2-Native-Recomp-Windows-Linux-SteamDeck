@@ -3291,6 +3291,9 @@ static const int kBotSetsN = 9;
 #ifndef _WIN32
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
+#include <X11/Xatom.h>
+#include <X11/extensions/Xrandr.h>
+#include "ts2_fenster_icon.h"
 #include <dlfcn.h>
 // Raw mouse input on X11 / XWayland (XInput2 raw motion): unaccelerated counts straight from the device, like raw input
 // on Windows. libXi is loaded at run time, so the bridge needs neither its headers nor a link dependency. Without it
@@ -4160,6 +4163,40 @@ bool GSRunner::CreatePlatformWindow()
 			wh->initial_state = NormalState;
 			XSetWMHints(s_display, s_window, wh);
 			XFree(wh);
+		}
+	}
+	{
+		// Window icon (user test 18 Nov: KDE showed the generic X icon, which looked like the game ran through Wine).
+		// _NET_WM_ICON = width, height, ARGB pixels as longs.
+		std::vector<unsigned long> ic; ic.reserve(2 + kTs2IconW * kTs2IconH);
+		ic.push_back(kTs2IconW); ic.push_back(kTs2IconH);
+		for (unsigned i = 0; i < kTs2IconW * kTs2IconH; ++i) ic.push_back(kTs2Icon[i]);
+		XChangeProperty(s_display, s_window, XInternAtom(s_display, "_NET_WM_ICON", False), XA_CARDINAL, 32, PropModeReplace,
+			reinterpret_cast<const unsigned char*>(ic.data()), static_cast<int>(ic.size()));
+		// Monitor (user test 18 Nov: with three monitors the game opened on a different one every time, once on the
+		// portrait one, 1440x2560, where fullscreen stretched the picture and the text). The window now opens centred on
+		// the monitor under the mouse pointer, i.e. where the player clicked the launcher. USPosition so KWin keeps it.
+		// PS2XGS_NO_PLACE=1 = old behaviour (window manager decides).
+		if (!(std::getenv("PS2XGS_NO_PLACE") && *std::getenv("PS2XGS_NO_PLACE") == '1'))
+		{
+			Window rr, cr; int px = 0, py = 0, wx, wy; unsigned mask;
+			if (XQueryPointer(s_display, root, &rr, &cr, &px, &py, &wx, &wy, &mask))
+			{
+				int mx = 0, my = 0, mw = DisplayWidth(s_display, screen), mh = DisplayHeight(s_display, screen);
+				int n = 0;
+				if (XRRMonitorInfo* mon = XRRGetMonitors(s_display, root, True, &n))
+				{
+					for (int i = 0; i < n; ++i)
+						if (px >= mon[i].x && px < mon[i].x + mon[i].width && py >= mon[i].y && py < mon[i].y + mon[i].height)
+						{ mx = mon[i].x; my = mon[i].y; mw = mon[i].width; mh = mon[i].height; break; }
+					XRRFreeMonitors(mon);
+				}
+				const int w = static_cast<int>(ps2xFensterMass(false)), h = static_cast<int>(ps2xFensterMass(true));
+				const int x = mx + std::max(0, (mw - w) / 2), y = my + std::max(0, (mh - h) / 2);
+				XMoveWindow(s_display, s_window, x, y);
+				if (XSizeHints* sh = XAllocSizeHints()) { sh->flags = USPosition | PPosition; sh->x = x; sh->y = y; XSetWMNormalHints(s_display, s_window, sh); XFree(sh); }
+				Console.WriteLn("(ps2xgs) window placed on the monitor at %d,%d (%dx%d)", mx, my, mw, mh);
+			}
 		}
 	}
 	XMapRaised(s_display, s_window);
