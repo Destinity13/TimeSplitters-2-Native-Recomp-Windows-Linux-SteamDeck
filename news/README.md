@@ -4,6 +4,8 @@ Patch notes, dev logs and what we're working on next. The same posts also show u
 
 | Date | Post | Type |
 |---|---|---|
+| 2026-11-18 | [Devlog: hidden content is coming back](2026-11-18-devlog-hidden-content.md) | Devlog |
+| 2026-11-18 | [Devlog - one download for both discs](2026-11-18-devlog-one-download-both-discs.md) | Devlog |
 | 2026-11-17 | [Devlog - coming in 1.2.2](2026-11-17-devlog-coming-in-1-2-2.md) | Devlog |
 | 2026-11-16 | [Version 1.2.1 - better updates](2026-11-16-patch-notes-1-2-1.md) | Release |
 | 2026-11-16 | [Devlog - 1.2 is out, what comes next](2026-11-16-devlog-after-1-2.md) | Devlog |
