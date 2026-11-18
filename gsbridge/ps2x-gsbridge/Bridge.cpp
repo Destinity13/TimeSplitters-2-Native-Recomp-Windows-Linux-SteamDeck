@@ -2773,6 +2773,10 @@ static const int kBotSetsN = 9;
 		ImGui::SetNextWindowPos(ImVec2(ds.x * 0.5f, ds.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_Always);
 		ImGui::Begin("##ps2xmenu", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+		// Ultrawide and other short screens: the window is capped at 80 % of the height, but the content is laid out for
+		// the full UI scale, so the lower rows were cut off. Shrink the text so everything fits the capped window.
+		const float menuFit = std::min(1.0f, std::min(h / (820.0f * ImGuiManager::GetGlobalScale()), w / (980.0f * ImGuiManager::GetGlobalScale())));
+		if (menuFit < 0.999f) ImGui::SetWindowFontScale(menuFit);
 
 		Cfg c;
 		{ std::lock_guard<std::mutex> lk(m); c = cfg; }
@@ -2830,7 +2834,7 @@ static const int kBotSetsN = 9;
 			}
 			ImGui::Spacing();
 			const float fussH = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2;
-			ImGui::BeginChild("##hub", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+			ImGui::BeginChild("##hub", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground); if (menuFit < 0.999f) ImGui::SetWindowFontScale(menuFit);
 			if (seite == 0)
 			{
 				static int modus = 0, karte = 0, botSet = 0;
@@ -2946,7 +2950,7 @@ static const int kBotSetsN = 9;
 		const auto head = [](const char* t) { ImGui::SeparatorText(t); };
 		// The content scrolls in its own area, the footer always stays visible
 		const float fussH = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2;
-		ImGui::BeginChild("##inhalt", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+		ImGui::BeginChild("##inhalt", ImVec2(0, -fussH), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground); if (menuFit < 0.999f) ImGui::SetWindowFontScale(menuFit);
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_FittingPolicyScroll))
 		{
 			if (ImGui::BeginTabItem(tr("Display")))
