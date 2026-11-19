@@ -105,7 +105,7 @@ const KEYMAP: &[(&str, &str)] = &[
     ("nachzieheffekt", "motion_trail"), ("maus_zielen", "mouse_aim"), ("maus_empfindlichkeit", "mouse_sensitivity"),
     ("maus_invertiert", "mouse_invert"), ("maus_zielmodus_dauer", "aim_mode_hold"), ("sprache", "language"),
     ("eingabeanzeige", "show_input"), ("zoom_empfindlichkeit", "zoom_sensitivity"), ("belegung_version", "bindings_version"),
-    ("effekte", "effects"), ("alles_frei", "unlock_all"), ("leicht_plus", "extended_easy"), ("pad_modern", "modern_gamepad_aim"), ("pad_tempo", "gamepad_aim_speed"), ("auto_ziel", "auto_aim"), ("leben_unendlich", "infinite_health"), ("ruestung_unendlich", "infinite_armor"), ("munition_unendlich", "infinite_ammo"), ("fadenkreuz", "crosshair"), ("zielfernrohr", "scope"), ("online_plus_effekte", "impact_effects"), ("schaden_stoss", "damage_kick"), ("treffermarker", "hit_markers"), ("treffer_klang", "hit_sound"), ("blickwinkel_max", "pitch_limit"), ("texturpakete", "texture_packs"), ("online_passwort", "online_password"), ("online_favoriten", "online_favorites"),
+    ("effekte", "effects"), ("alles_frei", "unlock_all"), ("leicht_plus", "extended_easy"), ("menue_taste", "menu_key"), ("fruehere_stimmen", "earlier_voices"), ("mapmaker_gegner", "mapmaker_spawns"), ("pad_modern", "modern_gamepad_aim"), ("pad_tempo", "gamepad_aim_speed"), ("auto_ziel", "auto_aim"), ("leben_unendlich", "infinite_health"), ("ruestung_unendlich", "infinite_armor"), ("munition_unendlich", "infinite_ammo"), ("fadenkreuz", "crosshair"), ("zielfernrohr", "scope"), ("online_plus_effekte", "impact_effects"), ("schaden_stoss", "damage_kick"), ("treffermarker", "hit_markers"), ("treffer_klang", "hit_sound"), ("blickwinkel_max", "pitch_limit"), ("texturpakete", "texture_packs"), ("online_passwort", "online_password"), ("online_favoriten", "online_favorites"),
 ];
 const FXMAP: &[(&str, &str)] = &[("aus", "off"), ("klar", "clear"), ("filmisch", "cinematic")];
 
@@ -251,6 +251,9 @@ const KEYS: &[&str] = &[
     "maus_empfindlichkeit", "maus_invertiert", "maus_zielmodus_dauer", "sprache", "eingabeanzeige", "zoom_empfindlichkeit", "fadenkreuz", "blickwinkel_max",
     "zielfernrohr", "online_plus_effekte", "schaden_stoss", "treffermarker", "treffer_klang",
     "texturpakete", "online_server", "online_name", "online_passwort", "online_favoriten",
+    // Crystal Cut (same keys as the game menu and the port): restored content, extended easy, voices, MapMaker spawns
+    "more_arcade_maps", "planet_x_arcade", "chicago_spawns", "more_characters", "restored_names", "more_modes", "thief_teams",
+    "skating", "gothic_tileset", "deagle_texture", "story_enemies", "mapmaker_story_coop", "leicht_plus", "fruehere_stimmen", "mapmaker_gegner", "menue_taste",
 ];
 
 #[derive(Serialize, serde::Deserialize, Clone)]
@@ -313,6 +316,38 @@ fn read_start(root: &Path) -> StartOpts {
         edition: kv.get("TS2_EDITION").map(|v| v.trim().to_string()).filter(|v| v == "original" || v == "onlineplus").unwrap_or_else(ed_default),
         game_lang: kv.get("TS2_GAME_LANGUAGE").map(|v| v.trim().to_string()).filter(|v| gl_ok(v)).unwrap_or_else(gl_default),
     }
+}
+
+// Profiles: complete copies of the settings file in <settings dir>/profiles/<name>.ini, the same folder the game menu
+// (Crystal Cut tab) uses, so a profile saved in one place shows up in the other.
+fn profile_dir() -> PathBuf { let d = cfg_dir().join("profiles"); let _ = std::fs::create_dir_all(&d); d }
+fn profile_name(n: &str) -> Result<String, String> {
+    let o: String = n.chars().filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == ' ').take(40).collect();
+    let o = o.trim().to_string();
+    if o.is_empty() { Err("invalid profile name".into()) } else { Ok(o) }
+}
+#[tauri::command]
+fn profile_list() -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(profile_dir()).map(|r| r.filter_map(|e| e.ok()).filter_map(|e| {
+        let p = e.path(); if p.extension().map(|x| x == "ini").unwrap_or(false) { p.file_stem().map(|s| s.to_string_lossy().to_string()) } else { None }
+    }).collect()).unwrap_or_default();
+    v.sort(); v
+}
+#[tauri::command]
+fn profile_save(st: State<Launcher>, name: String) -> Result<(), String> {
+    let n = profile_name(&name)?;
+    std::fs::copy(ini_read_path(&st.root), profile_dir().join(format!("{n}.ini"))).map(|_| ()).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn profile_load(st: State<Launcher>, name: String) -> Result<(), String> {
+    let n = profile_name(&name)?;
+    let text = std::fs::read_to_string(profile_dir().join(format!("{n}.ini"))).map_err(|e| e.to_string())?;
+    write_atomic(&ini_path(&st.root), &text)
+}
+#[tauri::command]
+fn profile_delete(name: String) -> Result<(), String> {
+    let n = profile_name(&name)?;
+    std::fs::remove_file(profile_dir().join(format!("{n}.ini"))).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1226,7 +1261,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             status, settings_load, settings_save, pick_iso, setup_start, play, query_servers, query_board, fetch_text,
             host_start, host_stop, host_running, open_path, open_url, make_shortcut,
-            update_check, update_install, last_iso, restart_launcher, quit_launcher
+            update_check, update_install, last_iso, restart_launcher, quit_launcher,
+            profile_list, profile_save, profile_load, profile_delete
         ])
         .build(tauri::generate_context!())
         .expect("TS2 launcher failed to start");

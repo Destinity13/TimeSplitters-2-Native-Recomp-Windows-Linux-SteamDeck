@@ -41,7 +41,7 @@ const L = {
     "upd.what": "Der Launcher sichert zuerst deine Spielstände, lädt dann nur die geänderten Dateien, prüft jede einzelne und tauscht sie erst aus, wenn alles stimmt. Geht etwas schief, bleibt alles wie es war.",
     "set.title": "Optionen", "set.sub": "Alles, was das Spielmenü auch kann, schon vor dem Start. Änderungen gelten beim nächsten Spielstart.",
     "set.save": "Speichern", "set.reset": "Standard", "set.saved": "Gespeichert ✓", "set.unsaved": "Ungespeicherte Änderungen",
-    "tab.gfx": "Grafik", "tab.fx": "Bild", "tab.audio": "Ton & Pad", "tab.input": "Steuerung", "tab.launch": "Start & System",
+    "tab.gfx": "Grafik", "s.mkey": "Spielmenü: zusätzliche Taste neben F1", "s.mkey.s": "ESC schließt ein offenes Menü immer", "tab.cc": "Crystal Cut", "s.cc.pre": "Voreinstellungen", "s.cc.pre.s": "Ändert nur die Einstellungen, um die es geht. Alles lässt sich danach anpassen", "s.cc.p0": "Crystal Cut (alles an)", "s.cc.p1": "Original (PS2)", "s.cc.p2": "Steam Deck 60 fps", "s.cc.p3": "Leistung", "s.cc.p4": "Reizarm", "s.cc.all": "Alle wiederhergestellten Inhalte", "s.cc.all.s": "Aus dem Spiel geschnittene Inhalte, auf der Disc gefunden und zurückgeholt", "s.lp": "Erweiterter Leicht-Modus", "s.lp.s": "Volle Level auf Leicht, Normal und Schwer bleiben gleich", "s.fs": "Frühere Sprachaufnahmen", "s.fs.s": "Louie Bignose spricht mit seiner zuerst aufgenommenen Stimme", "s.mmg": "MapMaker-Gegnerspawns (0 = Original 10)", "s.prof": "Profile", "s.prof.s": "Ein Profil merkt sich alle Einstellungen. Gleiche Profile wie im Spielmenü (ESC/F1)", "s.prof.name": "Profilname", "s.prof.save": "Als Profil speichern", "s.prof.load": "Laden", "s.prof.del": "Löschen", "s.prof.none": "Noch keine Profile", "toast.prof": "Profil gespeichert", "toast.profl": "Profil geladen", "s.cc.more_arcade_maps": "Mehr Arcade-Karten", "s.cc.more_arcade_maps.s": "Chicago, Atom Smasher, NeoTokyo, Spacestation und Robot Factory in der Arcade-Kartenliste", "s.cc.planet_x_arcade": "Planet X im Arcade", "s.cc.planet_x_arcade.s": "Planet X in den Deathmatch-Modi", "s.cc.chicago_spawns": "Chicago-Spawnpunkte", "s.cc.chicago_spawns.s": "19 Spawnpunkte aus dem Story-Aufbau im Arcade", "s.cc.more_characters": "Mehr Figuren", "s.cc.more_characters.s": "25 zusätzliche Figuren, John Vattic eingeschlossen", "s.cc.restored_names": "Wiederhergestellte Namen", "s.cc.restored_names.s": "Gestrichene Figuren und Gegenstände mit richtigen Namen", "s.cc.more_modes": "Mehr Modi", "s.cc.more_modes.s": "One on One, Dam und Wild West in Flame Tag und Virus", "s.cc.thief_teams": "Thief mit Teams", "s.cc.thief_teams.s": "Thief geht mit oder ohne Teams", "s.cc.skating": "Skating-Cheat", "s.cc.skating.s": "Der gestrichene Skating-Cheat ist wieder freischaltbar", "s.cc.gothic_tileset": "Gothic-Kachelsatz", "s.cc.gothic_tileset.s": "Der gestrichene Gothic-Kachelsatz im MapMaker", "s.cc.deagle_texture": "Desert-Eagle-Textur", "s.cc.deagle_texture.s": "Fehlende Textur wird nachgeliefert, keine weiße Waffe mehr", "s.cc.story_enemies": "Gestrichene Story-Gegner", "s.cc.story_enemies.s": "Lean Molly und Ample Sally in Wild West, Marco und der Reaper Splitter in Notre Dame", "s.cc.mapmaker_story_coop": "MapMaker-Story-Koop", "s.cc.mapmaker_story_coop.s": "Jeder angeschlossene Controller spielt MapMaker-Storykarten mit (2 bis 4)", "tab.fx": "Bild", "tab.audio": "Ton & Pad", "tab.input": "Steuerung", "tab.launch": "Start & System",
     "s.res": "Interne Auflösung", "s.asp": "Bildformat", "s.filt": "Texturfilter", "s.aniso": "Anisotrop", "s.tri": "Trilinear",
     "s.vsync": "VSync", "s.vsync.s": "Kein Tearing, minimal mehr Verzögerung", "s.hdtext": "HD-Text", "s.hdtext.s": "Neu gesetzte, scharfe Textseiten",
     "s.cas": "Schärfe (CAS)", "s.cass": "Schärfe-Stärke", "s.fxaa": "FXAA", "s.fxaa.s": "Weiche Kanten (leicht unscharf)",
@@ -99,7 +99,7 @@ const L = {
     "upd.what": "The launcher backs up your saves first, then downloads only the changed files, checks every single one and replaces them only when all of them are right. If anything goes wrong, nothing changes.",
     "set.title": "Options", "set.sub": "Everything the in-game menu can do, before you launch. Changes apply on the next launch.",
     "set.save": "Save", "set.reset": "Defaults", "set.saved": "Saved ✓", "set.unsaved": "Unsaved changes",
-    "tab.gfx": "Graphics", "tab.fx": "Picture", "tab.audio": "Sound & pad", "tab.input": "Controls", "tab.launch": "Launch & system",
+    "tab.gfx": "Graphics", "s.mkey": "Game menu: extra key besides F1", "s.mkey.s": "ESC always closes an open menu", "tab.cc": "Crystal Cut", "s.cc.pre": "Presets", "s.cc.pre.s": "Changes only the settings it is about. Everything can be changed afterwards", "s.cc.p0": "Crystal Cut (everything on)", "s.cc.p1": "Original (PS2)", "s.cc.p2": "Steam Deck 60 fps", "s.cc.p3": "Performance", "s.cc.p4": "Low stimulus", "s.cc.all": "All restored content", "s.cc.all.s": "Content cut from the game, found on the disc and brought back", "s.lp": "Extended Easy Mode", "s.lp.s": "Full levels on Easy, Normal and Hard do not change", "s.fs": "Earlier voice takes", "s.fs.s": "Louie Bignose uses the voice recorded for him first", "s.mmg": "MapMaker enemy spawns (0 = original 10)", "s.prof": "Profiles", "s.prof.s": "A profile keeps every setting. The same profiles as in the game menu (ESC/F1)", "s.prof.name": "Profile name", "s.prof.save": "Save as profile", "s.prof.load": "Load", "s.prof.del": "Delete", "s.prof.none": "No profiles yet", "toast.prof": "Profile saved", "toast.profl": "Profile loaded", "s.cc.more_arcade_maps": "More arcade maps", "s.cc.more_arcade_maps.s": "Chicago, Atom Smasher, NeoTokyo, Spacestation and Robot Factory in the arcade map list", "s.cc.planet_x_arcade": "Planet X in arcade", "s.cc.planet_x_arcade.s": "Planet X in the Deathmatch modes", "s.cc.chicago_spawns": "Chicago spawn points", "s.cc.chicago_spawns.s": "19 spawn points from the story setup in arcade", "s.cc.more_characters": "More characters", "s.cc.more_characters.s": "25 extra characters, John Vattic included", "s.cc.restored_names": "Restored names", "s.cc.restored_names.s": "Cut characters and items get their proper names", "s.cc.more_modes": "More modes", "s.cc.more_modes.s": "One on One, Dam and Wild West in Flame Tag and Virus", "s.cc.thief_teams": "Thief with teams", "s.cc.thief_teams.s": "Thief with or without teams", "s.cc.skating": "Skating cheat", "s.cc.skating.s": "The cut Skating cheat can be unlocked again", "s.cc.gothic_tileset": "Gothic tile set", "s.cc.gothic_tileset.s": "The cut Gothic tile set in the MapMaker", "s.cc.deagle_texture": "Desert Eagle texture", "s.cc.deagle_texture.s": "The missing texture is delivered, no more white gun", "s.cc.story_enemies": "Cut story enemies", "s.cc.story_enemies.s": "Lean Molly and Ample Sally in Wild West, Marco and the Reaper Splitter in Notre Dame", "s.cc.mapmaker_story_coop": "MapMaker Story co-op", "s.cc.mapmaker_story_coop.s": "Every connected controller plays MapMaker story maps (2 to 4)", "tab.fx": "Picture", "tab.audio": "Sound & pad", "tab.input": "Controls", "tab.launch": "Launch & system",
     "s.res": "Internal resolution", "s.asp": "Aspect ratio", "s.filt": "Texture filter", "s.aniso": "Anisotropic", "s.tri": "Trilinear",
     "s.vsync": "VSync", "s.vsync.s": "No tearing, slightly more latency", "s.hdtext": "HD text", "s.hdtext.s": "Re-typeset, sharp text pages",
     "s.cas": "Sharpening (CAS)", "s.cass": "Sharpening strength", "s.fxaa": "FXAA", "s.fxaa.s": "Smoother edges (slightly soft)",
@@ -131,9 +131,9 @@ const S = {
   status: { platform: "linux", version: "?", ready: false },
   ini: {}, start: {}, saved: null,
   servers: [], sel: null, sort: { k: "players", d: -1 }, filt: new Set(), extra: [],
-  news: [], running: false, hosting: false, setTab: "gfx",
+  news: [], running: false, hosting: false, setTab: "cc",
 };
-const DEF = { aufloesung: "9", bildformat: "4", fxaa: "0", cas: "1", cas_staerke: "25", texturfilter: "2", anisotrop: "16", tv_shader: "0", effekte: "aus",
+const DEF = { menue_taste: "0", more_arcade_maps: "1", planet_x_arcade: "1", chicago_spawns: "1", more_characters: "1", restored_names: "1", more_modes: "1", thief_teams: "1", skating: "1", gothic_tileset: "1", deagle_texture: "1", story_enemies: "1", mapmaker_story_coop: "1", leicht_plus: "1", fruehere_stimmen: "1", mapmaker_gegner: "0", aufloesung: "9", bildformat: "4", fxaa: "0", cas: "1", cas_staerke: "25", texturfilter: "2", anisotrop: "16", tv_shader: "0", effekte: "aus",
   vsync: "0", fps_anzeige: "0", hd_text: "1", lautstaerke: "100", maus_zielen: "1", maus_empfindlichkeit: "30", maus_invertiert: "0", maus_zielmodus_dauer: "0",
   zoom_empfindlichkeit: "50", fadenkreuz: "0", blickwinkel_max: "40", pad_modern: "0", pad_tempo: "100", auto_ziel: "0", leben_unendlich: "0", ruestung_unendlich: "0", munition_unendlich: "0", alles_frei: "0", zielfernrohr: "1", online_plus_effekte: "1", schaden_stoss: "50", treffer_toenung: "100", lebensbogen: "100", weiche_schnitte: "0", treffermarker: "1", treffer_klang: "1", vibration: "1", vibration_staerke: "100", trilinear: "2", dithering: "0" };
 const DEF_START = { widescreen: true, fullscreen: false, letterbox: false, renderer: "3", editions: "both", edition: "original", game_lang: "en" };
@@ -437,6 +437,26 @@ function SETTINGS() {
       { k: "dithering", type: "seg", label: "s.dith", opts: [["0", opt("Aus", "Off")], ["1", opt("Skaliert", "Scaled")], ["2", "Original"]] },
       ...(win ? [] : [{ k: "effekte", type: "seg", label: "s.fx", opts: [["aus", opt("Aus", "Off")], ["original-plus", "Original+"], ["klar", opt("Klar", "Clear")], ["filmisch", opt("Filmisch", "Cinematic")]] }]),
     ],
+    cc: [
+      { type: "presets" },
+      { k: "@cc_all", type: "tog", label: "s.cc.all" },
+      { k: "more_arcade_maps", type: "tog", label: "s.cc.more_arcade_maps" },
+      { k: "planet_x_arcade", type: "tog", label: "s.cc.planet_x_arcade" },
+      { k: "chicago_spawns", type: "tog", label: "s.cc.chicago_spawns" },
+      { k: "more_characters", type: "tog", label: "s.cc.more_characters" },
+      { k: "restored_names", type: "tog", label: "s.cc.restored_names" },
+      { k: "more_modes", type: "tog", label: "s.cc.more_modes" },
+      { k: "thief_teams", type: "tog", label: "s.cc.thief_teams" },
+      { k: "skating", type: "tog", label: "s.cc.skating" },
+      { k: "gothic_tileset", type: "tog", label: "s.cc.gothic_tileset" },
+      { k: "deagle_texture", type: "tog", label: "s.cc.deagle_texture" },
+      { k: "story_enemies", type: "tog", label: "s.cc.story_enemies" },
+      { k: "mapmaker_story_coop", type: "tog", label: "s.cc.mapmaker_story_coop" },
+      { k: "leicht_plus", type: "tog", label: "s.lp" },
+      { k: "fruehere_stimmen", type: "tog", label: "s.fs" },
+      { k: "mapmaker_gegner", type: "range", label: "s.mmg", min: 0, max: 1000, unit: "" },
+      { type: "profiles" },
+    ],
     audio: [
       { k: "lautstaerke", type: "range", label: "s.vol", min: 0, max: 200, unit: "%" },
       { k: "vibration", type: "tog", label: "s.rumble" },
@@ -469,6 +489,7 @@ function SETTINGS() {
     launch: [
       { k: "@widescreen", type: "tog", label: "q.ws" }, { k: "@fullscreen", type: "tog", label: "q.fs" }, { k: "@letterbox", type: "tog", label: "q.lb" },
       { k: "fps_anzeige", type: "tog", label: "q.fps" },
+      { k: "menue_taste", type: "seg", label: "s.mkey", opts: [["0", opt("Nur F1", "F1 only")], ["1", "ESC"], ["2", "F2"], ["3", "F3"], ["4", "F4"], ["5", "^ / `"]] },
       { k: "sprache", type: "seg", label: "s.lang", opts: [["-1", "Default"], ["0", "English"], ["1", "Deutsch"]] },
       ...(S.status.region === "PAL" ? [{ k: "@game_lang", type: "seg", label: "s.gamelang", opts: [["en", "English"], ["fr", "Français"], ["de", "Deutsch"], ["es", "Español"], ["it", "Italiano"]] }] : []),
       ...(win ? [{ k: "@renderer", type: "seg", label: "s.renderer", opts: [["3", "Direct3D 11"], ["14", "Vulkan"]] }] : []),
@@ -476,7 +497,8 @@ function SETTINGS() {
     ],
   };
 }
-const getV = (k) => (k[0] === "@" ? S.start[k.slice(1)] : iv(k));
+const CC_KEYS = ["more_arcade_maps", "planet_x_arcade", "chicago_spawns", "more_characters", "restored_names", "more_modes", "thief_teams", "skating", "gothic_tileset", "deagle_texture", "story_enemies", "mapmaker_story_coop"];
+const getV = (k) => (k === "@cc_all" ? (CC_KEYS.every((x) => iv(x) === "1") ? "1" : "0") : k[0] === "@" ? S.start[k.slice(1)] : iv(k));
 const isOn = (k) => { const v = getV(k); return v === true || v === "1" || v === "true"; };
 // The in-game menu (ESC/F1) writes the same settings file. After the game exits (and when the window gets the focus
 // back) the file is read again, so both always show the same values; settings changed here but not saved yet stay.
@@ -491,14 +513,25 @@ async function reloadSettings() {
   renderSettings(); dirty();
 }
 
+// Presets: the same five as in the game menu (Crystal Cut tab); each changes only the settings it is about
+function preset(n) {
+  const set = (o) => { for (const [k, v] of Object.entries(o)) S.ini[k] = String(v); };
+  if (n === 0) { for (const k of CC_KEYS) S.ini[k] = "1"; set({ leicht_plus: 1, fruehere_stimmen: 1 }); }
+  if (n === 1) { for (const k of CC_KEYS) S.ini[k] = "0"; set({ leicht_plus: 0, fruehere_stimmen: 0, mapmaker_gegner: 0, alles_frei: 0, nachzieheffekt: 1, kamera_unschaerfe: 1, treffer_toenung: 100, lebensbogen: 100, weiche_schnitte: 0 }); }
+  if (n === 2) set({ aufloesung: 2, fxaa: 0, cas: 1, cas_staerke: 25, anisotrop: 4, tv_shader: 0, effekte: "aus", dithering: 0, vsync: 1, bildformat: 4 });
+  if (n === 3) set({ aufloesung: 1, fxaa: 0, cas: 0, anisotrop: 0, tv_shader: 0, effekte: "aus", dithering: 0 });
+  if (n === 4) set({ treffer_toenung: 0, lebensbogen: 0, weiche_schnitte: 1, nachzieheffekt: 0, kamera_unschaerfe: 0, vibration_staerke: 40, schaden_stoss: 0 });
+  dirty(); renderSettings();
+}
 function setV(k, v) {
+  if (k === "@cc_all") { for (const x of CC_KEYS) S.ini[x] = v ? "1" : "0"; dirty(); return; }
   if (k[0] === "@") { const n = k.slice(1); S.start[n] = typeof DEF_START[n] === "boolean" ? !!v : v; if (n === "fullscreen") S.ini.vollbild = v ? "1" : "0"; }
   else S.ini[k] = typeof v === "boolean" ? (v ? "1" : "0") : String(v);   // toggles: the settings file uses 1/0 ("true" was read as off)
   dirty();
 }
 function dirty() { $("#saveMsg").textContent = JSON.stringify([S.ini, S.start]) !== S.saved ? t("set.unsaved") : ""; }
 function renderSettings() {
-  const tabs = [["gfx", "tab.gfx"], ["fx", "tab.fx"], ["audio", "tab.audio"], ["input", "tab.input"], ["op", "tab.op"], ["launch", "tab.launch"]];
+  const tabs = [["cc", "tab.cc"], ["gfx", "tab.gfx"], ["fx", "tab.fx"], ["audio", "tab.audio"], ["input", "tab.input"], ["op", "tab.op"], ["launch", "tab.launch"]];
   $("#setTabs").innerHTML = tabs.map(([id, k]) => `<button data-tab="${id}" class="${S.setTab === id ? "on" : ""}">${t(k)}</button>`).join("");
   const list = SETTINGS()[S.setTab];
   const half = Math.ceil(list.length / 2);
@@ -507,6 +540,11 @@ function renderSettings() {
   $$("#setBody input[type=range]").forEach(paintRange);
 }
 function field(f) {
+  if (f.type === "presets") return `<div class="field"><div class="lab"><span>${t("s.cc.pre")}</span></div><small class="note">${t("s.cc.pre.s")}</small>
+      <div class="seg" style="margin-top:10px;flex-wrap:wrap">${[0, 1, 2, 3, 4].map((n) => `<button data-preset="${n}">${t("s.cc.p" + n)}</button>`).join("")}</div></div>`;
+  if (f.type === "profiles") return `<div class="field"><div class="lab"><span>${t("s.prof")}</span></div><small class="note">${t("s.prof.s")}</small>
+      <div class="seg" style="margin-top:10px"><input id="profName" placeholder="${t("s.prof.name")}" maxlength="40" style="flex:1;min-width:0"><button data-prof="save">${t("s.prof.save")}</button></div>
+      ${(S.profiles || []).length ? S.profiles.map((n) => `<div class="seg" style="margin-top:6px"><span style="flex:1;align-self:center">${esc(n)}</span><button data-prof="load" data-n="${esc(n)}">${t("s.prof.load")}</button><button data-prof="del" data-n="${esc(n)}">${t("s.prof.del")}</button></div>`).join("") : `<small class="note">${t("s.prof.none")}</small>`}</div>`;
   if (f.type === "note") return `<p class="note">${t(f.label)}</p>`;
   if (f.type === "actions") return `<div class="field"><div class="lab"><span>${t("s.setupAgain")}</span></div><small class="note">${t("s.setupAgain.s")}</small>
       <div class="seg" style="margin-top:10px"><button data-act="setup">${t("s.setupAgain")}</button>${S.status.platform !== "windows" ? `<button data-act="shortcut">${t("s.shortcut")}</button>` : ""}
@@ -522,6 +560,20 @@ function field(f) {
 const fmtR = (v, d, u) => (d > 1 ? (v / d).toFixed(1) : v) + u;
 function paintRange(r) { r.style.setProperty("--p", ((r.value - r.min) / (r.max - r.min)) * 100 + "%"); }
 
+async function loadProfiles() { try { S.profiles = await API.profileList(); } catch (_) { S.profiles = []; } }
+async function profileAction(act, n) {
+  try {
+    if (act === "save") { const name = ($("#profName").value || "").trim(); if (!name) return; await persist(false); await API.profileSave(name); toast(t("toast.prof")); }
+    if (act === "load") { await API.profileLoad(n); await reloadSettingsForce(); toast(t("toast.profl")); }
+    if (act === "del") await API.profileDelete(n);
+  } catch (e) { toast(String(e)); }
+  await loadProfiles(); renderSettings();
+}
+async function reloadSettingsForce() {
+  const r = await API.settingsLoad(); S.ini = r.ini || {};
+  for (const k of Object.keys(S.ini)) { if (S.ini[k] === "true") S.ini[k] = "1"; else if (S.ini[k] === "false") S.ini[k] = "0"; }
+  S.saved = JSON.stringify([S.ini, S.start]); renderSettings(); dirty();
+}
 async function persist(showToast = true) {
   try {
     await API.settingsSave(S.ini, S.start);
@@ -546,6 +598,8 @@ function wire() {
     const row = e.target.closest("#srvBody tr[data-addr]"); if (row) { S.sel = row.dataset.addr; renderOnline(); return; }
     const th = e.target.closest("th[data-s]"); if (th) { S.sort = { k: th.dataset.s, d: S.sort.k === th.dataset.s ? -S.sort.d : th.dataset.s === "ping" || th.dataset.s === "name" ? 1 : -1 }; renderOnline(); return; }
     const fb = e.target.closest("#srvFilt button"); if (fb) { const f = fb.dataset.f; S.filt.has(f) ? S.filt.delete(f) : S.filt.add(f); renderOnline(); return; }
+    const pr = e.target.closest("#setBody [data-preset]"); if (pr) { preset(parseInt(pr.dataset.preset, 10)); return; }
+    const pf = e.target.closest("#setBody [data-prof]"); if (pf) { profileAction(pf.dataset.prof, pf.dataset.n); return; }
     const tb = e.target.closest("#setTabs button"); if (tb) { S.setTab = tb.dataset.tab; renderSettings(); return; }
     const tg = e.target.closest("#setBody .tog"); if (tg) { setV(tg.dataset.k, !isOn(tg.dataset.k)); renderSettings(); return; }
     const sg = e.target.closest("#setBody .seg[data-k] button"); if (sg) { const k = sg.parentElement.dataset.k; setV(k, sg.dataset.v); if (k === "sprache") { lang = detectLang(); applyLang(); } else renderSettings(); return; }
@@ -704,6 +758,7 @@ async function updateEvent(e) {
   wire();
   window.addEventListener("focus", () => { reloadSettings(); });
   try { const r = await API.settingsLoad(); S.ini = r.ini || {}; for (const k of Object.keys(S.ini)) { if (S.ini[k] === "true") S.ini[k] = "1"; else if (S.ini[k] === "false") S.ini[k] = "0"; } S.start = { ...DEF_START, ...(r.start || {}) }; S.start.editions = "both"; } catch (e) { S.start = { ...DEF_START }; }
+  await loadProfiles();
   S.start.editions = "both";
   S.saved = JSON.stringify([S.ini, S.start]);
   $("#playerName").value = S.ini.online_name || "";

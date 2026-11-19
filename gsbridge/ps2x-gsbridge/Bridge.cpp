@@ -1450,7 +1450,7 @@ namespace ps2xmenu
 	{
 		if (sprache.load() != 1) return en;
 		static const std::unordered_map<std::string_view, const char*> de = {
-			{"Settings", "Einstellungen"}, {"Gamepad", "Gamepad"}, {"Turn speed", "Drehgeschwindigkeit"}, {"Modern aiming (right stick turns the view, crosshair fixed in the centre)", "Modernes Zielen (rechter Stick dreht die Sicht, Fadenkreuz fest in der Mitte)"}, {"Off = the original PS2 controls. On: no auto-aim, L2 zooms, shots land on the crosshair.", "Aus = die Original-PS2-Steuerung. An: kein Auto-Aim, L2 zoomt, Schuesse treffen das Fadenkreuz."}, {"Unlock everything (levels, characters, cheats)", "Alles freischalten (Level, Charaktere, Cheats)"}, {"Only while this is on. Your own progress and save data stay untouched.", "Nur solange dies an ist. Eigener Fortschritt und Spielstand bleiben unveraendert."}, {"Extended Easy Mode (full levels on Easy)", "Erweiterter Leicht-Modus (volle Level auf Leicht)"}, {"Normal and Hard do not change.", "Normal und Schwer bleiben unveraendert."}, {"Earlier voice takes (found on the disc)", "Fruehere Sprachaufnahmen (auf der Disc gefunden)"}, {"MapMaker enemy spawns (0 = original 10)", "MapMaker-Gegnerspawns (0 = Original 10)"}, {"Louie Bignose uses the voice recorded for him first. Takes effect on the next match.", "Louie Bignose spricht mit seiner zuerst aufgenommenen Stimme. Wirkt ab dem naechsten Match."}, {"Saving works in the game as on the PS2.", "Gespeichert wird im Spiel wie auf der PS2."}, {"Saving works in the game as on the PS2 (profile, options and progress).", "Gespeichert wird im Spiel wie auf der PS2 (Profil, Optionen und Fortschritt)."}, {"Display", "Anzeige"}, {"Picture", "Bild"}, {"Audio", "Ton"}, {"Controls", "Steuerung"},
+			{"Settings", "Einstellungen"}, {"Gamepad", "Gamepad"}, {"Turn speed", "Drehgeschwindigkeit"}, {"Modern aiming (right stick turns the view, crosshair fixed in the centre)", "Modernes Zielen (rechter Stick dreht die Sicht, Fadenkreuz fest in der Mitte)"}, {"Off = the original PS2 controls. On: no auto-aim, L2 zooms, shots land on the crosshair.", "Aus = die Original-PS2-Steuerung. An: kein Auto-Aim, L2 zoomt, Schuesse treffen das Fadenkreuz."}, {"Unlock everything (levels, characters, cheats)", "Alles freischalten (Level, Charaktere, Cheats)"}, {"Only while this is on. Your own progress and save data stay untouched.", "Nur solange dies an ist. Eigener Fortschritt und Spielstand bleiben unveraendert."}, {"Extended Easy Mode (full levels on Easy)", "Erweiterter Leicht-Modus (volle Level auf Leicht)"}, {"Normal and Hard do not change.", "Normal und Schwer bleiben unveraendert."}, {"Earlier voice takes (found on the disc)", "Fruehere Sprachaufnahmen (auf der Disc gefunden)"}, {"MapMaker enemy spawns (0 = original 10)", "MapMaker-Gegnerspawns (0 = Original 10)"}, {"Louie Bignose uses the voice recorded for him first. Takes effect on the next match.", "Louie Bignose spricht mit seiner zuerst aufgenommenen Stimme. Wirkt ab dem naechsten Match."}, {"Saving works in the game as on the PS2.", "Gespeichert wird im Spiel wie auf der PS2."}, {"Saving works in the game as on the PS2 (profile, options and progress).", "Gespeichert wird im Spiel wie auf der PS2 (Profil, Optionen und Fortschritt)."}, {"Display", "Anzeige"}, {"Picture", "Bild"}, {"Audio", "Ton"}, {"Controls", "Steuerung"}, {"F1 only", "Nur F1"}, {"Extra menu key (besides F1)", "Zusaetzliche Menuetaste (neben F1)"}, {"Crystal Cut", "Crystal Cut"}, {"Presets", "Voreinstellungen"}, {"A preset changes only the settings it is about. Everything can be changed afterwards.", "Eine Voreinstellung aendert nur die Einstellungen, um die es ihr geht. Alles laesst sich danach weiter anpassen."}, {"Crystal Cut (everything on)", "Crystal Cut (alles an)"}, {"Original (PS2)", "Original (PS2)"}, {"Steam Deck 60 fps", "Steam Deck 60 fps"}, {"Low stimulus", "Reizarm"}, {"Restored content", "Wiederhergestellte Inhalte"}, {"Content cut from the game, found on the disc and brought back. (restart) = takes effect after a restart.", "Aus dem Spiel geschnittene Inhalte, auf der Disc gefunden und zurueckgeholt. (Neustart) = wirkt nach einem Neustart."}, {"(restart)", "(Neustart)"}, {"All restored content", "Alle wiederhergestellten Inhalte"}, {"More arcade maps", "Mehr Arcade-Karten"}, {"Chicago, Atom Smasher, NeoTokyo, Spacestation and Robot Factory join the arcade map list.", "Chicago, Atom Smasher, NeoTokyo, Spacestation und Robot Factory kommen in die Arcade-Kartenliste."}, {"Planet X in arcade", "Planet X im Arcade"}, {"Planet X can be played in Deathmatch modes.", "Planet X ist in den Deathmatch-Modi spielbar."}, {"Chicago spawn points", "Chicago-Spawnpunkte"}, {"Chicago uses the 19 spawn points of its story setup in arcade.", "Chicago nutzt im Arcade die 19 Spawnpunkte aus seinem Story-Aufbau."}, {"More characters", "Mehr Figuren"}, {"25 extra characters in the character select, John Vattic included.", "25 zusaetzliche Figuren in der Auswahl, John Vattic eingeschlossen."}, {"Restored names", "Wiederhergestellte Namen"}, {"Cut characters and items get their proper names.", "Gestrichene Figuren und Gegenstaende bekommen ihre richtigen Namen."}, {"More modes", "Mehr Modi"}, {"One on One, plus Dam and Wild West in Flame Tag and Virus.", "One on One, dazu Dam und Wild West in Flame Tag und Virus."}, {"Thief with teams", "Thief mit Teams"}, {"Thief can be played with or without teams.", "Thief geht mit oder ohne Teams."}, {"Skating cheat", "Skating-Cheat"}, {"The cut Skating cheat can be unlocked again.", "Der gestrichene Skating-Cheat laesst sich wieder freischalten."}, {"Gothic tile set", "Gothic-Kachelsatz"}, {"The cut Gothic tile set in the MapMaker.", "Der gestrichene Gothic-Kachelsatz im MapMaker."}, {"Desert Eagle texture", "Desert-Eagle-Textur"}, {"Levels without the Desert Eagle texture get it delivered, no more white gun.", "Level ohne Desert-Eagle-Textur bekommen sie nachgeliefert, keine weisse Waffe mehr."}, {"Cut story enemies", "Gestrichene Story-Gegner"}, {"Lean Molly and Ample Sally in Wild West, Marco the Snitch and the Reaper Splitter in Notre Dame.", "Lean Molly und Ample Sally in Wild West, Marco the Snitch und der Reaper Splitter in Notre Dame."}, {"MapMaker Story co-op", "MapMaker-Story-Koop"}, {"MapMaker story maps are played by every connected controller (2 to 4 players). One controller = solo.", "MapMaker-Storykarten spielt jeder angeschlossene Controller mit (2 bis 4 Spieler). Ein Controller = solo."}, {"How many enemy spawn points a MapMaker map may hold.", "Wie viele Gegner-Spawnpunkte eine MapMaker-Karte haben darf."}, {"Profiles", "Profile"}, {"A profile keeps every setting (picture, controls, sound, restored content). Load it any time.", "Ein Profil merkt sich alle Einstellungen (Bild, Steuerung, Ton, wiederhergestellte Inhalte). Jederzeit ladbar."}, {"Profile name", "Profilname"}, {"Save as profile", "Als Profil speichern"}, {"Load", "Laden"}, {"Overwrite", "Ueberschreiben"}, {"Delete", "Loeschen"}, {"Saved: ", "Gespeichert: "}, {"Loaded: ", "Geladen: "}, {"Deleted: ", "Geloescht: "}, {"Could not save the profile.", "Profil konnte nicht gespeichert werden."}, {"Restored content, presets and profiles: Crystal Cut tab.", "Wiederhergestellte Inhalte, Voreinstellungen und Profile: Reiter Crystal Cut."},
 			{"Textures", "Texturen"}, {"Online", "Online"}, {"Save data", "Speicherstand"}, {"Language", "Sprache"},
 			{"Preset", "Voreinstellung"}, {"Remaster (sharp)", "Remaster (scharf)"}, {"Original look", "Original-Look"}, {"Performance", "Leistung"},
 			{"Internal resolution", "Interne Aufloesung"}, {"Aspect ratio", "Bildformat"}, {"Takes full effect after the next area change or restart.", "Wirkt ab dem naechsten Bereichswechsel bzw. Neustart voll."},
@@ -1474,8 +1474,8 @@ namespace ps2xmenu
 			{"Gamepad", "Gamepad"}, {"Rumble", "Vibration"}, {"Rumble strength", "Vibrationsstaerke"},
 			{"Any modern gamepad is detected automatically (Xbox, PlayStation, Switch, Deck).", "Jedes moderne Gamepad wird automatisch erkannt (Xbox, PlayStation, Switch, Deck)."},
 			{"Mouse", "Maus"}, {"Mouse aiming", "Maus-Zielen"}, {"Sensitivity", "Empfindlichkeit"}, {"Zoom sensitivity", "Zoom-Empfindlichkeit"},
-			{"Invert vertical", "Oben/unten vertauscht"}, {"Field of view", "Sichtfeld"}, {"60 = original. Aiming and scopes keep the zoom of the weapon.", "60 = Original. Zielen und Zielfernrohr behalten den Zoom der Waffe."}, {"Infinite health", "Unendlich Leben"}, {"Infinite armor", "Unendlich Ruestung"}, {"Infinite ammo", "Unendlich Munition"}, {"Cheats for single player and split screen. Off in Online+ and in online matches.", "Cheats fuer Einzelspieler und Splitscreen. Aus in Online+ und in Online-Partien."}, {"Auto-aim (pulls the aim to enemies, like on the PS2)", "Zielhilfe (zieht das Ziel zu Gegnern, wie auf der PS2)"}, {"Always hold aim mode (original crosshair, slower walking)", "Zielmodus immer halten (Original-Fadenkreuz, langsameres Laufen)"}, {"Crosshair", "Fadenkreuz"}, {"Sniper scope", "Zielfernrohr"}, {"Impact effects (Online+)", "Treffer-Effekte (Online+)"}, {"Extra feedback on top of the original game. Off = the game exactly as on the PS2.", "Zusaetzliches Feedback zum Originalspiel. Aus = das Spiel genau wie auf der PS2."}, {"Hit and kill markers", "Treffer- und Kill-Marker"}, {"Play online", "Online spielen"}, {"Open server browser", "Serverbrowser oeffnen"}, {"Join a server, then pick Network Game in the game.", "Server beitreten, dann im Spiel Netzwerkspiel waehlen."}, {"Online play is not available in this start mode.", "Online-Spiel ist in diesem Startmodus nicht verfuegbar."}, {"Effects", "Effekte"}, {"BOT MATCH", "BOT-MATCH"}, {"* = has to be unlocked in the game first (Arcade League / Challenge).", "* = muss erst im Spiel freigeschaltet werden (Arcade-Liga / Challenge)."}, {"Mode", "Modus"}, {"Map", "Karte"}, {"START BOT MATCH", "BOT-MATCH STARTEN"}, {"Jump straight into a match against bots. Pick a mode and a map, the game sets everything up for you.", "Direkt in ein Match gegen Bots. Modus und Karte waehlen, das Spiel stellt alles fuer dich ein."}, {"Don't touch the controller for a few seconds while the menus run.", "Ein paar Sekunden nichts druecken, waehrend die Menues durchlaufen."}, {"Opponents", "Gegner"}, {"Next rank:", "Naechster Rang:"}, {"Recoil punch when firing", "Rueckstoss beim Schiessen"}, {"Multi-kill and streak announcer", "Ansager fuer Multikills und Serien"}, {"Red screen edge when hit", "Roter Bildschirmrand bei Treffern"}, {"PLAY ONLINE", "ONLINE SPIELEN"}, {"PROFILE & STATS", "PROFIL & STATS"}, {"SETTINGS", "EINSTELLUNGEN"}, {"Total XP", "XP gesamt"}, {"XP to next level", "XP bis zum naechsten Level"}, {"  Back to main menu  ", "  Zurueck zum Hauptmenue  "}, {"All other settings: ESC / F1 during the game.", "Alle weiteren Einstellungen: ESC / F1 im Spiel."}, {"TimeSplitters 2 Online+ - online play, progression and extra impact.", "TimeSplitters 2 Online+ - Online-Spiel, Fortschritt und mehr Wucht."}, {"Hit and kill sounds", "Treffer- und Kill-Sound"}, {"Progress", "Fortschritt"}, {"Kills", "Abschuesse"}, {"Hits", "Treffer"}, {"Hit +10 XP, kill +100 XP. Saved locally; online servers will track it later.", "Treffer +10 XP, Abschuss +100 XP. Lokal gespeichert; Online-Server zaehlen spaeter mit."}, {"Camera kick when hit", "Kamerastoss bei Treffern"}, {"Look up/down limit", "Blick hoch/runter bis"},
-			{"Click into the game to capture the mouse, ESC or F1 releases it.", "Klick ins Spiel faengt die Maus, ESC/F1 gibt sie wieder frei."},
+			{"Invert vertical", "Oben/unten vertauscht"}, {"Field of view", "Sichtfeld"}, {"60 = original. Aiming and scopes keep the zoom of the weapon.", "60 = Original. Zielen und Zielfernrohr behalten den Zoom der Waffe."}, {"Infinite health", "Unendlich Leben"}, {"Infinite armor", "Unendlich Ruestung"}, {"Infinite ammo", "Unendlich Munition"}, {"Cheats for single player and split screen. Off in Online+ and in online matches.", "Cheats fuer Einzelspieler und Splitscreen. Aus in Online+ und in Online-Partien."}, {"Auto-aim (pulls the aim to enemies, like on the PS2)", "Zielhilfe (zieht das Ziel zu Gegnern, wie auf der PS2)"}, {"Always hold aim mode (original crosshair, slower walking)", "Zielmodus immer halten (Original-Fadenkreuz, langsameres Laufen)"}, {"Crosshair", "Fadenkreuz"}, {"Sniper scope", "Zielfernrohr"}, {"Impact effects (Online+)", "Treffer-Effekte (Online+)"}, {"Extra feedback on top of the original game. Off = the game exactly as on the PS2.", "Zusaetzliches Feedback zum Originalspiel. Aus = das Spiel genau wie auf der PS2."}, {"Hit and kill markers", "Treffer- und Kill-Marker"}, {"Play online", "Online spielen"}, {"Open server browser", "Serverbrowser oeffnen"}, {"Join a server, then pick Network Game in the game.", "Server beitreten, dann im Spiel Netzwerkspiel waehlen."}, {"Online play is not available in this start mode.", "Online-Spiel ist in diesem Startmodus nicht verfuegbar."}, {"Effects", "Effekte"}, {"BOT MATCH", "BOT-MATCH"}, {"* = has to be unlocked in the game first (Arcade League / Challenge).", "* = muss erst im Spiel freigeschaltet werden (Arcade-Liga / Challenge)."}, {"Mode", "Modus"}, {"Map", "Karte"}, {"START BOT MATCH", "BOT-MATCH STARTEN"}, {"Jump straight into a match against bots. Pick a mode and a map, the game sets everything up for you.", "Direkt in ein Match gegen Bots. Modus und Karte waehlen, das Spiel stellt alles fuer dich ein."}, {"Don't touch the controller for a few seconds while the menus run.", "Ein paar Sekunden nichts druecken, waehrend die Menues durchlaufen."}, {"Opponents", "Gegner"}, {"Next rank:", "Naechster Rang:"}, {"Recoil punch when firing", "Rueckstoss beim Schiessen"}, {"Multi-kill and streak announcer", "Ansager fuer Multikills und Serien"}, {"Red screen edge when hit", "Roter Bildschirmrand bei Treffern"}, {"PLAY ONLINE", "ONLINE SPIELEN"}, {"PROFILE & STATS", "PROFIL & STATS"}, {"SETTINGS", "EINSTELLUNGEN"}, {"Total XP", "XP gesamt"}, {"XP to next level", "XP bis zum naechsten Level"}, {"  Back to main menu  ", "  Zurueck zum Hauptmenue  "}, {"All other settings: F1 during the game.", "Alle weiteren Einstellungen: F1 im Spiel."}, {"TimeSplitters 2 Online+ - online play, progression and extra impact.", "TimeSplitters 2 Online+ - Online-Spiel, Fortschritt und mehr Wucht."}, {"Hit and kill sounds", "Treffer- und Kill-Sound"}, {"Progress", "Fortschritt"}, {"Kills", "Abschuesse"}, {"Hits", "Treffer"}, {"Hit +10 XP, kill +100 XP. Saved locally; online servers will track it later.", "Treffer +10 XP, Abschuss +100 XP. Lokal gespeichert; Online-Server zaehlen spaeter mit."}, {"Camera kick when hit", "Kamerastoss bei Treffern"}, {"Look up/down limit", "Blick hoch/runter bis"},
+			{"Click into the game to capture the mouse, F1 (menu) releases it.", "Klick ins Spiel faengt die Maus, F1 (Menue) gibt sie wieder frei."},
 			{"Key bindings", "Tastenbelegung"}, {"Click a field, then press a key or mouse button. Delete clears, ESC cancels.", "Feld anklicken, dann Taste oder Maustaste druecken. Entf leert, ESC bricht ab."},
 			{"Action", "Aktion"}, {"Primary", "Taste 1"}, {"Secondary", "Taste 2"}, {"... press a key ...", "... Taste druecken ..."}, {"Reset to defaults", "Standardbelegung"},
 			{"HD text (own re-typesetting for text pages without a pack)", "HD-Text (eigener Neusatz fuer Textseiten ohne Paket)"},
@@ -1486,8 +1486,8 @@ namespace ps2xmenu
 			{"A backup copy of the save data is made at every start.", "Bei jedem Start wird automatisch eine Sicherungskopie angelegt."},
 			{"Memory card: not set", "Speicherkarte: nicht gesetzt"}, {"Memory card: ", "Speicherkarte: "}, {" (still empty)", " (noch leer)"}, {"\nLast saved: ", "\nZuletzt gespeichert: "},
 			{"  Back to game  ", "  Weiterspielen  "}, {"  Quit game  ", "  Spiel beenden  "},
-			{"ESC / F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot", "ESC / F1 / Guide: Menue   F7: freie Kamera   F8: Video aufnehmen   F9: FPS   F10: Turbo   F11 oder Alt+Enter: Vollbild   F12: Screenshot"},
-			{"Menu: ESC / F1   |   Gamepad: Select + Start (or Guide)", "Menue: ESC / F1   |   Gamepad: Select + Start (oder Guide)"},
+			{"F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot", "F1 / Guide: Menue   F7: freie Kamera   F8: Video aufnehmen   F9: FPS   F10: Turbo   F11 oder Alt+Enter: Vollbild   F12: Screenshot"},
+			{"Menu: F1   |   Gamepad: Select + Start (or Guide)", "Menue: F1   |   Gamepad: Select + Start (oder Guide)"},
 			// Online
 			{"Play online", "Online spielen"}, {"Pick a server and connect. Then confirm \"TS2 Online\" in the game: Start Game hosts, Join Game lists the games on the server.", "Server waehlen und Verbinden. Dann im Spiel \"TS2 Online\" bestaetigen: Start Game hostet, Join Game zeigt die Spiele auf dem Server."},
 			{"Player name", "Spielername"}, {"(none)", "(keiner)"}, {"Searching ...", "Suche ..."}, {"Refresh", "Aktualisieren"}, {"not full", "nicht voll"},
@@ -1575,6 +1575,24 @@ namespace ps2xmenu
 		return fmt::format(fmt::runtime(tr("Key 0x{:x}")), c);
 	}
 
+	// Crystal Cut (TS2): restored content, every piece on by default with its own switch. The keys are the ones the port
+	// reads (ts2Opt in ts2_override.cpp); same spelling in both settings file languages.
+	struct CcOpt { const char* key; const char* name; const char* info; bool neustart; };
+	static constexpr CcOpt kCc[] = {
+		{"more_arcade_maps", "More arcade maps", "Chicago, Atom Smasher, NeoTokyo, Spacestation and Robot Factory join the arcade map list.", true},
+		{"planet_x_arcade", "Planet X in arcade", "Planet X can be played in Deathmatch modes.", true},
+		{"chicago_spawns", "Chicago spawn points", "Chicago uses the 19 spawn points of its story setup in arcade.", true},
+		{"more_characters", "More characters", "25 extra characters in the character select, John Vattic included.", true},
+		{"restored_names", "Restored names", "Cut characters and items get their proper names.", true},
+		{"more_modes", "More modes", "One on One, plus Dam and Wild West in Flame Tag and Virus.", true},
+		{"thief_teams", "Thief with teams", "Thief can be played with or without teams.", true},
+		{"skating", "Skating cheat", "The cut Skating cheat can be unlocked again.", true},
+		{"gothic_tileset", "Gothic tile set", "The cut Gothic tile set in the MapMaker.", false},
+		{"deagle_texture", "Desert Eagle texture", "Levels without the Desert Eagle texture get it delivered, no more white gun.", true},
+		{"story_enemies", "Cut story enemies", "Lean Molly and Ample Sally in Wild West, Marco the Snitch and the Reaper Splitter in Notre Dame.", true},
+		{"mapmaker_story_coop", "MapMaker Story co-op", "MapMaker story maps are played by every connected controller (2 to 4 players). One controller = solo.", false},
+	};
+	static constexpr int kAnzCc = static_cast<int>(sizeof(kCc) / sizeof(kCc[0]));
 	struct Cfg
 	{
 		int upscale = 9 /* auto: fits the screen, steps down when the PC cannot hold the frame rate */, aspect = 4, cas = 1, casSharp = 25, tv = 0, filter = 2, aniso = 16, dither = 0;
@@ -1605,10 +1623,12 @@ namespace ps2xmenu
 		int autoAim = 0;         // TS2 mouse aiming: keep the game's auto-aim (pulls the aim to enemies); off = shots go to the crosshair
 		int padModern = 0;       // TS2: modern gamepad aiming (right stick turns the view, crosshair fixed in the centre)
 		int unlockAll = 0;       // TS2: everything unlocked while the option is on (levels, characters, cheats)
-		int leichtPlus = 0;      // TS2: Extended Easy Mode, full levels on Easy (port reads it as option 44)
-		int fruehStimmen = 0;    // TS2: earlier voice takes found on the disc (Louie Bignose), port reads it as option 43
+		int leichtPlus = 1;      // TS2: Extended Easy Mode (on by default since Crystal Cut), full levels on Easy (port reads it as option 44)
+		int fruehStimmen = 1;    // TS2: earlier voice takes (restored, on by default) found on the disc (Louie Bignose), port reads it as option 43
+		int cc[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};   // Crystal Cut options (kCc), 1 = on
 		int mmGegner = 0;        // TS2: MapMaker enemy spawn limit (0 = game value 10), the port reads mapmaker_spawns from the settings file
 		int nickMax = 40;        // Mouse: how far up/down you can look (degrees, original 40)
+		int menuTaste = 0;       // Menu key besides F1 (user 19 Nov: ESC is "back" for most players): 0 F1 only, 1 ESC, 2 F2, 3 F3, 4 F4, 5 ^ / `
 		int bel[32][2] = {};     // bindings per action (2 keys), defaults in kAktionen
 		int belVersion = 0;      // version of the saved bindings (0 = none saved)
 		Cfg() { for (int i = 0; i < kAnzAktionen; ++i) { bel[i][0] = kAktionen[i].std1; bel[i][1] = kAktionen[i].std2; } belVersion = kBelegungVersion; }
@@ -1652,7 +1672,7 @@ namespace ps2xmenu
 		{"nachzieheffekt", "motion_trail"}, {"maus_zielen", "mouse_aim"}, {"maus_empfindlichkeit", "mouse_sensitivity"},
 		{"maus_invertiert", "mouse_invert"}, {"maus_zielmodus_dauer", "aim_mode_hold"}, {"sprache", "language"},
 		{"eingabeanzeige", "show_input"}, {"zoom_empfindlichkeit", "zoom_sensitivity"}, {"belegung_version", "bindings_version"},
-		{"effekte", "effects"}, {"alles_frei", "unlock_all"}, {"leicht_plus", "extended_easy"}, {"fruehere_stimmen", "earlier_voices"}, {"mapmaker_gegner", "mapmaker_spawns"}, {"pad_modern", "modern_gamepad_aim"}, {"pad_tempo", "gamepad_aim_speed"}, {"auto_ziel", "auto_aim"}, {"leben_unendlich", "infinite_health"}, {"ruestung_unendlich", "infinite_armor"}, {"munition_unendlich", "infinite_ammo"}, {"sichtfeld", "field_of_view"}, {"fadenkreuz", "crosshair"}, {"zielfernrohr", "scope"}, {"online_plus_effekte", "impact_effects"}, {"schaden_stoss", "damage_kick"}, {"treffermarker", "hit_markers"}, {"treffer_klang", "hit_sound"}, {"blickwinkel_max", "pitch_limit"}, {"texturpakete", "texture_packs"}, {"online_passwort", "online_password"}, {"online_favoriten", "online_favorites"}};
+		{"effekte", "effects"}, {"alles_frei", "unlock_all"}, {"leicht_plus", "extended_easy"}, {"fruehere_stimmen", "earlier_voices"}, {"mapmaker_gegner", "mapmaker_spawns"}, {"menue_taste", "menu_key"}, {"pad_modern", "modern_gamepad_aim"}, {"pad_tempo", "gamepad_aim_speed"}, {"auto_ziel", "auto_aim"}, {"leben_unendlich", "infinite_health"}, {"ruestung_unendlich", "infinite_armor"}, {"munition_unendlich", "infinite_ammo"}, {"sichtfeld", "field_of_view"}, {"fadenkreuz", "crosshair"}, {"zielfernrohr", "scope"}, {"online_plus_effekte", "impact_effects"}, {"schaden_stoss", "damage_kick"}, {"treffermarker", "hit_markers"}, {"treffer_klang", "hit_sound"}, {"blickwinkel_max", "pitch_limit"}, {"texturpakete", "texture_packs"}, {"online_passwort", "online_password"}, {"online_favoriten", "online_favorites"}};
 	static constexpr const char* kFxMap[][2] = {{"aus", "off"}, {"klar", "clear"}, {"filmisch", "cinematic"}};
 	// Line "key=value": translate the key (and the effects value) to the other language; nachEnglisch=false -> internal (German) names
 	std::string cfgZeile(const std::string& line, bool nachEnglisch)
@@ -1744,10 +1764,12 @@ namespace ps2xmenu
 			else if (k == "ansager") cfg.impactAnsage = v != 0 ? 1 : 0;
 			else if (k == "schaden_rand") cfg.impactRand = v != 0 ? 1 : 0;
 			else if (k == "blickwinkel_max") cfg.nickMax = std::clamp(v, 40, 85);
+			else if (k == "menue_taste") cfg.menuTaste = std::clamp(v, 0, 5);
 			else if (k == "alles_frei") cfg.unlockAll = v != 0 ? 1 : 0;
 			else if (k == "leicht_plus") cfg.leichtPlus = v != 0 ? 1 : 0;
 			else if (k == "fruehere_stimmen") cfg.fruehStimmen = v != 0 ? 1 : 0;
 			else if (k == "mapmaker_gegner") cfg.mmGegner = std::clamp(v, 0, 1000);
+			else if ([&] { for (int i = 0; i < kAnzCc; ++i) if (k == kCc[i].key) { cfg.cc[i] = v != 0 ? 1 : 0; return true; } return false; }()) {}
 			else if (k == "pad_modern") cfg.padModern = v != 0 ? 1 : 0;
 			else if (k == "pad_tempo") cfg.padSens = std::clamp(v, 20, 300);
 			else if (k == "auto_ziel") cfg.autoAim = v != 0 ? 1 : 0;
@@ -1787,6 +1809,53 @@ namespace ps2xmenu
 			cfg.belVersion = kBelegungVersion;
 		}
 	}
+	std::string ccZeilen(const Cfg& c)
+	{
+		std::string z;
+		for (int i = 0; i < kAnzCc; ++i) z += std::string("\n") + kCc[i].key + "=" + (c.cc[i] ? "1" : "0");
+		return z;
+	}
+	// Profiles (Crystal Cut): complete copies of the settings file in <settings dir>/profiles/<name>.ini
+	std::string profilDir() { const std::string d = dir() + "/profiles"; ps2x_mkdir(d.c_str(), 0755); return d; }
+	std::vector<std::string> profile()
+	{
+		std::vector<std::string> out; std::error_code ec;
+		for (const auto& e : std::filesystem::directory_iterator(profilDir(), ec))
+			if (e.path().extension() == ".ini") out.push_back(e.path().stem().string());
+		std::sort(out.begin(), out.end());
+		return out;
+	}
+	static std::string profilName(std::string n)
+	{
+		std::string o; for (char ch : n) if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '-' || ch == '_' || ch == ' ') o += ch;
+		while (!o.empty() && o.back() == ' ') o.pop_back();
+		return o.substr(0, 40);
+	}
+	// Presets: change only the settings they are about, everything else stays as the player set it
+	void preset(Cfg& c, int p)
+	{
+		switch (p)
+		{
+		case 0: // Crystal Cut: everything restored on
+			for (int i = 0; i < kAnzCc; ++i) c.cc[i] = 1;
+			c.leichtPlus = 1; c.fruehStimmen = 1;
+			break;
+		case 1: // Original (PS2): the game as it shipped
+			for (int i = 0; i < kAnzCc; ++i) c.cc[i] = 0;
+			c.leichtPlus = 0; c.fruehStimmen = 0; c.mmGegner = 0; c.unlockAll = 0;
+			c.nachzieh = 1; c.camBlur = 1; c.reizarm = 100; c.lebensbogen = 100; c.weichSchnitt = 0;
+			break;
+		case 2: // Steam Deck 60 fps: 2x internal (1280x800), cheap filters, no post effects, frame limiter by V-Sync
+			c.upscale = 2; c.fxaa = false; c.cas = 1; c.casSharp = 25; c.aniso = 4; c.tv = 0; c.fx = 0; c.dither = 0; c.vsync = true; c.aspect = 4;
+			break;
+		case 3: // Performance: weak PCs
+			c.upscale = 1; c.fxaa = false; c.cas = 0; c.aniso = 0; c.tv = 0; c.fx = 0; c.dither = 0;
+			break;
+		case 4: // Low stimulus: no red flash, no camera kick, soft cuts, clear picture
+			c.reizarm = 0; c.lebensbogen = 0; c.weichSchnitt = 1; c.nachzieh = 0; c.camBlur = 0; c.rumblePct = 40; c.impactKick = 0; c.impactRand = 0; c.impactAnsage = 0;
+			break;
+		}
+	}
 	void save()
 	{
 		Cfg c;
@@ -1797,7 +1866,7 @@ namespace ps2xmenu
 		  << "\ncas_staerke=" << c.casSharp << "\ndithering=" << c.dither << "\ntv_shader=" << c.tv << "\nfarbe=" << c.shadeboost << "\nhelligkeit=" << c.sbB
 		  << "\nkontrast=" << c.sbC << "\nsaettigung=" << c.sbS << "\ntexturfilter=" << c.filter << "\nanisotrop=" << c.aniso
 		  << "\nvollbild=" << c.fullscreen << "\nfps_anzeige=" << c.showFps << "\nvibration=" << c.rumble
-		  << "\nvibration_staerke=" << c.rumblePct << "\nvsync=" << c.vsync << "\nbildrate=" << c.hz << "\nlautstaerke=" << c.volume << "\nkamera_unschaerfe=" << c.camBlur << "\nnachzieheffekt=" << c.nachzieh << "\ntreffer_toenung=" << c.reizarm << "\nlebensbogen=" << c.lebensbogen << "\nweiche_schnitte=" << c.weichSchnitt << "\nstartmenue=" << c.startMenu << "\neffekte=" << (c.fx == 1 ? "original-plus" : c.fx == 2 ? "klar" : c.fx == 3 ? "filmisch" : "aus") << "\ntrilinear=" << c.tri << "\nhd_text=" << c.hdText << "\nmaus_zielen=" << c.maus << "\nmaus_empfindlichkeit=" << c.mausSens << "\nmaus_invertiert=" << c.mausInvert << "\nmaus_zielmodus_dauer=" << c.mausZielmodus << "\nsprache=" << c.lang << "\neingabeanzeige=" << c.showInput << "\nbelegung_version=" << c.belVersion << "\nzoom_empfindlichkeit=" << c.zoomSens << "\nfadenkreuz=" << c.fadenkreuz << "\nzielfernrohr=" << c.scope << "\nonline_plus_effekte=" << c.impact << "\nschaden_stoss=" << c.impactKick << "\ntreffermarker=" << c.impactMarker << "\ntreffer_klang=" << c.impactSound << "\nrueckstoss=" << c.impactRecoil << "\nansager=" << c.impactAnsage << "\nschaden_rand=" << c.impactRand << "\nblickwinkel_max=" << c.nickMax << "\nalles_frei=" << c.unlockAll << "\nleicht_plus=" << c.leichtPlus << "\nfruehere_stimmen=" << c.fruehStimmen << "\nmapmaker_gegner=" << c.mmGegner << "\npad_modern=" << c.padModern << "\npad_tempo=" << c.padSens << "\nauto_ziel=" << c.autoAim << "\nleben_unendlich=" << c.cheatHealth << "\nruestung_unendlich=" << c.cheatArmor << "\nmunition_unendlich=" << c.cheatAmmo << "\nsichtfeld=" << c.fov << "\ntexturpakete=" << c.packs << "\nonline_server=" << c.onlineServer << "\nonline_name=" << c.onlineName << "\nonline_passwort=" << c.onlinePw << "\nonline_favoriten=" << c.onlineFavs << "\n";
+		  << "\nvibration_staerke=" << c.rumblePct << "\nvsync=" << c.vsync << "\nbildrate=" << c.hz << "\nlautstaerke=" << c.volume << "\nkamera_unschaerfe=" << c.camBlur << "\nnachzieheffekt=" << c.nachzieh << "\ntreffer_toenung=" << c.reizarm << "\nlebensbogen=" << c.lebensbogen << "\nweiche_schnitte=" << c.weichSchnitt << "\nstartmenue=" << c.startMenu << "\neffekte=" << (c.fx == 1 ? "original-plus" : c.fx == 2 ? "klar" : c.fx == 3 ? "filmisch" : "aus") << "\ntrilinear=" << c.tri << "\nhd_text=" << c.hdText << "\nmaus_zielen=" << c.maus << "\nmaus_empfindlichkeit=" << c.mausSens << "\nmaus_invertiert=" << c.mausInvert << "\nmaus_zielmodus_dauer=" << c.mausZielmodus << "\nsprache=" << c.lang << "\neingabeanzeige=" << c.showInput << "\nbelegung_version=" << c.belVersion << "\nzoom_empfindlichkeit=" << c.zoomSens << "\nfadenkreuz=" << c.fadenkreuz << "\nzielfernrohr=" << c.scope << "\nonline_plus_effekte=" << c.impact << "\nschaden_stoss=" << c.impactKick << "\ntreffermarker=" << c.impactMarker << "\ntreffer_klang=" << c.impactSound << "\nrueckstoss=" << c.impactRecoil << "\nansager=" << c.impactAnsage << "\nschaden_rand=" << c.impactRand << "\nblickwinkel_max=" << c.nickMax << "\nmenue_taste=" << c.menuTaste << "\nalles_frei=" << c.unlockAll << "\nleicht_plus=" << c.leichtPlus << "\nfruehere_stimmen=" << c.fruehStimmen << "\nmapmaker_gegner=" << c.mmGegner << "\npad_modern=" << c.padModern << "\npad_tempo=" << c.padSens << "\nauto_ziel=" << c.autoAim << "\nleben_unendlich=" << c.cheatHealth << "\nruestung_unendlich=" << c.cheatArmor << "\nmunition_unendlich=" << c.cheatAmmo << "\nsichtfeld=" << c.fov << ccZeilen(c) << "\ntexturpakete=" << c.packs << "\nonline_server=" << c.onlineServer << "\nonline_name=" << c.onlineName << "\nonline_passwort=" << c.onlinePw << "\nonline_favoriten=" << c.onlineFavs << "\n";
 		for (int i = 0; i < kAnzAktionen; ++i)
 			f << "taste_" << i << "=" << c.bel[i][0] << "," << c.bel[i][1] << "   # " << kAktionen[i].name << "\n";
 		std::ofstream aus(iniPath(), std::ios::trunc);
@@ -1866,7 +1935,7 @@ namespace ps2xmenu
 		       a.aniso == b.aniso && a.dither == b.dither && a.sbB == b.sbB && a.sbC == b.sbC && a.sbS == b.sbS && a.rumblePct == b.rumblePct &&
 		       a.hz == b.hz && a.volume == b.volume && a.camBlur == b.camBlur && a.nachzieh == b.nachzieh && a.reizarm == b.reizarm && a.lebensbogen == b.lebensbogen && a.weichSchnitt == b.weichSchnitt && a.fxaa == b.fxaa && a.shadeboost == b.shadeboost &&
 		       a.fullscreen == b.fullscreen && a.showFps == b.showFps && a.rumble == b.rumble && a.vsync == b.vsync && a.startMenu == b.startMenu &&
-		       a.hdText == b.hdText && a.unlockAll == b.unlockAll && a.leichtPlus == b.leichtPlus && a.fruehStimmen == b.fruehStimmen && a.mmGegner == b.mmGegner && a.padModern == b.padModern && a.padSens == b.padSens && a.autoAim == b.autoAim && a.cheatHealth == b.cheatHealth && a.cheatArmor == b.cheatArmor && a.cheatAmmo == b.cheatAmmo && a.fov == b.fov && a.maus == b.maus && a.mausSens == b.mausSens && a.mausInvert == b.mausInvert && a.mausZielmodus == b.mausZielmodus && a.fadenkreuz == b.fadenkreuz && a.scope == b.scope && a.impact == b.impact && a.impactKick == b.impactKick && a.impactMarker == b.impactMarker && a.impactSound == b.impactSound && a.impactRecoil == b.impactRecoil && a.impactAnsage == b.impactAnsage && a.impactRand == b.impactRand && a.nickMax == b.nickMax && a.lang == b.lang && a.showInput == b.showInput &&
+		       a.hdText == b.hdText && a.unlockAll == b.unlockAll && a.leichtPlus == b.leichtPlus && a.fruehStimmen == b.fruehStimmen && a.mmGegner == b.mmGegner && std::memcmp(a.cc, b.cc, sizeof(a.cc)) == 0 && a.padModern == b.padModern && a.padSens == b.padSens && a.autoAim == b.autoAim && a.cheatHealth == b.cheatHealth && a.cheatArmor == b.cheatArmor && a.cheatAmmo == b.cheatAmmo && a.fov == b.fov && a.maus == b.maus && a.mausSens == b.mausSens && a.mausInvert == b.mausInvert && a.mausZielmodus == b.mausZielmodus && a.fadenkreuz == b.fadenkreuz && a.scope == b.scope && a.impact == b.impact && a.impactKick == b.impactKick && a.impactMarker == b.impactMarker && a.impactSound == b.impactSound && a.impactRecoil == b.impactRecoil && a.impactAnsage == b.impactAnsage && a.impactRand == b.impactRand && a.nickMax == b.nickMax && a.menuTaste == b.menuTaste && a.lang == b.lang && a.showInput == b.showInput &&
 		       a.zoomSens == b.zoomSens && std::memcmp(a.bel, b.bel, sizeof(a.bel)) == 0 && a.packs == b.packs && a.fx == b.fx && a.tri == b.tri &&
 		       a.onlineServer == b.onlineServer && a.onlineName == b.onlineName && a.onlinePw == b.onlinePw && a.onlineFavs == b.onlineFavs;
 	}
@@ -2770,7 +2839,7 @@ static const int kBotSetsN = 9;
 			if (t < 15.0f && !hinweisAus)
 			{
 				const float a = std::clamp((15.0f - t) / 2.0f, 0.0f, 1.0f);
-				const char* txt = tr("Menu: ESC / F1   |   Gamepad: Select + Start (or Guide)");
+				const char* txt = tr("Menu: F1   |   Gamepad: Select + Start (or Guide)");
 				ImDrawList* dl = ImGui::GetForegroundDrawList();
 				const float fs = ImGui::GetFontSize();
 				const ImVec2 ts = ImGui::CalcTextSize(txt);
@@ -2933,7 +3002,7 @@ static const int kBotSetsN = 9;
 				if (ImGui::Checkbox(tr("Red screen edge when hit"), &rd)) c.impactRand = rd ? 1 : 0;
 				ImGui::EndDisabled();
 				ImGui::Spacing();
-				ImGui::TextDisabled("%s", tr("All other settings: ESC / F1 during the game."));
+				ImGui::TextDisabled("%s", tr("All other settings: F1 during the game."));
 			}
 			ImGui::EndChild();
 			ImGui::Separator();
@@ -2961,7 +3030,7 @@ static const int kBotSetsN = 9;
 			ImGui::SetNextItemWidth(lw);
 			int li = c.lang + 1;
 			if (ImGui::Combo("##lang", &li, kLang, 3)) c.lang = li - 1;
-			ImGui::TextDisabled("%s", tr("ESC / F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot"));
+			ImGui::TextDisabled("%s", tr("F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot"));
 			ImGui::Spacing();
 		}
 
@@ -3015,6 +3084,12 @@ static const int kBotSetsN = 9;
 				ImGui::SameLine(0, ImGui::GetFontSize() * 2);
 				ImGui::Checkbox(tr("Show FPS"), &c.showFps);
 				ImGui::Checkbox(tr("Open this menu at start"), &c.startMenu);
+				{
+					// Menu key besides F1 (and the Guide button / Select + Start). ESC always closes the open menu.
+					const char* kMt[] = {tr("F1 only"), "ESC", "F2", "F3", "F4", "^ / `"};
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.f);
+					ImGui::Combo(tr("Extra menu key (besides F1)"), &c.menuTaste, kMt, 6);
+				}
 				ImGui::SameLine(0, ImGui::GetFontSize() * 2);
 				ImGui::Checkbox(tr("Input overlay (debug)"), &c.showInput);
 				ImGui::EndTabItem();
@@ -3108,7 +3183,7 @@ static const int kBotSetsN = 9;
 						ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14);
 						ImGui::SliderInt(tr("Look up/down limit"), &c.nickMax, 40, 85, "%d\xC2\xB0");
 					}
-					ImGui::TextDisabled("%s", tr("Click into the game to capture the mouse, ESC or F1 releases it."));
+					ImGui::TextDisabled("%s", tr("Click into the game to capture the mouse, F1 (menu) releases it."));
 				}
 				if (std::strcmp(cfgName(), "ts2-recomp") == 0)
 				{
@@ -3244,6 +3319,81 @@ static const int kBotSetsN = 9;
 				onlineTab(c, closeReq);
 				ImGui::EndTabItem();
 			}
+			// PS2XGS_MENU_TAB=crystalcut (test runs): open the menu on this tab once
+			static bool s_ccWaehlen = [] { const char* e = std::getenv("PS2XGS_MENU_TAB"); return e && std::strcmp(e, "crystalcut") == 0; }();
+			if (std::strcmp(cfgName(), "ts2-recomp") == 0 && ImGui::BeginTabItem(tr("Crystal Cut"), nullptr, s_ccWaehlen ? ImGuiTabItemFlags_SetSelected : 0))
+			{
+				s_ccWaehlen = false;
+				{ static bool s_gem = false; if (!s_gem) { s_gem = true; Console.WriteLn(fmt::format("[ps2xmenu] Crystal Cut tab: {} restored options, {} profiles", kAnzCc, profile().size())); } }
+				head(tr("Presets"));
+				ImGui::TextDisabled("%s", tr("A preset changes only the settings it is about. Everything can be changed afterwards."));
+				static const char* kPre[] = {"Crystal Cut (everything on)", "Original (PS2)", "Steam Deck 60 fps", "Performance", "Low stimulus"};
+				for (int i = 0; i < 5; ++i) { if (i) ImGui::SameLine(); if (ImGui::Button(tr(kPre[i]))) preset(c, i); }
+				head(tr("Restored content"));
+				ImGui::TextDisabled("%s", tr("Content cut from the game, found on the disc and brought back. (restart) = takes effect after a restart."));
+				bool alle = true; for (int i = 0; i < kAnzCc; ++i) alle = alle && c.cc[i];
+				if (ImGui::Checkbox(tr("All restored content"), &alle)) for (int i = 0; i < kAnzCc; ++i) c.cc[i] = alle ? 1 : 0;
+				ImGui::Separator();
+				if (ImGui::BeginTable("##cc", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg))
+				{
+					for (int i = 0; i < kAnzCc; ++i)
+					{
+						ImGui::TableNextRow(); ImGui::TableNextColumn();
+						bool on = c.cc[i] != 0;
+						std::string lab = std::string(tr(kCc[i].name)) + (kCc[i].neustart ? std::string(" ") + tr("(restart)") : std::string()) + "##cc" + std::to_string(i);
+						if (ImGui::Checkbox(lab.c_str(), &on)) c.cc[i] = on ? 1 : 0;
+						ImGui::TableNextColumn(); ImGui::TextDisabled("%s", tr(kCc[i].info));
+					}
+					ImGui::TableNextRow(); ImGui::TableNextColumn();
+					{ bool lp = c.leichtPlus != 0; if (ImGui::Checkbox(tr("Extended Easy Mode (full levels on Easy)"), &lp)) c.leichtPlus = lp ? 1 : 0; }
+					ImGui::TableNextColumn(); ImGui::TextDisabled("%s", tr("Normal and Hard do not change."));
+					ImGui::TableNextRow(); ImGui::TableNextColumn();
+					{ bool fs = c.fruehStimmen != 0; if (ImGui::Checkbox(tr("Earlier voice takes (found on the disc)"), &fs)) c.fruehStimmen = fs ? 1 : 0; }
+					ImGui::TableNextColumn(); ImGui::TextDisabled("%s", tr("Louie Bignose uses the voice recorded for him first. Takes effect on the next match."));
+					ImGui::TableNextRow(); ImGui::TableNextColumn();
+					{ int g = c.mmGegner; ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.f); if (ImGui::SliderInt(tr("MapMaker enemy spawns (0 = original 10)"), &g, 0, 1000)) c.mmGegner = g; }
+					ImGui::TableNextColumn(); ImGui::TextDisabled("%s", tr("How many enemy spawn points a MapMaker map may hold."));
+					ImGui::EndTable();
+				}
+				head(tr("Profiles"));
+				ImGui::TextDisabled("%s", tr("A profile keeps every setting (picture, controls, sound, restored content). Load it any time."));
+				static char s_name[48] = "";
+				static std::string s_meldung;
+				ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.f);
+				ImGui::InputTextWithHint("##profilname", tr("Profile name"), s_name, sizeof s_name);
+				ImGui::SameLine();
+				if (ImGui::Button(tr("Save as profile")))
+				{
+					const std::string n = profilName(s_name);
+					if (!n.empty())
+					{
+						{ std::lock_guard<std::mutex> lk(m); cfg = c; }
+						save();
+						std::error_code ec;
+						std::filesystem::copy_file(iniPath(), profilDir() + "/" + n + ".ini", std::filesystem::copy_options::overwrite_existing, ec);
+						s_meldung = ec ? std::string(tr("Could not save the profile.")) : std::string(tr("Saved: ")) + n;
+					}
+				}
+				for (const std::string& n : profile())
+				{
+					ImGui::PushID(n.c_str());
+					ImGui::BulletText("%s", n.c_str()); ImGui::SameLine();
+					if (ImGui::SmallButton(tr("Load")))
+					{
+						std::error_code ec;
+						std::filesystem::copy_file(profilDir() + "/" + n + ".ini", iniPath(), std::filesystem::copy_options::overwrite_existing, ec);
+						if (!ec) { load(0.f); { std::lock_guard<std::mutex> lk(m); c = cfg; } s_meldung = std::string(tr("Loaded: ")) + n; }
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton(tr("Overwrite")))
+					{ { std::lock_guard<std::mutex> lk(m); cfg = c; } save(); std::error_code ec; std::filesystem::copy_file(iniPath(), profilDir() + "/" + n + ".ini", std::filesystem::copy_options::overwrite_existing, ec); s_meldung = std::string(tr("Saved: ")) + n; }
+					ImGui::SameLine();
+					if (ImGui::SmallButton(tr("Delete"))) { std::error_code ec; std::filesystem::remove(profilDir() + "/" + n + ".ini", ec); s_meldung = std::string(tr("Deleted: ")) + n; }
+					ImGui::PopID();
+				}
+				if (!s_meldung.empty()) ImGui::TextColored(ImVec4(0.50f, 1.00f, 0.42f, 1.0f), "%s", s_meldung.c_str());
+				ImGui::EndTabItem();
+			}
 			if (ImGui::BeginTabItem(tr("Save data")))
 			{
 				ImGui::TextWrapped("%s", memcardInfo().c_str());
@@ -3255,16 +3405,7 @@ static const int kBotSetsN = 9;
 					bool ua = c.unlockAll != 0;
 					if (ImGui::Checkbox(tr("Unlock everything (levels, characters, cheats)"), &ua)) c.unlockAll = ua ? 1 : 0;
 					ImGui::TextDisabled("%s", tr("Only while this is on. Your own progress and save data stay untouched."));
-					bool lp = c.leichtPlus != 0;
-					if (ImGui::Checkbox(tr("Extended Easy Mode (full levels on Easy)"), &lp)) c.leichtPlus = lp ? 1 : 0;
-					ImGui::TextDisabled("%s", tr("Normal and Hard do not change."));
-					bool fs = c.fruehStimmen != 0;
-					if (ImGui::Checkbox(tr("Earlier voice takes (found on the disc)"), &fs)) c.fruehStimmen = fs ? 1 : 0;
-					{
-						int g = c.mmGegner;
-						if (ImGui::SliderInt(tr("MapMaker enemy spawns (0 = original 10)"), &g, 0, 1000)) c.mmGegner = g;
-					}
-					ImGui::TextDisabled("%s", tr("Louie Bignose uses the voice recorded for him first. Takes effect on the next match."));
+					ImGui::TextDisabled("%s", tr("Restored content, presets and profiles: Crystal Cut tab."));
 					if (!onlinePlus())
 					{
 						ImGui::Separator();
@@ -3724,7 +3865,15 @@ static void ps2xKey(KeySym ks, bool down, bool alt)
 			std::lock_guard<std::mutex> lk(ps2xmenu::m);
 			ps2xmenu::cfg.fullscreen = ps2xin::fullscreen;
 		}
-		else if (down && (ks == XK_Escape || ks == XK_F1))
+		else if (down && [&] {
+				// F1 always; the extra menu key is a setting (ESC used to open it, but most players use ESC as "back").
+				// ESC always closes an open menu.
+				if (ks == XK_F1) return true;
+				if (ks == XK_Escape && ps2xmenu::open.load()) return true;
+				int mt; { std::lock_guard<std::mutex> lk(ps2xmenu::m); mt = ps2xmenu::cfg.menuTaste; }
+				return (mt == 1 && ks == XK_Escape) || (mt == 2 && ks == 0xffbf) || (mt == 3 && ks == 0xffc0) || (mt == 4 && ks == 0xffc1) ||
+				       (mt == 5 && (ks == 0x60 || ks == 0x5e || ks == 0xfe52));
+			}())
 			ps2xmenu::toggle();
 		else if (down && ks == XK_F9)
 		{
@@ -4750,7 +4899,8 @@ PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, 
 		{ std::lock_guard<std::mutex> lk(ps2xmenu::m); sm = ps2xmenu::cfg.startMenu; }
 		// started from the launcher: settings were made there, the menu stays closed (ESC/F1 opens it)
 		const bool vomLauncher = std::getenv("TS2_LAUNCHER") != nullptr;
-		if (sm && !cfgTest && !vomLauncher)
+		const bool tabTest = std::getenv("PS2XGS_MENU_TAB") != nullptr;   // test runs: open the menu on a given tab
+		if ((sm && !cfgTest && !vomLauncher) || tabTest)
 			ps2xmenu::open.store(true);
 	}
 	s_settings_interface.SetBoolValue("EmuCore", "WarnAboutUnsafeSettings", false); // no PCSX2 warning messages in the picture

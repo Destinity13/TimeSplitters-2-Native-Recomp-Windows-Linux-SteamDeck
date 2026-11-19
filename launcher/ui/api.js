@@ -17,6 +17,10 @@
       status: () => inv("status"),
       settingsLoad: () => inv("settings_load"),
       settingsSave: (ini, start) => inv("settings_save", { ini, start }),
+      profileList: () => inv("profile_list"),
+      profileSave: (name) => inv("profile_save", { name }),
+      profileLoad: (name) => inv("profile_load", { name }),
+      profileDelete: (name) => inv("profile_delete", { name }),
       pickIso: () => inv("pick_iso"),
       setup: (iso) => inv("setup_start", { iso }),
       play: () => inv("play"),
@@ -57,11 +61,16 @@
     "lan.example.com": { name: "Monkey Assistant Party", players: 16, max: 16, pw: false, motd: "Full house!", ping: 58 },
   };
   let hosting = false;
+  const profs = { "Steam Deck": {}, "Couch co-op": {} };   // browser preview only
   window.API = {
     real: false, URLS,
     status: async () => ({ platform: /Win/.test(navigator.platform) ? "windows" : "linux", version: "1.2.0", ready: true, iso: "TimeSplitters 2 (USA).iso", build: "game" }),
     settingsLoad: async () => ({ ini: { ...ini }, start: { ...start } }),
     settingsSave: async (i, s) => { ini = { ...ini, ...i }; start = { ...start, ...s }; return true; },
+    profileList: async () => Object.keys(profs).sort(),
+    profileSave: async (n) => { profs[n] = { ...ini }; return true; },
+    profileLoad: async (n) => { ini = { ...(profs[n] || ini) }; return true; },
+    profileDelete: async (n) => { delete profs[n]; return true; },
     pickIso: async () => "TimeSplitters 2 (USA).iso",
     setup: async () => {
       const steps = ["Disc prüfen (SLUS-20314 / SLES-50877)", "Dateien entpacken", "ELF rekompilieren", "Laufzeit bauen", "Fertig"];
