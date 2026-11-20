@@ -4,6 +4,7 @@ Patch notes, dev logs and what we're working on next. The same posts also show u
 
 | Date | Post | Type |
 |---|---|---|
+| 2026-11-20 | [Crystal Cut 1.3.0 - patch notes](2026-11-20-patch-notes-1-3-0.md) | Release |
 | 2026-11-18 | [Devlog: hidden content is coming back](2026-11-18-devlog-hidden-content.md) | Devlog |
 | 2026-11-18 | [Devlog - one download for both discs](2026-11-18-devlog-one-download-both-discs.md) | Devlog |
 | 2026-11-17 | [Devlog - coming in 1.2.2](2026-11-17-devlog-coming-in-1-2-2.md) | Devlog |

@@ -2,7 +2,16 @@
 
 # Known issues
 
-An honest list, as of 16 November 2026 (release 1.2).
+An honest list, as of 20 November 2026 (release 1.3.0).
+
+## Open in 1.3.0
+
+- **Bugs can still happen** in odd cases, especially in the newest features. Please report them on GitHub, Reddit or YouTube with a screenshot or clip and `app/build/play.log`.
+- **HD texture packs** (issue #17) are still being looked at.
+- **Controllable turrets** (issue #11) and the performance report (issue #19) are on the list.
+- **Video recording (F8)** can stop the game at the moment. Please do not use it until it is fixed.
+- The extra characters share one portrait in the character select.
+- Windows: the built-in zip extractor is very slow with the package (8000 small files). Use 7-Zip.
 
 ## Not a bug
 

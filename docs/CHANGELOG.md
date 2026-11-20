@@ -5,6 +5,17 @@
 Every runtime build gets a number (`pcNNN`). Only builds that changed something visible are listed; the bug details
 are in [FINDINGS](FINDINGS.md) and [KNOWN_ISSUES](KNOWN_ISSUES.md).
 
+## 20 November 2026 — 1.3.0 Crystal Cut
+
+| Build | What changed | Result |
+|---|---|---|
+| `pc318`–`pc428`, `pal001`–`pal041` | **PAL support:** the European disc recompiled and brought to the USA state, 60 Hz timing (723 values), English by default, shared saves, cross-region online, region-aware setup | 6/6 regression on both discs for every build |
+| `pc341`–`pc399` | **restored content:** Consultant, 25 extra characters (list moved to `0x9000`), 9 extra Arcade maps (list moved to `0x6800`), One on One, Thief teams, Flame Tag/Virus maps, Gothic tiles, Extended Easy, Skating cheat, weapon names, missing-file delivery (Desert Eagle texture), Bignose voice set | checked from the menu with screenshots, both discs |
+| `pc373`–`pc381` | **128 MB guest RAM:** heap moved above 32 MB, runtime masks follow `PS2_RAM_SIZE` | Spacestation and Robot Factory load; same frame rate |
+| `pc400`–`pc424` | **MapMaker Story co-op** (player count hook at the level start, start chooser hook) and **story enemies** (Molly, Sally, Marco, Reaper) | split screen with shared objectives on all three story maps, USA and PAL |
+| `pc425`–`pc428` | story enemy limit setting; Bignose voice on by default; **research bone-tree guard off by default** (it skipped real skeletons: empty character previews and garbage polygons in some builds after pc381) | 12/12 regressions, character select and long matches checked by picture, release package played before hand-over |
+| bridge r125 + launcher 124 | Crystal Cut tab (switch for every restored piece, presets, profiles), menu key setting (ESC no longer opens the menu), same options in the launcher | Linux and Windows CI |
+
 ## 16 November 2026 — 1.2
 
 | Build | What changed | Result |

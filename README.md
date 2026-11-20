@@ -1,17 +1,17 @@
 <div align="center">
 
-<img src="docs/screenshots/banner_v101.jpg" width="100%" alt="TimeSplitters 2, native PC port: Windows, Linux and Steam Deck, 60 FPS, 16:9, up to 4K, online multiplayer">
+<img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt="Crystal Cut: the restored native PC port for TimeSplitters 2">
 
-# TimeSplitters 2 — Native PC Port
+# Crystal Cut: the restored native PC port for TimeSplitters 2
 
-**The PS2 classic, recompiled into a real PC game — no emulator. Windows, Linux and Steam Deck.<br>
-60 FPS, true 16:9, up to 4K, mouse and keyboard, split-screen, and the online multiplayer the PS2 version never got.**
+**The PS2 classic, recompiled into a real PC game. No emulator. Windows, Linux and Steam Deck.<br>
+Now with the content that was cut before release, found again on your own disc. USA and PAL disc, one game.**
 
 [![Download](https://img.shields.io/github/v/release/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck?style=for-the-badge&label=download&color=2ea44f)](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=for-the-badge&logo=windows&logoColor=white)](#windows)
 [![Linux](https://img.shields.io/badge/Linux-any%20distro-fcc624?style=for-the-badge&logo=linux&logoColor=black)](#linux)
 [![Steam Deck](https://img.shields.io/badge/Steam%20Deck-plays-1a9fff?style=for-the-badge&logo=steamdeck&logoColor=white)](#steam-deck)
-[![Online](https://img.shields.io/badge/online-16%20players-8a2be2?style=for-the-badge)](#online-multiplayer)
+[![Discs](https://img.shields.io/badge/disc-USA%20%2B%20PAL-c0392b?style=for-the-badge)](#usa-and-pal-one-game)
 
 [![Listed on PlayPorted](https://playported.com/badge.svg)](https://playported.com/ports/1340-timesplitters-2/)
 
@@ -21,10 +21,10 @@
 [![AI-assisted](https://img.shields.io/badge/AI--assisted-Claude-d97757)](#ai-disclosure)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-[News](news/README.md) · [Play it](#play-it-in-3-minutes) · [Online](#online-multiplayer) · [What makes it different](#what-makes-it-different) · [1.1 vs 1.2](#11-vs-12) · [Gallery](#gallery) · [Before / after](#before--after) · [FAQ](#faq) · [Status](#status) · [How it works](#how-it-works) · [Docs](#documentation)
+[News](news/README.md) · [Play it](#play-it-in-3-minutes) · [Firsts](#firsts) · [USA and PAL](#usa-and-pal-one-game) · [Play it your way](#play-it-your-way) · [Found on the disc](#found-on-the-disc) · [Online](#online-multiplayer) · [Gallery](#gallery) · [FAQ](#faq) · [Status](#status) · [Docs](#documentation)
 
-<img src="docs/screenshots/patch12_haze.jpg" width="100%" alt="Siberia camp fence: 1.1.0 with the haze overlay on the left, 1.2 with a clear picture on the right">
-<sub>1.1.0 (left) against 1.2 (right), same spot in Siberia. The game's haze overlay left a soft double image in the distance at high resolutions, 1.2 turns it off by default. Both sides captured from the port, nothing retouched.</sub>
+<img src="docs/screenshots/cc/koop1.jpg" width="100%" alt="MapMaker Story co-op in split screen on the PS2 version, Splitter Base">
+<sub>MapMaker Story co-op in split screen. As far as we know, this has never run on the PS2 version before.</sub>
 
 </div>
 
@@ -33,8 +33,8 @@
 
 <table>
 <tr>
-<td width="50%" valign="top"><a href="news/2026-11-18-devlog-hidden-content.md"><img src="news/img/hidden-content.jpg" width="100%" alt=""></a><br><sub>2026-11-18 · Devlog</sub><br><b><a href="news/2026-11-18-devlog-hidden-content.md">Devlog: hidden content is coming back</a></b><br><sub>The Consultant is playable, Dam and Wild West are back in Arcade, hidden weapons and the cut Gothic MapMaker tiles are in. Works with your normal disc, USA and PAL.</sub></td>
-<td width="50%" valign="top"><sub>2026-11-18 · Devlog</sub><br><b><a href="news/2026-11-18-devlog-one-download-both-discs.md">Devlog - one download for both discs</a></b><br><sub>The PAL version is now part of the port. One download works with the USA and the European disc, both play the same and can meet online.</sub></td>
+<td width="50%" valign="top"><a href="news/2026-11-20-patch-notes-1-3-0.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-20 · Release</sub><br><b><a href="news/2026-11-20-patch-notes-1-3-0.md">Crystal Cut 1.3.0 is out</a></b><br><sub>MapMaker Story co-op on PS2, cut characters back in the story, 9 new Arcade maps, One on One, 25 extra characters, 128 MB, USA and PAL as one game.</sub></td>
+<td width="50%" valign="top"><a href="news/2026-11-18-devlog-hidden-content.md"><img src="news/img/hidden-content.jpg" width="100%" alt=""></a><br><sub>2026-11-18 · Devlog</sub><br><b><a href="news/2026-11-18-devlog-hidden-content.md">Devlog: hidden content is coming back</a></b><br><sub>How the treasure hunt through the disc started.</sub></td>
 </tr>
 </table>
 
@@ -42,44 +42,109 @@
 <!-- news:end -->
 
 > [!IMPORTANT]
-> **Version 1.2 is out.** On 1.1.0 the launcher updates by itself. **On a Steam Deck or still on 1.0.x, download
-> 1.2 once by hand**: before 1.2 the launcher did not open on SteamOS, so the Deck could not update itself.
-> [Patch notes 1.2](news/2026-11-16-patch-notes-1-2.md)
+> **Crystal Cut 1.3.0 is out.** [Full patch notes](news/2026-11-20-patch-notes-1-3-0.md)
 >
-> Since 1.1 the launcher checks for new versions when you start it, downloads only the files
-> that changed, backs up your saves first and shows the project news. So after this one download everyone stays on
-> the same version without doing anything.
->
-> Coming from 1.0.x: extract 1.2 into a **new** folder and set it up once with your disc. To keep your saves, copy
-> `app/build/spielstand` from the old folder to `savedata` in the new one.
+> Extract 1.3.0 into a **new** folder and set it up once with your disc (USA or PAL). To keep your saves, copy the
+> `savedata` folder from your old install into the new one. On Windows, extract the zip with 7-Zip: the built-in
+> Windows extractor is very slow with the 8000 small compiler files in the package.
 
-> [!TIP]
-> **New in 1.1:** the launcher with automatic updates and news · fog, snow, smoke and debris match the original now
-> (a bug in the vector unit code, [the story](news/2026-11-14-devlog-road-to-1-1.md)) · the picture fits 16:9, 16:10,
-> 21:9 and 32:9 · menus and HUD in 16:9 · mouse aiming rebuilt · modern gamepad aiming, unlock everything and
-> texture packs as options · laptops with two graphics chips use the fast one · everything in English by default.
-> [Patch notes](news/2026-11-14-patch-notes-1-1-0.md)
+> [!NOTE]
+> **This is still a young project.** Bugs and odd cases can happen, especially in the newest features. If something
+> looks wrong, please tell us: [GitHub issues](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/issues),
+> Reddit or YouTube comments. A screenshot or short clip plus `app/build/play.log` helps a lot. Thank you to everyone
+> who already did.
+
+## What Crystal Cut is
+
+In TimeSplitters 2 everything revolves around the time crystals. This edition is about the cut: content the
+developers cut before release that is still sitting on the original disc. We went through the whole disc, file by file
+and table by table, and brought back what could be brought back. **Everything comes from your own disc.** Nothing from
+the game is in the download, nothing was taken from other games or leaked builds.
+
+Every restored piece is on by default and has its own switch. You can still play the game exactly like on the PS2.
 
 <table>
 <tr>
-<td align="center" width="16%"><b><big>60 FPS</big></b><br><sub>every frame shown,<br>16.7 ms each</sub></td>
-<td align="center" width="16%"><b><big>16:9</big></b><br><sub>real Hor+ widescreen,<br>HUD at the edges</sub></td>
-<td align="center" width="16%"><b><big>up to 8×</big></b><br><sub>internal resolution<br>(4K and above)</sub></td>
-<td align="center" width="16%"><b><big>16 players</big></b><br><sub>online with server<br>browser</sub></td>
-<td align="center" width="16%"><b><big>3 platforms</big></b><br><sub>Windows 10 / 11,<br>Linux, Steam Deck</sub></td>
-<td align="center" width="16%"><b><big>~3 min</big></b><br><sub>from disc image<br>to playing</sub></td>
+<td align="center" width="16%"><b><big>9</big></b><br><sub>new Arcade<br>maps</sub></td>
+<td align="center" width="16%"><b><big>25 + 1</big></b><br><sub>extra characters<br>plus the Consultant</sub></td>
+<td align="center" width="16%"><b><big>4</big></b><br><sub>cut characters back<br>in the story</sub></td>
+<td align="center" width="16%"><b><big>2</big></b><br><sub>discs, USA and PAL,<br>one game</sub></td>
+<td align="center" width="16%"><b><big>128 MB</big></b><br><sub>game memory<br>instead of 32 MB</sub></td>
+<td align="center" width="16%"><b><big>60 FPS</big></b><br><sub>16:9, up to 8×,<br>online play</sub></td>
 </tr>
 <tr>
-<td align="center" colspan="6"><sub>Story 10/10 levels · Arcade League · Challenge · MapMaker · co-op split-screen · checked frame by frame against PCSX2</sub></td>
+<td align="center" colspan="6"><sub>8849 files in 88 archives checked one by one · every build tested on both discs · checked against PCSX2</sub></td>
 </tr>
 </table>
+
+## Firsts
+
+As far as we know, none of this has been done before on TimeSplitters 2. We checked The Cutting Room Floor, the
+TimeSplitters wiki, Nexus and ModDB before calling anything new. If someone did it first, tell us and we will happily
+give credit.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/cc/koop2.jpg" width="100%" alt="MapMaker Story co-op, both players share the objectives"></td>
+<td width="50%"><img src="docs/screenshots/cc/arcade_liste.jpg" width="100%" alt="Notre Dame, Chicago and Atom Smasher in the Arcade map list"></td>
+</tr>
+<tr>
+<td><sub><b>MapMaker Story co-op on the PS2 version.</b> The GameCube version can do it with mods. On PS2 the lock was never found. Now a second player joins in split screen with shared objectives, on all three story sample maps, USA and PAL.</sub></td>
+<td><sub><b>Chicago, Atom Smasher and NeoTokyo as Arcade maps.</b> Their arcade setups were on the disc, the menu never showed them. Chicago gets 19 spawn points from its own story setup.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/cc/planetx.jpg" width="100%" alt="Deathmatch on Planet X"></td>
+<td><img src="docs/screenshots/cc/oneonone_menu.jpg" width="100%" alt="One on One in the mode menu"></td>
+</tr>
+<tr>
+<td><sub><b>Planet X, Spacestation and Robot Factory as Arcade maps.</b> Spacestation and Robot Factory crash on a real PS2 because the memory is too small. The port gives the game 128 MB.</sub></td>
+<td><sub><b>One on One is playable.</b> A complete mode entry with name, description and icon that the menu always skipped.</sub></td>
+</tr>
+</table>
+
+- **Cut characters as story enemies.** Lean Molly and Ample Sally are loaded in Wild West but never placed. Marco the Snitch and the Reaper Splitter are loaded in Notre Dame but never placed. Now they fight you.
+- **25 characters added on top of the roster.** Mods replace existing characters, we extend the list so nobody is lost.
+- **Louie Bignose speaks with his own voice.** Nine recordings made for him sit on the disc unused.
+- **128 MB game memory** in a PS2 recompilation of this game, at the same frame rate.
+- **USA and PAL are one game** (next section).
+
+## USA and PAL: one game
+
+<img src="docs/screenshots/cc/koop_pal.jpg" width="100%" alt="The same MapMaker co-op map running from the PAL disc">
+
+- **One download for both discs.** The setup checks which disc you have and builds the right game.
+- **The European disc runs at 60 Hz** like the USA one: 723 timing values were set to the USA timing, so speed, timers and animations match.
+- **Both play together online.** A USA player and a PAL player meet in the same match.
+- **Shared saves:** a profile from one disc loads with the other.
+- Both start in English. PAL owners can pick the game language in the launcher.
+- Every feature and every restored piece works on both, and every build is tested on both.
+
+## Play it your way
+
+- **The original:** the PS2 game as it was, at 60 FPS and in 16:9, with nothing added. One preset.
+- **Crystal Cut:** everything restored, on by default.
+- **Your own mix:** a switch for every restored piece, every picture and control option, saved as **profiles** you can load and share.
+- **Presets** such as Steam Deck 60 fps.
+- The same options in the launcher and in the game menu (**F1**, Guide or Select+Start).
+
+## Found on the disc
+
+Not everything can be played, but all of it is real and still on the disc.
+
+- A voice actor's demo recording, shipped by accident and never used
+- Leftovers from TimeSplitters 1 in the sound bank (Bank, Mall, Cyberden) and four complete voice sets of TS1 characters
+- 49 muted sounds, an unused ambient track and two silent placeholder tracks
+- 121 files the game asks for that never made it onto the disc, among them 12 skies
+- A cut Arcade Story mode with its own setup for Planet X. The level data it needs is not on the disc, very likely the cut map "Martian"
+- The British text set on the USA disc, and a placeholder level
+
+All of it in the [patch notes](news/2026-11-20-patch-notes-1-3-0.md#what-we-found-on-the-disc).
 
 ## Play it in 3 minutes
 
 Download the package for your system from [**Releases**](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/releases/latest),
-extract it, start the launcher and pick **your** disc image. The launcher checks the disc, extracts it and builds the
-game once with a progress bar (about 3 minutes on a desktop PC, longer on a laptop). Then press **Start Game**.
-After that the launcher keeps the game up to date by itself.
+extract it, start the launcher and pick **your** disc image, USA or PAL. The launcher checks the disc, extracts it and
+builds the game once with a progress bar (about 3 minutes on a desktop PC, longer on a laptop). Then press **Start Game**.
 
 Nothing to install: each package brings its own compiler and prebuilt libraries, and only the code generated from
 your disc is compiled on your PC.
@@ -88,8 +153,8 @@ your disc is compiled on your PC.
 <tr><th width="33%" id="windows">🪟 Windows 10 / 11</th><th width="33%" id="linux">🐧 Linux</th><th width="33%" id="steam-deck">🎮 Steam Deck</th></tr>
 <tr><td valign="top">
 
-1. Download `…-windows-x86_64.zip`, extract it into a **new** folder
-2. Run **`TS2-Recomp.bat`**
+1. Download `…-windows-x86_64.zip`, extract it with **7-Zip** into a **new** folder
+2. Run **`TS2-Launcher.exe`**
 3. Pick your ISO, wait, **Play**
 
 <sub>Nothing to install; uses Direct3D 11 (Vulkan as fallback). Windows may warn about an unsigned app:
@@ -98,10 +163,10 @@ your disc is compiled on your PC.
 </td><td valign="top">
 
 1. Download `…-linux-x86_64.tar.xz`, extract it
-2. Run **`./TS2-Recomp.sh`**
+2. Run **`./TS2-Launcher`**
 3. Pick your ISO, wait, **Play**
 
-<sub>Needs only `python3`; runs on any current distribution. The graphical launcher uses WebKitGTK; without it the script falls back to simple dialogs (no automatic updates there).</sub>
+<sub>Needs only `python3`; runs on any current distribution.</sub>
 
 </td><td valign="top">
 
@@ -109,19 +174,16 @@ your disc is compiled on your PC.
 2. Add **`TS2-SteamDeck.sh`** to Steam
 3. Play in **Game Mode**
 
-<sub>Deck detected automatically, tuned for a steady 60 FPS. Updates: start the launcher in Desktop Mode now and then. [Step by step](docs/STEAM_DECK.md)</sub>
+<sub>Deck detected automatically, preset for a steady 60 FPS. [Step by step](docs/STEAM_DECK.md)</sub>
 
 </td></tr>
 </table>
 
-**In the game:** ESC / F1 / Guide = settings menu and server browser · F7 = free camera · F8 = record video · F9 = FPS · F10 = turbo · F11 or Alt+Enter = fullscreen · F12 = screenshot
+**In the game:** F1 / Guide / Select+Start = settings menu (an extra key can be picked) · F7 = free camera · F9 = FPS · F10 = turbo · F11 or Alt+Enter = fullscreen · F12 = screenshot
 
-**Mouse and keyboard:** click into the game to capture the mouse (ESC releases it). Mouse look with the game's own
-aim-mode crosshair (pinned to the centre, shots land on it), left = fire, right = zoom (hold), middle/Q = secondary
-fire, E/Space = use, R = reload, C = crouch, wheel = weapon, WASD = move. Every key and mouse button can be rebound in
-the settings menu while playing; sensitivity, zoom sensitivity and invert are there too. On the Steam Deck mouse
-aiming is off by default, and on every system touching the gamepad hands control straight back to it. Mouse play is new
-and not finished yet (aim-mode walking speed, vehicles): [what is done and what is open](docs/MOUSE.md).
+**Mouse and keyboard:** click into the game to capture the mouse. Mouse look with the game's own aim-mode crosshair,
+left = fire, right = zoom, middle/Q = secondary fire, E/Space = use, R = reload, C = crouch, wheel = weapon, WASD =
+move. Every key and button can be rebound in the menu. [Details](docs/MOUSE.md)
 
 ## Online multiplayer
 
@@ -255,6 +317,17 @@ comparing with PCSX2. Details in the <a href="news/2026-11-14-devlog-road-to-1-1
 <td><img src="docs/screenshots/gallery_character.jpg" alt="Character select at 16:9"></td>
 </tr>
 </table>
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/cc/chicago.jpg" alt="Deathmatch in Chicago"></td>
+<td width="50%"><img src="docs/screenshots/cc/neotokyo.jpg" alt="Deathmatch in NeoTokyo"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/cc/gothic.jpg" alt="Gothic tile set in the MapMaker"></td>
+<td><img src="docs/screenshots/cc/figuren.jpg" alt="Extra characters in the character select"></td>
+</tr>
+</table>
+
 <sub>All pictures straight from the port on the author's own disc: no AI upscaling, no texture pack. The clips are
 captured from the running game.</sub>
 
@@ -276,7 +349,7 @@ the port's renderer on the author's own disc, no AI upscaling, no texture pack.<
 |---|---|
 | **Does it run on Windows?** | Yes, since 1.0.1: Windows 10 and 11, 64-bit, with Direct3D 11 (Vulkan as fallback). The package brings everything it needs, including the compiler that builds your copy. Windows may warn about an unsigned app the first time – "More info" → "Run anyway". |
 | **Do I need PCSX2 installed?** | No. The package brings the small GS/SPU2 bridge it needs. Nothing else is installed on your system. |
-| **Which disc works?** | The **USA** release, `SLUS-203.14`, as an `.iso` dump of your own disc. PAL and Japanese discs are different builds and will not work (yet). |
+| **Which disc works?** | The **USA** release (`SLUS-203.14`) and the **European PAL** release (`SLES-508.77`), as an `.iso` dump of your own disc. Both play the same game and can play together online. The Japanese disc is not supported. |
 | **Is it an emulator with extra steps?** | No. The game's CPU code is translated to C++ once and compiled for your PC. At runtime there is no MIPS interpreter or JIT, only the GS/SPU2 (graphics and sound) from PCSX2. That is why it holds 60 FPS on a Steam Deck. |
 | **Why does it compile on my PC?** | Because the translated game code is derived from your disc and must not be distributed. Your PC turns your disc into your build, once, with the compiler that ships in the package. |
 | **Controller, mouse or both?** | Both, at the same time. Gamepads through SDL3 (any modern pad, rumble, pressure buttons), mouse look with the game's own crosshair, all keys and buttons rebindable in the menu. Mouse play is the newest part and [not finished](docs/MOUSE.md). |
@@ -289,13 +362,14 @@ the port's renderer on the author's own disc, no AI upscaling, no texture pack.<
 
 | | |
 |---|---|
+| 🆕 **New in 1.3.0** | **Crystal Cut:** MapMaker Story co-op on PS2 · cut characters in the story · 9 new Arcade maps · One on One · 25 extra characters + Consultant · Gothic tile set · Bignose voice · 128 MB · USA and PAL as one game · Crystal Cut menu with presets and profiles · low stimulus options · FOV slider · MapMaker walls, widescreen menus, turret, rumble and lights fixed |
 | ✅ **Already there** | title, profiles, Story (all 10 levels load and play, Siberia played through), Story co-op, Arcade League, Challenge, MapMaker, options, bonus trailer, memory card, sound |
 | 🆕 **New in 1.2** | **clear picture at high resolutions** (haze overlay off by default) · scope weapons no longer zoom in by themselves · mouse speed follows the zoom · Temporal Uplink map fixed · turrets with the mouse · optional cheats · launcher on the Steam Deck · safer Windows setup |
 | 🆕 **New in 1.1** | **launcher with automatic updates and news** · particle effects fixed (fog, snow, smoke, debris) · any aspect ratio · 16:9 menus and HUD · mouse aiming rebuilt · modern gamepad aiming · unlock everything · texture packs · fast graphics card on laptops · English by default · Online+ as an optional experiment |
 | 🆕 **New in 1.0.1** | **Windows release** · HUD at the 16:9 edges · sniper scope correct in 16:9 · co-op split screen fixed in 16:9 · no PCSX2 messages at start |
 | 🆕 **New in 1.0** | online multiplayer with in-game server browser · `ts2-server` in the package · mouse and keyboard play · TS2-style settings menu (EN/DE) · F8 video recording · F7 free camera |
 | 🟡 **Being tested** | mouse play beyond Siberia/Arcade ([open points](docs/MOUSE.md)), Story levels 2–10 by hand (automated runs are clean), Arcade Custom, 3–4 players via multitap, online over the internet |
-| 🛠 **Coming in updates** | field-of-view slider · twin gun at the Siberia dam with the mouse · smoother loading on the Steam Deck · hipfire with modern controls · difficulty menu highlight in widescreen · MapMaker walls · options for hit flash and muzzle flash · dedicated server that runs matches without a hosting player |
+| 🛠 **Being worked on** | HD texture packs · controllable turrets · performance on slower PCs · video recording · more from the disc (GameCube and Xbox data checks) |
 
 Every build: [CHANGELOG](docs/CHANGELOG.md) · open issues: [KNOWN_ISSUES](docs/KNOWN_ISSUES.md) · found a bug?
 [Open an issue](https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/issues) and attach `app/build/play.log` and `app/build/bridge.log`.
