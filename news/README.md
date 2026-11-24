@@ -4,6 +4,7 @@ Patch notes, dev logs and what we're working on next. The same posts also show u
 
 | Date | Post | Type |
 |---|---|---|
+| 2026-11-24 | [Back to work: polish first, no new features](2026-11-24-polish-before-features.md) | Devlog |
 | 2026-11-21 | [Devlog: what we're working on and what could come](2026-11-21-devlog-whats-next.md) | Devlog |
 | 2026-11-21 | [Crystal Cut 1.3.2 patch notes](2026-11-21-patch-notes-1-3-2.md) | Release |
 | 2026-11-20 | [Crystal Cut 1.3.1 brings automatic updates back](2026-11-20-patch-notes-1-3-1.md) | Release |

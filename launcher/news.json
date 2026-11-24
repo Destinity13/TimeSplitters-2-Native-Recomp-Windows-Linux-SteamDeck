@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-24T06:00:00Z",
+    "title": "Back to work: polish first, no new features",
+    "tag": "Devlog",
+    "body": "Work is back on. No new features until everything in the game runs properly. Graphics bugs first, then aiming and gameplay, every fix tested before the next update.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-24-polish-before-features.md"
+  },
+  {
     "date": "2026-11-21T09:30:00Z",
     "title": "Devlog: what we're working on and what could come",
     "tag": "Devlog",
