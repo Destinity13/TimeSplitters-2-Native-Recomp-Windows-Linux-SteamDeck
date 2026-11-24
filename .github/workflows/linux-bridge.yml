@@ -90,6 +90,11 @@ jobs:
           O=out/gs; mkdir -p $O
           L=$(find pcsx2/build -name 'libps2xgs.so' | head -1); cp "$L" $O/
           cp -rL pcsx2/bin/resources $O/resources
+          # shaderc wird von PCSX2 per dlopen geladen (ldd sieht es nicht): ohne libshaderc_shared.so.1 baut der
+          # Vulkan-Renderer keine Shader und das Setup bricht beim VU1-Schritt ab (Issue #26, Linux Mint). Mitnehmen,
+          # seine Abhaengigkeiten holt die Schleife darunter.
+          for f in "$HOME"/deps/lib/libshaderc_shared.so*; do [ -e "$f" ] && cp -L "$f" "$O/$(basename "$f")"; done
+          [ -e $O/libshaderc_shared.so.1 ] || { echo "FEHLER: libshaderc_shared.so.1 fehlt in ~/deps/lib"; exit 1; }
           # nicht ueberall vorhandene Bibliotheken aus ~/deps mitnehmen (rekursiv)
           for i in 1 2 3; do
             for f in $O/*.so*; do
@@ -109,6 +114,7 @@ jobs:
           for f in $O/*.so*; do echo "$(basename "$f"): $(objdump -T "$f" | grep -oE 'GLIBC_[0-9.]+' | sort -V | uniq | tail -1) $(objdump -T "$f" | grep -oE 'GLIBCXX_[0-9.]+' | sort -V | uniq | tail -1)"; done
           echo "== AVX-512: $(objdump -d --no-show-raw-insn $O/libps2xgs.so | grep -c zmm)"
           echo "== ungeloest:"; ldd $O/libps2xgs.so | grep "not found" || echo keine
+          echo "== shaderc ungeloest:"; ldd $O/libshaderc_shared.so.1 | grep "not found" || echo keine
           cp cmake.log bau.log out/ 2>/dev/null || true
           tar -C out -czf ps2xgs-linux-x86_64.tar.gz gs
       - uses: actions/upload-artifact@v4

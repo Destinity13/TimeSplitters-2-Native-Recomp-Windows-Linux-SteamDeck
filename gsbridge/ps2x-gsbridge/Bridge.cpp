@@ -1396,15 +1396,23 @@ void ps2xSpielRect(float* out4);   // GSRenderer.cpp
 struct ps2xImSpiel
 {
 	ImDrawList* dl; int v0; ImVec2 o, ds;
+	// centre of the whole game picture, relative to o. ds is clipped to the window: where the picture reaches past an
+	// edge (16:9 fill, zoom), ds * 0.5 is the centre of the visible part only and the port crosshair sat beside the
+	// real aim point (issues #25, #21: hip fire shots landed down and to the right of the dot).
+	ImVec2 mitte;
 	explicit ps2xImSpiel(ImDrawList* d) : dl(d), v0(d->VtxBuffer.Size)
 	{
 		const ImGuiIO& io = ImGui::GetIO();
 		float r[4] = {0, 0, 0, 0}; ps2xSpielRect(r);
 		const float ww = g_gs_device ? static_cast<float>(g_gs_device->GetWindowWidth()) : io.DisplaySize.x;
 		const float sk = ww > 0.0f ? io.DisplaySize.x / ww : 1.0f;
-		if (r[2] - r[0] < 16.0f || r[3] - r[1] < 16.0f) { o = ImVec2(0, 0); ds = io.DisplaySize; return; }
+		if (r[2] - r[0] < 16.0f || r[3] - r[1] < 16.0f) { o = ImVec2(0, 0); ds = io.DisplaySize; mitte = ImVec2(ds.x * 0.5f, ds.y * 0.5f); return; }
 		o = ImVec2(std::max(0.0f, r[0] * sk), std::max(0.0f, r[1] * sk));
 		ds = ImVec2(std::min(io.DisplaySize.x - o.x, (r[2] - r[0]) * sk), std::min(io.DisplaySize.y - o.y, (r[3] - r[1]) * sk));
+		mitte = ImVec2((r[0] + r[2]) * 0.5f * sk - o.x, (r[1] + r[3]) * 0.5f * sk - o.y);
+		static const bool lg = std::getenv("PS2XGS_KREUZ_LOG") != nullptr;
+		if (lg) { static int n = 0; if ((n++ % 300) == 0) std::fprintf(stderr, "[kreuzmitte] rect %.1f %.1f %.1f %.1f sk %.3f window %.0fx%.0f o %.1f %.1f ds %.1f %.1f mitte %.1f %.1f (alt %.1f %.1f)\n",
+			r[0], r[1], r[2], r[3], sk, io.DisplaySize.x, io.DisplaySize.y, o.x, o.y, ds.x, ds.y, mitte.x, mitte.y, ds.x * 0.5f, ds.y * 0.5f); }
 	}
 	~ps2xImSpiel() { for (int i = v0; i < dl->VtxBuffer.Size; ++i) { dl->VtxBuffer[i].pos.x += o.x; dl->VtxBuffer[i].pos.y += o.y; } }
 };
@@ -2623,7 +2631,7 @@ static const int kBotSetsN = 9;
 				{
 					ImDrawList* dl = ImGui::GetForegroundDrawList();
 					ps2xImSpiel spiel(dl); const ImVec2 ds = spiel.ds;
-					const float cx = std::floor(ds.x * 0.5f), cy = std::floor(ds.y * 0.5f);
+					const float cx = std::floor(spiel.mitte.x), cy = std::floor(spiel.mitte.y);
 					const float u = std::max(1.0f, std::round(ds.y / 540.0f)); // Strichstaerke
 					const float in = 4.0f * u, out = 11.0f * u;
 					const ImU32 sch = IM_COL32(0, 0, 0, 170), hell = IM_COL32(255, 255, 255, 235);
@@ -2657,7 +2665,7 @@ static const int kBotSetsN = 9;
 					{
 						ImDrawList* dl = ImGui::GetForegroundDrawList();
 						ps2xImSpiel spiel(dl); const ImVec2 ds = spiel.ds;
-						const float cx = std::floor(ds.x * 0.5f), cy = std::floor(ds.y * 0.5f);
+						const float cx = std::floor(spiel.mitte.x), cy = std::floor(spiel.mitte.y);
 						const float u = std::max(1.0f, std::round(ds.y / 540.0f));
 						const float t01 = kill ? aK / 0.6f : aT / 0.32f;
 						const float in = (kill ? 11.0f : 8.0f) * u + t01 * 4.0f * u, out = in + (kill ? 15.0f : 11.0f) * u;
@@ -5387,6 +5395,15 @@ namespace ps2xstats
 PS2XGS_API int ps2xgs_option(int id, int fallback)
 {
 	if (id == 9) { ps2xosd::ego.store(fallback != 0); return fallback; } // Message from the game: first-person view with the mouse active
+	// Refresh rate of the display the window is on, in mHz, while V-Sync is on (0 otherwise). The port then runs its VBlank
+	// at that rate when it is close to the game's (PCSX2 "Sync to host refresh rate"): a 60 Hz VBlank against a 59.94 Hz or
+	// 60.01 Hz display drops or doubles a frame every few seconds, seen as bouncing/jitter while turning.
+	if (id == 60)
+	{
+		bool vs; { std::lock_guard<std::mutex> lk(ps2xmenu::m); vs = ps2xmenu::cfg.vsync; }
+		const float hz = g_gs_device ? g_gs_device->GetWindowInfo().surface_refresh_rate : 0.0f;
+		return (vs && hz > 1.0f && hz < 1000.0f) ? static_cast<int>(hz * 1000.0f + 0.5f) : 0;
+	}
 	if (id == 10) return ps2xosd::zoomAktiv.load() ? 1 : 0;
 	if (id == 19) { static const bool lg = std::getenv("TS2_IMPACT_LOG") != nullptr; if (lg) std::fprintf(stderr, "[Online+] damage %d\n", fallback); ps2xosd::schadenStaerke.store(std::clamp(fallback, 1, 100)); ps2xosd::schadenMs.store(ps2xosd::jetztMs()); return fallback; } // player took damage
 	if (id == 20) { if (ps2xosd::todN.exchange(fallback) != fallback) { std::lock_guard<std::mutex> lk(ps2xosd::am); ps2xosd::serie = 0; ps2xosd::kette = 0; } return fallback; } // player died
