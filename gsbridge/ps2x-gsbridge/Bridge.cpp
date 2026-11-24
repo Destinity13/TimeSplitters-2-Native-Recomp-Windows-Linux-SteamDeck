@@ -4897,8 +4897,15 @@ PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, 
 			s_settings_interface.SetIntValue("SPU2/Output", "OutputLatencyMS", 20);
 		}
 		ps2xmenu::toSettings(s_settings_interface);
+		// The port renders 16:9 (widescreen start): force a 16:9 output, but not over "fill window" (3) and "fit any screen"
+		// (4, the default). Before, this line also overrode those two, so 16:10 (Steam Deck) and 21:9/32:9 windows showed the
+		// game's window-shaped picture inside a 16:9 box with black bars, squashed, until a menu change re-applied the settings.
 		if (widescreen)
-			s_settings_interface.SetStringValue("EmuCore/GS", "AspectRatio", "16:9");
+		{
+			int a; { std::lock_guard<std::mutex> lk(ps2xmenu::m); a = ps2xmenu::cfg.aspect; }
+			if (a != 3 && a != 4)
+				s_settings_interface.SetStringValue("EmuCore/GS", "AspectRatio", "16:9");
+		}
 		g_ps2xMenuDraw = &ps2xmenu::draw;
 		ps2xmenu::active.store(true);
 		g_ps2xCpuHook = &ps2xmenu::cpuHook;
