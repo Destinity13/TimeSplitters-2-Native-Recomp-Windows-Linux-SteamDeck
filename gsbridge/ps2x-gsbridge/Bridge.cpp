@@ -1,5 +1,5 @@
 #include <string_view>
-// ps2x-gsbridge: the PCSX2 GS as a library for a native PS2 port (SotC Recomp, TS2 Recomp).
+// ps2x-gsbridge: the PCSX2 GS as a library for the native TimeSplitters 2 port (TS2 Recomp).
 // Derived from pcsx2-gsrunner/Main.cpp (PCSX2 Dev Team, GPL-3.0+): host interface, configuration and the
 // X11 window remain; instead of a dump file the port feeds packets live (GSDumpReplayer live mode).
 // SPDX-License-Identifier: GPL-3.0+
@@ -1432,10 +1432,10 @@ namespace ps2xmenu
 	std::atomic<bool> gameWide{false};
 	std::atomic<bool> active{false};   // menu/settings active (not in windowless test runs) // the game renders in its own 16:9 mode (set_screen_wide_and_progressive)
 
-	// Game-specific texts through the environment (start script of each port), default: SotC
+	// Game-specific texts through the environment (start script), default: TimeSplitters 2
 	const char* envOr(const char* k, const char* d) { const char* e = std::getenv(k); return (e && *e) ? e : d; }
-	const char* spielTitel() { return envOr("PS2XGS_TITEL", "SHADOW OF THE COLOSSUS"); }
-	const char* cfgName() { return envOr("PS2XGS_CFGNAME", "sotc-recomp"); }
+	const char* spielTitel() { return envOr("PS2XGS_TITEL", "TIMESPLITTERS 2"); }
+	const char* cfgName() { return envOr("PS2XGS_CFGNAME", "ts2-recomp"); }
 	// Edition: "onlineplus" = TimeSplitters 2 Online+ (separate game: impact effects, progression, Online+ menu); otherwise original
 	bool onlinePlus() { static const bool v = [] { const char* e = std::getenv("PS2XGS_EDITION"); const char* t = std::getenv("TS2_IMPACT"); return (e && std::string_view(e) == "onlineplus") || (t && *t == '1'); }(); return v; }
 	std::atomic<bool> opOeffnen{false};   // the game's main menu item "Online+" was selected
@@ -1747,7 +1747,7 @@ namespace ps2xmenu
 			else if (k == "vibration_staerke") cfg.rumblePct = std::clamp(v, 0, 100);
 			else if (k == "vsync") cfg.vsync = v != 0;
 			else if (k == "startmenue") cfg.startMenu = v != 0;
-			else if (k == "bildrate") cfg.hz = (v == 60 && std::getenv("SOTC_60HZ_EXPERIMENT")) ? 60 : 50; // 60 Hz: character physics still faulty
+			else if (k == "bildrate") cfg.hz = (v == 60) ? 60 : 50;
 			else if (k == "lautstaerke") cfg.volume = std::clamp(v, 0, 200);
 			else if (k == "kamera_unschaerfe") cfg.camBlur = v != 0 ? 1 : 0;
 			else if (k == "treffer_toenung") cfg.reizarm = std::clamp(v, 0, 100);
@@ -1887,7 +1887,7 @@ namespace ps2xmenu
 	}
 	// ---------- Texturquellen (HD-Text + Pakete) -> zusammengesetzter Ersatzordner ----------
 	// Sources: <dir>/texturquellen/<name>/... (hd-text = our re-typeset pages; packs are imported by the start script from
-	// texturpakete/*.zip|7z|rar importiert). Ziel: <Textures>/SCES-53326/replacements als Verweise (Symlinks); spaetere
+	// texturpakete/*.zip|7z|rar importiert). Ziel: <Textures>/<serial>/replacements als Verweise (Symlinks); spaetere
 	// source overrides earlier ones, HD text last. PS2XGS_TEXDIR (test runs) turns the management off.
 	// PS2XGS_TEXQUELLEN: directory with the texture sources (start script: <project>/build/texturquellen), otherwise ~/.config/...
 	// Folder inside the settings directory. With English settings (PS2XGS_CFG_EN=1) the folder has an English name;
@@ -1998,7 +1998,7 @@ namespace ps2xmenu
 		if (!texManaged()) return 0;
 		std::error_code ec;
 		const std::filesystem::path root = texRoot();
-		const auto dst = root / envOr("PS2XGS_SERIAL", "SCES-53326") / "replacements"; // PCSX2-Ordnername = Seriennummer
+		const auto dst = root / envOr("PS2XGS_SERIAL", "SLUS-20314") / "replacements"; // PCSX2-Ordnername = Seriennummer
 		const auto marker = dst / ".verwaltet";
 		std::filesystem::create_directories(dst, ec);
 		if (!std::filesystem::exists(marker, ec))
@@ -2135,6 +2135,9 @@ namespace ps2xmenu
 		si.SetIntValue("EmuCore/GS", "OsdPerformancePos", (c.showFps && !showcase) ? 3 : 0);
 		si.SetBoolValue("EmuCore/GS", "OsdShowResolution", c.showFps && !showcase);   // resolution line only together with the FPS counter
 		si.SetBoolValue("EmuCore/GS", "OsdShowGSStats", false);
+		// No PCSX2 on-screen messages in the picture ("Controller 1 has no input bindings", "Failed to open patches zip"):
+		// they are about PCSX2's own setup, which the port does not use. The bridge shows its own notices (toasts).
+		si.SetIntValue("EmuCore/GS", "OsdMessagesPos", 0); // OsdOverlayPos::None
 		si.SetIntValue("EmuCore/GS", "VsyncEnable", c.vsync ? 1 : 0);
 		si.SetBoolValue("EmuCore/GS", "hw_mipmap", true);           // Mipmaps in hardware: no shimmering in the distance
 		si.SetIntValue("EmuCore/GS", "linear_present_mode", 1);     // weiches Herunterrechnen = Supersampling-Effekt
@@ -4333,7 +4336,7 @@ bool GSRunner::CreatePlatformWindow()
 		return false;
 	}
 
-	XStoreName(s_display, s_window, ps2xmenu::envOr("PS2X_WINDOW_TITLE", "Shadow of the Colossus (SotC Recomp)"));
+	XStoreName(s_display, s_window, ps2xmenu::envOr("PS2X_WINDOW_TITLE", "TimeSplitters 2 (TS2 Native Recomp)"));
 	XSelectInput(s_display, s_window, StructureNotifyMask | KeyPressMask | KeyReleaseMask | FocusChangeMask |
 		ButtonPressMask | ButtonReleaseMask | PointerMotionMask);
 	XkbSetDetectableAutoRepeat(s_display, True, nullptr); // held keys without release/press flicker
@@ -4848,18 +4851,11 @@ PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, 
 	if (widescreen)
 		s_settings_interface.SetStringValue("EmuCore/GS", "AspectRatio", "16:9");
 	s_settings_interface.SetBoolValue("EmuCore/GS", "OsdShowGSStats", false);
+	s_settings_interface.SetIntValue("EmuCore/GS", "OsdMessagesPos", 0); // no PCSX2 on-screen messages (see toSettings)
 	s_settings_interface.SetBoolValue("Logging", "EnableVerbose", false);
-	// SotC fixes from PCSX2's GameIndex.yaml (SCES-53326). Without a disc boot the game database does not apply,
-	// so fixed here: water colour (blending 4), borders/offset (half-pixel 5), post-processing/DOF (native scaling 3)
-	// Only for SotC (other games get the PCSX2 defaults or their own values through PS2XGS_SERIAL)
-	if (const char* ser = std::getenv("PS2XGS_SERIAL"); !ser || !*ser || std::string_view(ser) == "SCES-53326")
-	{
-		s_settings_interface.SetBoolValue("EmuCore/GS", "UserHacks", true);
-		s_settings_interface.SetIntValue("EmuCore/GS", "accurate_blending_unit", 4);
-		s_settings_interface.SetIntValue("EmuCore/GS", "UserHacks_HalfPixelOffset", 5);
-		s_settings_interface.SetIntValue("EmuCore/GS", "UserHacks_native_scaling", 3);
-	}
-	else if (std::string_view(ser) == "SLUS-20314" || std::string_view(ser) == "SLES-50877") // TimeSplitters 2 USA + PAL (GameIndex.yaml): "Fixes slight texture misalignment"
+	// TimeSplitters 2 USA + PAL, from PCSX2's GameIndex.yaml ("Fixes slight texture misalignment"). Without a disc boot the
+	// game database does not apply, so it is set here.
+	if (const char* ser = std::getenv("PS2XGS_SERIAL"); !ser || !*ser || std::string_view(ser) == "SLUS-20314" || std::string_view(ser) == "SLES-50877")
 	{
 		s_settings_interface.SetBoolValue("EmuCore/GS", "UserHacks", true);
 		s_settings_interface.SetIntValue("EmuCore/GS", "UserHacks_HalfPixelOffset", 2);
@@ -4919,7 +4915,7 @@ PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, 
 			ps2xmenu::open.store(true);
 	}
 	s_settings_interface.SetBoolValue("EmuCore", "WarnAboutUnsafeSettings", false); // no PCSX2 warning messages in the picture
-	// Picture output: SotC draws full frames, the PCRTC shows them as fields (SMODE2 INT=1, FFMD=0). PCSX2's
+	// Picture output: the game draws full frames, the PCRTC shows them as fields (SMODE2 INT=1, FFMD=0). PCSX2's
 	// automatic deinterlacing (adaptive) makes moving characters jitter/"wobble" on screen, not visible in
 	// screenshots. So: deinterlacing off = show the full frame directly. PS2X_DEINTERLACE=<0..9> for testing.
 	{
