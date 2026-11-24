@@ -36,8 +36,8 @@ Now with the content that was cut before release, found again on your own disc. 
 
 <table>
 <tr>
-<td width="50%" valign="top"><a href="news/2026-11-20-patch-notes-1-3-0.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-20 · Release</sub><br><b><a href="news/2026-11-20-patch-notes-1-3-0.md">Crystal Cut 1.3.0 is out</a></b><br><sub>MapMaker Story co-op on PS2, cut characters back in the story, 9 new Arcade maps, One on One, 25 extra characters, 128 MB, USA and PAL as one game.</sub></td>
-<td width="50%" valign="top"><a href="news/2026-11-18-devlog-hidden-content.md"><img src="news/img/hidden-content.jpg" width="100%" alt=""></a><br><sub>2026-11-18 · Devlog</sub><br><b><a href="news/2026-11-18-devlog-hidden-content.md">Devlog: hidden content is coming back</a></b><br><sub>How the treasure hunt through the disc started.</sub></td>
+<td width="50%" valign="top"><a href="news/2026-11-24-why-widescreen-is-hard.md"><img src="news/img/2026-11-24-mapmaker-after.jpg" width="100%" alt=""></a><br><sub>2026-11-24 · Devlog</sub><br><b><a href="news/2026-11-24-why-widescreen-is-hard.md">Why widescreen is the hard part, and where we are</a></b><br><sub>Where most of the current bugs come from, what is already fixed and what comes next.</sub></td>
+<td width="50%" valign="top"><a href="news/2026-11-21-patch-notes-1-3-2.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-21 · Release</sub><br><b><a href="news/2026-11-21-patch-notes-1-3-2.md">Crystal Cut 1.3.2 patch notes</a></b><br><sub>The first widescreen patch: your shots land where the crosshair is. Update from the launcher, saves and settings are kept.</sub></td>
 </tr>
 </table>
 
@@ -45,9 +45,9 @@ Now with the content that was cut before release, found again on your own disc. 
 <!-- news:end -->
 
 > [!IMPORTANT]
-> **Crystal Cut 1.3.0 is out.** [Full patch notes](news/2026-11-20-patch-notes-1-3-0.md)
+> **The current version is Crystal Cut 1.3.2.** [Patch notes](news/2026-11-21-patch-notes-1-3-2.md) · From 1.3.1 on, the launcher updates itself: just press Update.
 >
-> Extract 1.3.0 into a **new** folder and set it up once with your disc (USA or PAL). To keep your saves, copy the
+> Coming from 1.2 or older: extract the new version into a **new** folder and set it up once with your disc (USA or PAL). To keep your saves, copy the
 > `savedata` folder from your old install into the new one. On Windows, extract the zip with 7-Zip: the built-in
 > Windows extractor is very slow with the 8000 small compiler files in the package.
 
@@ -351,6 +351,7 @@ the port's renderer on the author's own disc, no AI upscaling, no texture pack.<
 | | |
 |---|---|
 | **Does it run on Windows?** | Yes, since 1.0.1: Windows 10 and 11, 64-bit, with Direct3D 11 (Vulkan as fallback). The package brings everything it needs, including the compiler that builds your copy. Windows may warn about an unsigned app the first time – "More info" → "Run anyway". |
+| **Windows blocks the launcher or the setup stops at "Recompiling"** | That is **Smart App Control** (Windows 11). It blocks every program that is not signed, and it has no per-app exception. Your build is compiled on your own PC, so it can never carry a signature. To play, turn it off: Windows Security → App & browser control → Smart App Control → Off, then start the setup again. Recent Windows updates let you turn it back on later without reinstalling. |
 | **Do I need PCSX2 installed?** | No. The package brings the small GS/SPU2 bridge it needs. Nothing else is installed on your system. |
 | **Which disc works?** | The **USA** release (`SLUS-203.14`) and the **European PAL** release (`SLES-508.77`), as an `.iso` dump of your own disc. Both play the same game and can play together online. The Japanese disc is not supported. |
 | **Is it an emulator with extra steps?** | No. The game's CPU code is translated to C++ once and compiled for your PC. At runtime there is no MIPS interpreter or JIT, only the GS/SPU2 (graphics and sound) from PCSX2. That is why it holds 60 FPS on a Steam Deck. |
