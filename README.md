@@ -23,6 +23,9 @@ Now with the content that was cut before release, found again on your own disc. 
 
 [News](news/README.md) · [Play it](#play-it-in-3-minutes) · [Firsts](#firsts) · [USA and PAL](#usa-and-pal-one-game) · [Play it your way](#play-it-your-way) · [Found on the disc](#found-on-the-disc) · [Online](#online-multiplayer) · [Gallery](#gallery) · [FAQ](#faq) · [Status](#status) · [Docs](#documentation)
 
+> [!NOTE]
+> **Seeing a bug in widescreen?** In 4:3 the game runs as it was made. Real native widescreen means every part of the game that was built for a 4:3 TV has to be adjusted by hand, and some of those spots only show up over time. [Why widescreen is the hard part, what is fixed and what comes next](news/2026-11-24-why-widescreen-is-hard.md). Thank you for every report!
+
 <img src="docs/screenshots/cc/koop1.jpg" width="100%" alt="MapMaker Story co-op in split screen on the PS2 version, Splitter Base">
 <sub>MapMaker Story co-op in split screen. As far as we know, this has never run on the PS2 version before.</sub>
 
