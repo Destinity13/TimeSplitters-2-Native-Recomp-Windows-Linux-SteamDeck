@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-24T08:30:00Z",
+    "title": "Devlog: the full Crystal Cut polish list",
+    "tag": "Devlog",
+    "body": "We went through every report again, open and closed. Graphics and widescreen first, then aiming, gameplay, setup and performance. All of it gets fixed and tested against the original before the next update.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-24-devlog-polish-list.md"
+  },
+  {
     "date": "2026-11-24T06:00:00Z",
     "title": "Back to work: polish first, no new features",
     "tag": "Devlog",
