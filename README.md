@@ -36,8 +36,8 @@ Now with the content that was cut before release, found again on your own disc. 
 
 <table>
 <tr>
+<td width="50%" valign="top"><a href="news/2026-11-25-devlog-1-3-3-almost-here.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-25 · Devlog</sub><br><b><a href="news/2026-11-25-devlog-1-3-3-almost-here.md">1.3.3 is almost here</a></b><br><sub>Hip fire on the crosshair, auto aim with modern controls, mouse and gamepad together, the VU1 setup error fixed and setup for older CPUs. In testing now, release in the next hours.</sub></td>
 <td width="50%" valign="top"><a href="news/2026-11-24-why-widescreen-is-hard.md"><img src="news/img/2026-11-24-mapmaker-after.jpg" width="100%" alt=""></a><br><sub>2026-11-24 · Devlog</sub><br><b><a href="news/2026-11-24-why-widescreen-is-hard.md">Why widescreen is the hard part, and where we are</a></b><br><sub>Where most of the current bugs come from, what is already fixed and what comes next.</sub></td>
-<td width="50%" valign="top"><a href="news/2026-11-21-patch-notes-1-3-2.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-21 · Release</sub><br><b><a href="news/2026-11-21-patch-notes-1-3-2.md">Crystal Cut 1.3.2 patch notes</a></b><br><sub>The first widescreen patch: your shots land where the crosshair is. Update from the launcher, saves and settings are kept.</sub></td>
 </tr>
 </table>
 
