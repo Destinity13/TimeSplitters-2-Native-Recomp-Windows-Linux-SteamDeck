@@ -3589,7 +3589,9 @@ namespace ps2xin
 	std::atomic<long long> menuZeigerMs{-100000};   // last pointer movement over the game window (menu cursor)
 	std::atomic<u32> menuBtns{0};
 	std::atomic<int> menuRad{0};      // pending wheel notches (+ up, - down)
-	bool menuMausAn() { static const bool an = [] { const char* e = std::getenv("PS2X_MENUE_MAUS"); return !(e && *e == '0'); }(); return an && menuModus.load(); }
+	// off by default (user test 25 Nov: a click only meant Cross, it never picked the entry under the pointer, and the pointer
+	// showed in intros and cutscenes). PS2X_MENUE_MAUS=1 = research.
+	bool menuMausAn() { static const bool an = [] { const char* e = std::getenv("PS2X_MENUE_MAUS"); return e && *e == '1'; }(); return an && menuModus.load(); }
 	// action pressed/released through keyboard/mouse -> recompute keyBtns/keyStick
 	void neuBerechnen()
 	{
@@ -3648,9 +3650,13 @@ namespace ps2xin
 	// Last real mouse/keyboard input. If the gamepad is used afterwards, the bridge releases the mouse
 	// (Steam Deck: a touchscreen tap or the trackpad would otherwise capture the mouse and the game would stay in mouse aiming).
 	std::atomic<long long> mausAktivMs{-100000};
-	bool padSeitMaus() { static const bool alt = [] { const char* e = std::getenv("PS2X_PAD_LOEST_ALT"); return e && *e == '1'; }();
+	// Which gamepad input releases a captured mouse: on a desktop PC ANY gamepad input (stick, button, trigger), so a player
+	// who picks up the controller is never left in the mouse aim mode (user test 25 Nov: stuck in the slow aim walk). On the
+	// Steam Deck only aiming with the right stick or gyro, because there the trackpad mouse and the built-in buttons are used
+	// together. PS2X_PAD_LOEST_ALT=1 / 0 forces one of the two rules.
+	bool padSeitMaus() { static const bool alleEingaben = [] { const char* e = std::getenv("PS2X_PAD_LOEST_ALT"); if (e && *e) return *e == '1'; return !ps2xAufSteamDeck(); }();
 		{ std::lock_guard<std::mutex> lk(ps2xmenu::m); if (ps2xmenu::cfg.mausMitPad) return false; }   // option "mouse and gamepad together"
-		return (alt ? padAktivMs.load() : padZielMs.load()) > mausAktivMs.load() + 250; }
+		return (alleEingaben ? padAktivMs.load() : padZielMs.load()) > mausAktivMs.load() + 250; }
 	// The mouse was captured when the menu opened: capture it again when the menu closes (issue #5: after a pause the
 	// mouse had to be woken up with a click)
 	std::atomic<bool> wiederFangen{false};
@@ -4228,6 +4234,7 @@ static LRESULT CALLBACK ps2xWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			ps2xin::pollPad(); // Gamepad ~250 Hz
 			if (ps2xin::mausGefangen.load() && !ps2xMausWill()) // menu opened / mouse aiming off -> release
 			{
+				if (ps2xin::padSeitMaus()) std::fprintf(stderr, "[maus] released: gamepad in use\n");
 				ps2xin::wiederFangen.store(ps2xmenu::open.load() && !ps2xin::padSeitMaus());
 				ps2xin::mausGefangen.store(false);
 				ClipCursor(nullptr);
@@ -4685,6 +4692,7 @@ void GSRunner::PumpPlatformMessages(bool forever)
 			}
 			if (ps2xin::mausGefangen.load() && !ps2xMausWill()) // menu opened / mouse aiming off -> release
 			{
+				if (ps2xin::padSeitMaus()) std::fprintf(stderr, "[maus] released: gamepad in use\n");
 				ps2xin::wiederFangen.store(ps2xmenu::open.load() && !ps2xin::padSeitMaus());
 				ps2xin::mausGefangen.store(false);
 				for (int i = 0; i < ps2xmenu::kAnzAktionen; ++i) ps2xin::impulse[i].store(0);
@@ -5186,8 +5194,10 @@ PS2XGS_API int ps2xgs_pad(unsigned short* pressed, unsigned char* axes4)
 		if ((b != s_last || axq != s_lastAx) && now - s_t > std::chrono::milliseconds(100))
 		{
 			s_last = b; s_lastAx = axq; s_t = now;
-			std::fprintf(stderr, "[Eingabe] tasten=%04x links=%02x/%02x rechts=%02x/%02x pad=%d tast=%02x\n", b, a[0], a[1], a[2], a[3],
-				ps2xin::padOn.load() ? 1 : 0, ps2xin::keyStick.load());
+			const long long jt = ps2xin::jetztMs();
+			std::fprintf(stderr, "[Eingabe] tasten=%04x links=%02x/%02x rechts=%02x/%02x pad=%d tast=%02x maus=%d padvor=%lld mausvor=%lld\n", b, a[0], a[1], a[2], a[3],
+				ps2xin::padOn.load() ? 1 : 0, ps2xin::keyStick.load(), ps2xin::mausGefangen.load() ? 1 : 0,
+				jt - ps2xin::padAktivMs.load(), jt - ps2xin::mausAktivMs.load());
 		}
 	}
 	return (s_display != nullptr || ps2xin::padOn.load()) ? 1 : 0;
