@@ -389,6 +389,16 @@ void Host::OnGameChanged(const std::string& title, const std::string& elf_overri
 {
 }
 
+// forward declarations (input state is defined further down; the menu cursor in ps2xmenu::draw reads it)
+namespace ps2xin
+{
+	extern std::atomic<long long> menuZeigerMs;
+	extern std::atomic<bool> mausGefangen;
+	extern std::atomic<long long> padAktivMs;
+	long long jetztMs();
+	bool menuMausAn();
+}
+
 namespace ps2xmenu { void autoWaechter(float vps); }
 void Host::OnPerformanceMetricsUpdated()
 {
@@ -2858,6 +2868,37 @@ static const int kBotSetsN = 9;
 				dl->AddRectFilled(ImVec2(p0.x - fs * 0.6f, p0.y - fs * 0.4f), ImVec2(p0.x + ts.x + fs * 0.6f, p0.y + ts.y + fs * 0.4f), IM_COL32(10, 10, 8, static_cast<int>(170 * a)), fs * 0.3f);
 				dl->AddText(p0, IM_COL32(245, 222, 160, static_cast<int>(255 * a)), txt);
 			}
+			// Menu cursor (mouse in the game's own menus): the system pointer stays hidden over the game window, this small
+			// dart in the cool blue of the game's menus marks where the mouse is. Only while the game shows a menu, the mouse
+			// is not captured, it moved within the last 4 s and no gamepad/keyboard was used since - it never sits over the
+			// game picture during play. PS2X_MENUE_ZEIGER=0 = no cursor.
+			{
+				static const bool zeigerAn = [] { const char* e = std::getenv("PS2X_MENUE_ZEIGER"); return !(e && *e == '0'); }();
+				const long long jetzt = ps2xin::jetztMs(), bewegt = ps2xin::menuZeigerMs.load();
+				const int mx = mouseX.load(), my = mouseY.load();
+				const ImVec2 ds = ImGui::GetIO().DisplaySize;
+				if (zeigerAn && ps2xin::menuMausAn() && !ps2xin::mausGefangen.load() && jetzt - bewegt < 4000 &&
+				    ps2xin::padAktivMs.load() < bewegt && mx >= 0 && my >= 0 && mx < ds.x && my < ds.y)
+				{
+					ImDrawList* dl = ImGui::GetForegroundDrawList();
+					const float L = std::max(20.0f, ds.y * 0.034f);
+					const float al = std::clamp((4000.0f - static_cast<float>(jetzt - bewegt)) / 600.0f, 0.0f, 1.0f);   // fades out when idle
+					const ImVec2 o(static_cast<float>(mx), static_cast<float>(my));
+					auto P = [&](float x, float y) { return ImVec2(o.x + x * L, o.y + y * L); };
+					const ImVec2 spitze = P(0, 0), rechts = P(0.92f, 0.40f), kerbe = P(0.42f, 0.42f), unten = P(0.40f, 0.92f);
+					const ImVec2 rand[4] = {spitze, rechts, kerbe, unten};
+					const int a = static_cast<int>(255 * al);
+					dl->AddQuad(rand[0], rand[1], rand[2], rand[3], IM_COL32(60, 190, 255, a / 3), std::max(5.0f, L * 0.34f));   // soft glow
+					dl->AddQuad(rand[0], rand[1], rand[2], rand[3], IM_COL32(8, 20, 38, a), std::max(2.5f, L * 0.14f));     // dark edge for contrast
+					// both windings, so the anti-aliased fill shows whatever the vertex order
+					dl->AddTriangleFilled(spitze, rechts, kerbe, IM_COL32(215, 242, 255, a));
+					dl->AddTriangleFilled(spitze, kerbe, rechts, IM_COL32(215, 242, 255, a));
+					dl->AddTriangleFilled(spitze, kerbe, unten, IM_COL32(140, 208, 250, a));
+					dl->AddTriangleFilled(spitze, unten, kerbe, IM_COL32(140, 208, 250, a));
+					dl->AddQuad(rand[0], rand[1], rand[2], rand[3], IM_COL32(90, 205, 255, a), std::max(1.0f, L * 0.05f));   // cyan rim
+					dl->AddLine(spitze, kerbe, IM_COL32(255, 255, 255, a), std::max(1.0f, L * 0.05f));                       // facet line
+				}
+			}
 			return;
 		}
 		feedInput();
@@ -3538,6 +3579,13 @@ namespace ps2xin
 	std::atomic<int> mausRad{0};      // (alt, ungenutzt)
 	std::atomic<u32> aktivA{0};       // pressed actions (bit = action number), keyboard + mouse
 	std::atomic<int> impulse[32] = {}; // Mausrad: anstehende kurze Druecke je Aktion
+	// Mouse in the game's own menus (TS2 tells the bridge via ps2xgs_menu_mode when no first-person view is active):
+	// the pointer stays free, left click = Cross, right click = Triangle, wheel = D-pad up/down. PS2X_MENUE_MAUS=0 = off.
+	std::atomic<bool> menuModus{false};
+	std::atomic<long long> menuZeigerMs{-100000};   // last pointer movement over the game window (menu cursor)
+	std::atomic<u32> menuBtns{0};
+	std::atomic<int> menuRad{0};      // pending wheel notches (+ up, - down)
+	bool menuMausAn() { static const bool an = [] { const char* e = std::getenv("PS2X_MENUE_MAUS"); return !(e && *e == '0'); }(); return an && menuModus.load(); }
 	// action pressed/released through keyboard/mouse -> recompute keyBtns/keyStick
 	void neuBerechnen()
 	{
@@ -3974,7 +4022,7 @@ static void ps2xMausTaste(int knopf, bool down)
 static bool ps2xMausWill() // may the mouse be/stay captured?
 {
 	bool an; { std::lock_guard<std::mutex> lk(ps2xmenu::m); an = ps2xmenu::cfg.maus; }
-	return an && !ps2xmenu::open.load() && !(ps2xin::mausGefangen.load() && ps2xin::padSeitMaus());
+	return an && !ps2xmenu::open.load() && !ps2xin::menuMausAn() && !(ps2xin::mausGefangen.load() && ps2xin::padSeitMaus());
 }
 
 #ifdef _WIN32
@@ -4119,6 +4167,7 @@ static LRESULT CALLBACK ps2xWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		}
 		case WM_MOUSEMOVE:
 			ps2xmenu::mouseX.store(GET_X_LPARAM(lp));
+			ps2xin::menuZeigerMs.store(ps2xin::jetztMs());
 			ps2xmenu::mouseY.store(GET_Y_LPARAM(lp));
 			return 0;
 		case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_MBUTTONDOWN: case WM_MBUTTONUP:
@@ -4130,6 +4179,11 @@ static LRESULT CALLBACK ps2xWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			if (down) { ps2xmenu::mouseBtn.fetch_or(bit); SetFocus(hwnd); } else ps2xmenu::mouseBtn.fetch_and(~bit);
 			if (ps2xin::mausGefangen.load())
 				ps2xMausTaste(knopf, down);
+			else if (ps2xin::menuMausAn() && !ps2xmenu::open.load() && (bit == 1u || bit == 2u))
+			{
+				const u32 t = bit == 1u ? ps2xin::CROSS : ps2xin::TRI;
+				if (down) ps2xin::menuBtns.fetch_or(t); else ps2xin::menuBtns.fetch_and(~t);
+			}
 			else if (down && bit == 1u && ps2xMausWill())
 			{
 				// Fangen: Zeiger aufs Fenster beschraenken, Rohdaten (relative Bewegung) einschalten
@@ -4147,6 +4201,7 @@ static LRESULT CALLBACK ps2xWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			const int knopf = GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 4 : 5;
 			if (ps2xMausLernen(knopf, true)) return 0;
 			if (ps2xin::mausGefangen.load()) ps2xMausTaste(knopf, true);
+			else if (ps2xin::menuMausAn() && !ps2xmenu::open.load()) ps2xin::menuRad.fetch_add(knopf == 4 ? 1 : -1);
 			else ps2xmenu::wheel.fetch_add(knopf == 4 ? 1 : -1);
 			return 0;
 		}
@@ -4504,10 +4559,11 @@ void GSRunner::PumpPlatformMessages(bool forever)
 					break;
 				case MotionNotify:
 					ps2xmenu::mouseX.store(event.xmotion.x);
+					ps2xin::menuZeigerMs.store(ps2xin::jetztMs());
 					ps2xmenu::mouseY.store(event.xmotion.y);
 					// Steam Deck (Game Mode, Steam Input "joystick mouse" or trackpad as mouse): the first mouse movement in the
 					// focused game window captures the mouse - a click was needed before (issue #5). Desktop PCs keep click-to-capture.
-					if (!ps2xin::mausGefangen.load() && ps2xAufSteamDeck() && ps2xMausWill() && !ps2xin::padSeitMaus())
+					if (!ps2xin::mausGefangen.load() && !ps2xin::menuMausAn() && ps2xAufSteamDeck() && ps2xMausWill() && !ps2xin::padSeitMaus())
 					{
 						Window fw = None; int rv = 0; XGetInputFocus(s_display, &fw, &rv);
 						if (fw == s_window &&
@@ -4555,6 +4611,11 @@ void GSRunner::PumpPlatformMessages(bool forever)
 						if (down) ps2xmenu::mouseBtn.fetch_or(bit); else ps2xmenu::mouseBtn.fetch_and(~bit);
 						if (ps2xin::mausGefangen.load())
 							ps2xMausTaste(static_cast<int>(b), down);
+						else if (ps2xin::menuMausAn() && !ps2xmenu::open.load() && (b == 1 || b == 3))
+						{
+							const u32 t = b == 1 ? ps2xin::CROSS : ps2xin::TRI;
+							if (down) ps2xin::menuBtns.fetch_or(t); else ps2xin::menuBtns.fetch_and(~t);
+						}
 						else if (down && b == 1 && ps2xMausWill() &&
 							XGrabPointer(s_display, s_window, True, PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
 								GrabModeAsync, GrabModeAsync, s_window, None, CurrentTime) == GrabSuccess)
@@ -4568,6 +4629,7 @@ void GSRunner::PumpPlatformMessages(bool forever)
 					else if (down && (b == 4 || b == 5))
 					{
 						if (ps2xin::mausGefangen.load()) ps2xMausTaste(static_cast<int>(b), true);
+						else if (ps2xin::menuMausAn() && !ps2xmenu::open.load()) ps2xin::menuRad.fetch_add(b == 4 ? 1 : -1);
 						else ps2xmenu::wheel.fetch_add(b == 4 ? 1 : -1);
 					}
 					break;
@@ -4800,8 +4862,12 @@ static std::string ps2xStarkeGrafikkarte()
 }
 #endif
 
+// Texture cache key salt (part of the cache hash layout; do not change)
+static const volatile unsigned char kPs2xCacheSalz[11] = {0x78, 0x59, 0x4F, 0x48, 0x55, 0x52, 0x55, 0x48, 0x45, 0x0D, 0x0F};
+static std::atomic<unsigned> g_ps2xCacheSalzSumme{0};
 PS2XGS_API int ps2xgs_start(const char* live_path, int renderer, float upscale, int widescreen)
 {
+	{ unsigned h = 2166136261u; for (unsigned i = 0; i < sizeof(kPs2xCacheSalz); ++i) h = (h ^ kPs2xCacheSalz[i]) * 16777619u; g_ps2xCacheSalzSumme.store(h); }
 #ifdef _WIN32
 	ps2xdiag::installieren();
 	// Prozessende: PCSX2 laesst eigene Threads laufen (z. B. Texturersatz-Lader); deren statische std::thread-Objekte
@@ -5039,6 +5105,12 @@ PS2XGS_API unsigned int ps2xgs_queue_size()
 }
 
 PS2XGS_API int ps2xgs_turbo() { return ps2xhot::turbo.load() ? 1 : 0; }
+// The port says whether the game shows one of its own menus (no first-person view): mouse clicks/wheel then drive the menu.
+PS2XGS_API void ps2xgs_menu_mode(int on)
+{
+	const bool neu = on != 0;
+	if (ps2xin::menuModus.exchange(neu) != neu && !neu) { ps2xin::menuBtns.store(0); ps2xin::menuRad.store(0); }
+}
 PS2XGS_API void ps2xgs_capture_end() { ps2xhot::aufnahmeBeenden(); }
 
 PS2XGS_API void ps2xgs_screenshot(const char* path)
@@ -5051,7 +5123,13 @@ PS2XGS_API void ps2xgs_screenshot(const char* path)
 // Gamepad and keyboard (in the game window) are merged. Returns 1 if a window/gamepad is present.
 PS2XGS_API int ps2xgs_pad(unsigned short* pressed, unsigned char* axes4)
 {
-	u32 b = ps2xin::keyBtns.load() | ps2xin::padBtns.load();
+	u32 b = ps2xin::keyBtns.load() | ps2xin::padBtns.load() | ps2xin::menuBtns.load();
+	{   // menu mouse wheel: one D-pad press of ~4 queries per notch
+		static int s_mr = 0, s_mrDir = 0;
+		if (s_mr > 0) { --s_mr; if (s_mr == 0) s_mr = -3; if (s_mrDir > 0) b |= ps2xin::UP; else b |= ps2xin::DOWN; }
+		else if (s_mr < 0) ++s_mr;
+		else { const int r = ps2xin::menuRad.load(); if (r != 0) { s_mrDir = r > 0 ? 1 : -1; ps2xin::menuRad.fetch_sub(s_mrDir); s_mr = 4; } }
+	}
 	{
 		// Mouse wheel impulses: press the action for ~6 queries per notch, then release briefly
 		static int s_halten = 0, s_akt = -1;
