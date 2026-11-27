@@ -1508,7 +1508,8 @@ namespace ps2xmenu
 			{"F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot", "F1 / Guide: Menue   F7: freie Kamera   F8: Video aufnehmen   F9: FPS   F10: Turbo   F11 oder Alt+Enter: Vollbild   F12: Screenshot"},
 			{"Menu: F1   |   Gamepad: Select + Start (or Guide)", "Menue: F1   |   Gamepad: Select + Start (oder Guide)"},
 			// Online co-op lobby (Online+ hub)
-			{"ONLINE CO-OP", "ONLINE-KOOP"}, {"Online Co-op", "Online-Koop"}, {"STORY CO-OP ONLINE", "STORY-KOOP ONLINE"}, {"Play the whole story together over the internet. Player 1 is Cortez, player 2 is Hart.", "Spielt die ganze Story zusammen uebers Internet. Spieler 1 ist Cortez, Spieler 2 ist Hart."},
+			{"ONLINE CO-OP", "ONLINE-KOOP"}, {"Online Co-op", "Online-Koop"}, {"WAITING FOR PLAYER", "WARTE AUF SPIELER"}, {"Lobby created", "Lobby erstellt"}, {" joined the lobby", " ist beigetreten"}, {" left", " hat die Lobby verlassen"}, {" lost connection", " hat die Verbindung verloren"},
+			{"Player 2 joined, waiting for ready", "Spieler 2 ist da, warte auf Bereit"}, {"Everyone is ready, start the co-op!", "Alle bereit, Koop starten!"}, {"In the lobby, press Ready when you are set", "In der Lobby, druecke Bereit, wenn du so weit bist"}, {"STORY CO-OP ONLINE", "STORY-KOOP ONLINE"}, {"Play the whole story together over the internet. Player 1 is Cortez, player 2 is Hart.", "Spielt die ganze Story zusammen uebers Internet. Spieler 1 ist Cortez, Spieler 2 ist Hart."},
 			{"GO ONLINE", "ONLINE GEHEN"}, {"CONNECTING...", "VERBINDE..."}, {"Uses the server you picked under PLAY ONLINE. No port forwarding needed.", "Nutzt den Server, den du unter ONLINE SPIELEN gewaehlt hast. Keine Portfreigabe noetig."},
 			{"CREATE LOBBY", "LOBBY ERSTELLEN"}, {"Open lobbies", "Offene Lobbys"}, {"No open lobby on this server yet. Create one and invite a friend.", "Noch keine offene Lobby auf diesem Server. Erstelle eine und lade einen Freund ein."},
 			{"JOIN", "BEITRETEN"}, {"STARTING IN", "START IN"}, {"The game restarts in co-op mode on both PCs. Don't touch anything.", "Das Spiel startet auf beiden PCs im Koop-Modus neu. Nichts druecken."},
@@ -2326,11 +2327,11 @@ namespace koop
 		ImGui::PopFont();
 		if (!mg)
 		{
-			const float a = 0.45f + 0.35f * std::sin(t * 3.0f);
+			const float a = 0.70f + 0.30f * std::sin(t * 3.0f);
 			ImGui::PushFont(ps2xschrift::kopf(), fs * 0.95f);
-			const char* w8 = "WAITING FOR PLAYER";
+			const char* w8 = tr("WAITING FOR PLAYER");
 			const ImVec2 ts = ImGui::CalcTextSize(w8);
-			dl->AddText(ImVec2(p.x + (w - ts.x) * 0.5f, p.y + h * 0.5f - ts.y * 0.2f), IM_COL32(150, 190, 255, static_cast<int>(255 * a)), w8);
+			dl->AddText(ImVec2(p.x + (w - ts.x) * 0.5f, p.y + h * 0.5f - ts.y * 0.2f), IM_COL32(170, 215, 255, static_cast<int>(255 * a)), w8);
 			ImGui::PopFont();
 		}
 		else
@@ -2340,10 +2341,12 @@ namespace koop
 			ImGui::PopFont();
 			const std::string rang = fmt::format("{} {}  {}", tr("Level"), mg->level, ps2xRang(mg->level));
 			dl->AddText(ImVec2(p.x + fs * 0.8f, p.y + fs * 4.4f), ps2xRangFarbe(mg->level), rang.c_str());
-			if (mg->host) dl->AddText(ImVec2(q.x - fs * 3.6f, p.y + fs * 2.7f), IM_COL32(255, 205, 80, 255), "HOST");
-			pingBalken(dl, ImVec2(q.x - fs * 3.6f, p.y + fs * 4.3f), fs * 0.9f, mg->ping);
+			// right column: HOST badge, ping bars + value, right aligned inside the card
 			const std::string ps = mg->ping < 0 ? std::string("--") : fmt::format("{} ms", mg->ping);
-			dl->AddText(ImVec2(q.x - fs * 2.2f, p.y + fs * 4.3f), IM_COL32(170, 180, 210, 255), ps.c_str());
+			const float pw = ImGui::CalcTextSize(ps.c_str()).x, rechts = q.x - fs * 0.8f;
+			if (mg->host) { const float hw = ImGui::CalcTextSize("HOST").x; dl->AddText(ImVec2(rechts - hw, p.y + fs * 2.7f), IM_COL32(255, 205, 80, 255), "HOST"); }
+			dl->AddText(ImVec2(rechts - pw, p.y + fs * 4.3f), IM_COL32(170, 180, 210, 255), ps.c_str());
+			pingBalken(dl, ImVec2(rechts - pw - fs * 1.6f, p.y + fs * 4.3f), fs * 0.9f, mg->ping);
 			// ready badge
 			const char* b = bereit ? "READY" : "NOT READY";
 			ImGui::PushFont(ps2xschrift::kopf(), fs * 0.9f);
@@ -2364,6 +2367,7 @@ namespace koop
 		ImGui::PushStyleColor(ImGuiCol_Button, orange ? ImVec4(0.85f, 0.45f, 0.10f, 1.0f) : ImVec4(0.14f, 0.30f, 0.58f, 1.0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, orange ? ImVec4(1.0f, 0.58f, 0.18f, 1.0f) : ImVec4(0.22f, 0.46f, 0.78f, 1.0f));
 		ImGui::PushFont(ps2xschrift::kopf(), ImGui::GetFontSize() * 0.95f);
+		w = std::max(w, ImGui::CalcTextSize(t).x + ImGui::GetFontSize() * 2.0f);   // never clip the label
 		const bool r = ImGui::Button(t, ImVec2(w, ImGui::GetFontSize() * 2.3f));
 		ImGui::PopFont(); ImGui::PopStyleColor(2); ImGui::EndDisabled();
 		return r;
@@ -2444,7 +2448,14 @@ namespace koop
 				ImGui::BeginChild("##koopchat", ImVec2(0, fs * 6.5f), ImGuiChildFlags_Borders);
 				for (const auto& c : ch)
 				{
-					if (c.name == "*") ImGui::TextDisabled("%s", c.text.c_str());
+					if (c.name == "*")
+					{
+						// system lines from the game side ("Lobby created", "<name> joined the lobby", ...) in the menu language
+						static const char* kSuffix[] = {" joined the lobby", " left", " lost connection"};
+						std::string zeile = tr(c.text.c_str());
+						for (const char* sx : kSuffix) { const size_t n = std::strlen(sx); if (c.text.size() > n && c.text.compare(c.text.size() - n, n, sx) == 0) zeile = c.text.substr(0, c.text.size() - n) + tr(sx); }
+						ImGui::TextColored(ImVec4(0.55f, 0.75f, 0.95f, 0.85f), "%s", zeile.c_str());
+					}
 					else { ImGui::TextColored(cyan, "%s:", c.name.c_str()); ImGui::SameLine(); ImGui::TextWrapped("%s", c.text.c_str()); }
 				}
 				if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f) ImGui::SetScrollHereY(1.0f);
