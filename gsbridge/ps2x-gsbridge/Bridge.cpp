@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <csignal>
 #include <exception>
 #include <cstdlib>
@@ -1506,6 +1507,15 @@ namespace ps2xmenu
 			{"  Back to game  ", "  Weiterspielen  "}, {"  Quit game  ", "  Spiel beenden  "},
 			{"F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot", "F1 / Guide: Menue   F7: freie Kamera   F8: Video aufnehmen   F9: FPS   F10: Turbo   F11 oder Alt+Enter: Vollbild   F12: Screenshot"},
 			{"Menu: F1   |   Gamepad: Select + Start (or Guide)", "Menue: F1   |   Gamepad: Select + Start (oder Guide)"},
+			// Online co-op lobby (Online+ hub)
+			{"ONLINE CO-OP", "ONLINE-KOOP"}, {"STORY CO-OP ONLINE", "STORY-KOOP ONLINE"}, {"Play the whole story together over the internet. Player 1 is Cortez, player 2 is Hart.", "Spielt die ganze Story zusammen uebers Internet. Spieler 1 ist Cortez, Spieler 2 ist Hart."},
+			{"GO ONLINE", "ONLINE GEHEN"}, {"CONNECTING...", "VERBINDE..."}, {"Uses the server you picked under PLAY ONLINE. No port forwarding needed.", "Nutzt den Server, den du unter ONLINE SPIELEN gewaehlt hast. Keine Portfreigabe noetig."},
+			{"CREATE LOBBY", "LOBBY ERSTELLEN"}, {"Open lobbies", "Offene Lobbys"}, {"No open lobby on this server yet. Create one and invite a friend.", "Noch keine offene Lobby auf diesem Server. Erstelle eine und lade einen Freund ein."},
+			{"JOIN", "BEITRETEN"}, {"STARTING IN", "START IN"}, {"The game restarts in co-op mode on both PCs. Don't touch anything.", "Das Spiel startet auf beiden PCs im Koop-Modus neu. Nichts druecken."},
+			{"START CO-OP", "KOOP STARTEN"}, {"READY", "BEREIT"}, {"NOT READY", "NICHT BEREIT"}, {"LEAVE", "VERLASSEN"}, {"Chat", "Chat"}, {"Send", "Senden"},
+			{"Start unlocks when player 2 is ready.", "Start geht, sobald Spieler 2 bereit ist."}, {"Connecting to the server", "Verbinde mit dem Server"}, {"Lobby open, waiting for player 2", "Lobby offen, warte auf Spieler 2"},
+			{"The host closed the lobby", "Der Host hat die Lobby geschlossen"}, {"The lobby is full", "Die Lobby ist voll"}, {"Starting online co-op", "Online-Koop startet"}, {"Everyone has to be ready", "Alle muessen bereit sein"},
+			{"Server not reachable (pick one under Play Online)", "Server nicht erreichbar (unter Online spielen einen waehlen)"}, {"Connection to the server lost", "Verbindung zum Server verloren"},
 			// Online
 			{"Play online", "Online spielen"}, {"Pick a server and connect. Then confirm \"TS2 Online\" in the game: Start Game hosts, Join Game lists the games on the server.", "Server waehlen und Verbinden. Dann im Spiel \"TS2 Online\" bestaetigen: Start Game hostet, Join Game zeigt die Spiele auf dem Server."},
 			{"Player name", "Spielername"}, {"(none)", "(keiner)"}, {"Searching ...", "Suche ..."}, {"Refresh", "Aktualisieren"}, {"not full", "nicht voll"},
@@ -2243,6 +2253,213 @@ namespace ps2xmenu
 		return ImGui::Combo(label, v, items, n);
 	}
 
+// ---------- Online+ hub: ONLINE CO-OP lobby page ----------
+// The game side (runtime, ts2lobby) does the networking through the online server; this page only shows its state
+// (ps2xgs_text id 5) and queues the player's commands (ps2xgs_text_get id 5).
+namespace koop
+{
+	struct Lobby { std::string session, host; int spieler = 1, ping = -1, level = 0; };
+	struct Mitglied { std::string name; bool bereit = false, host = false; int ping = -1, level = 0; };
+	struct Zeile { std::string name, text; };
+	std::mutex m;
+	int zustand = 0, countdown = 0;
+	bool ichHost = false;
+	std::string status;
+	std::vector<Lobby> lobbys;
+	std::vector<Mitglied> mitglieder;
+	std::vector<Zeile> chat;
+	std::deque<std::string> befehle;
+	long long zuletztMs = 0;
+
+	void befehl(const std::string& b) { std::lock_guard<std::mutex> lk(m); if (befehle.size() < 16) befehle.push_back(b); }
+	static std::vector<std::string> teile(const std::string& z) { std::vector<std::string> v; size_t a = 0; for (;;) { const size_t e = z.find('\t', a); v.push_back(z.substr(a, e == std::string::npos ? e : e - a)); if (e == std::string::npos) break; a = e + 1; } return v; }
+	void stand(const char* text)
+	{
+		std::lock_guard<std::mutex> lk(m);
+		lobbys.clear(); mitglieder.clear(); chat.clear(); countdown = 0;
+		const std::string t(text); size_t a = 0;
+		while (a < t.size())
+		{
+			size_t e = t.find('\n', a); if (e == std::string::npos) e = t.size();
+			const auto f = teile(t.substr(a, e - a)); a = e + 1;
+			if (f.empty() || f[0].empty()) continue;
+			if (f[0] == "S" && f.size() >= 5) { zustand = std::atoi(f[1].c_str()); ichHost = f[3] == "1"; status = f[4]; }
+			else if (f[0] == "L" && f.size() >= 6) lobbys.push_back({f[1], f[2], std::atoi(f[3].c_str()), std::atoi(f[4].c_str()), std::atoi(f[5].c_str())});
+			else if (f[0] == "M" && f.size() >= 6) mitglieder.push_back({f[1], f[2] == "1", f[4] == "1", std::atoi(f[3].c_str()), std::atoi(f[5].c_str())});
+			else if (f[0] == "C" && f.size() >= 3) chat.push_back({f[1], f[2]});
+			else if (f[0] == "G" && f.size() >= 2) countdown = std::atoi(f[1].c_str());
+		}
+		zuletztMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
+	std::string naechsterBefehl() { std::lock_guard<std::mutex> lk(m); if (befehle.empty()) return {}; std::string b = befehle.front(); befehle.pop_front(); return b; }
+
+	// ping as 4 signal bars (green / yellow / red)
+	static void pingBalken(ImDrawList* dl, ImVec2 p, float h, int ping)
+	{
+		const int n = ping < 0 ? 0 : ping < 60 ? 4 : ping < 120 ? 3 : ping < 200 ? 2 : 1;
+		const ImU32 an = ping < 0 ? IM_COL32(90, 90, 110, 255) : ping < 120 ? IM_COL32(90, 230, 110, 255) : ping < 200 ? IM_COL32(240, 200, 60, 255) : IM_COL32(240, 80, 60, 255);
+		const float w = h * 0.22f;
+		for (int i = 0; i < 4; ++i)
+		{
+			const float bh = h * (0.35f + 0.65f * (i + 1) / 4.0f);
+			dl->AddRectFilled(ImVec2(p.x + i * w * 1.5f, p.y + h - bh), ImVec2(p.x + i * w * 1.5f + w, p.y + h), i < n ? an : IM_COL32(60, 64, 84, 255), 1.5f);
+		}
+	}
+
+	// one player card: TS2 frontend look (dark blue glass, glowing cyan frame, gold accents)
+	static void karte(const Mitglied* mg, int nr, float w, float h)
+	{
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		const ImVec2 p = ImGui::GetCursorScreenPos(), q(p.x + w, p.y + h);
+		const float fs = ImGui::GetFontSize(), t = static_cast<float>(ImGui::GetTime());
+		const bool bereit = mg && mg->bereit;
+		const ImU32 rahmen = !mg ? IM_COL32(70, 80, 120, 200) : bereit ? IM_COL32(110, 255, 140, 255) : IM_COL32(100, 200, 255, 255);
+		dl->AddRectFilledMultiColor(p, q, IM_COL32(14, 22, 52, 235), IM_COL32(22, 34, 78, 235), IM_COL32(10, 14, 34, 235), IM_COL32(8, 10, 26, 235));
+		// glow
+		for (int i = 1; i <= 3; ++i) dl->AddRect(ImVec2(p.x - i, p.y - i), ImVec2(q.x + i, q.y + i), (rahmen & 0x00FFFFFF) | (static_cast<ImU32>(60 / i) << 24), 10.f + i, 1.5f);
+		dl->AddRect(p, q, rahmen, 10.f, 2.0f);
+		// header band
+		dl->AddRectFilled(p, ImVec2(q.x, p.y + fs * 2.0f), IM_COL32(30, 60, 130, 200), 10.f, ImDrawFlags_RoundCornersTop);
+		const char* rolle = nr == 0 ? "PLAYER 1  -  CORTEZ" : "PLAYER 2  -  HART";
+		ImGui::PushFont(ps2xschrift::kopf(), fs * 0.8f);
+		dl->AddText(ImVec2(p.x + fs * 0.7f, p.y + fs * 0.45f), IM_COL32(255, 205, 80, 255), rolle);
+		ImGui::PopFont();
+		if (!mg)
+		{
+			const float a = 0.45f + 0.35f * std::sin(t * 3.0f);
+			ImGui::PushFont(ps2xschrift::kopf(), fs * 0.95f);
+			const char* w8 = "WAITING FOR PLAYER";
+			const ImVec2 ts = ImGui::CalcTextSize(w8);
+			dl->AddText(ImVec2(p.x + (w - ts.x) * 0.5f, p.y + h * 0.5f - ts.y * 0.2f), IM_COL32(150, 190, 255, static_cast<int>(255 * a)), w8);
+			ImGui::PopFont();
+		}
+		else
+		{
+			ImGui::PushFont(ps2xschrift::kopf(), fs * 1.35f);
+			dl->AddText(ImVec2(p.x + fs * 0.8f, p.y + fs * 2.6f), IM_COL32(235, 245, 255, 255), mg->name.c_str());
+			ImGui::PopFont();
+			const std::string rang = fmt::format("{} {}  {}", tr("Level"), mg->level, ps2xRang(mg->level));
+			dl->AddText(ImVec2(p.x + fs * 0.8f, p.y + fs * 4.4f), ps2xRangFarbe(mg->level), rang.c_str());
+			if (mg->host) dl->AddText(ImVec2(q.x - fs * 3.6f, p.y + fs * 2.7f), IM_COL32(255, 205, 80, 255), "HOST");
+			pingBalken(dl, ImVec2(q.x - fs * 3.6f, p.y + fs * 4.3f), fs * 0.9f, mg->ping);
+			const std::string ps = mg->ping < 0 ? std::string("--") : fmt::format("{} ms", mg->ping);
+			dl->AddText(ImVec2(q.x - fs * 2.2f, p.y + fs * 4.3f), IM_COL32(170, 180, 210, 255), ps.c_str());
+			// ready badge
+			const char* b = bereit ? "READY" : "NOT READY";
+			ImGui::PushFont(ps2xschrift::kopf(), fs * 0.9f);
+			const ImVec2 bs = ImGui::CalcTextSize(b);
+			const ImVec2 b0(p.x + fs * 0.8f, q.y - bs.y - fs * 1.1f), b1(b0.x + bs.x + fs * 1.2f, q.y - fs * 0.5f);
+			const float puls = bereit ? 0.75f + 0.25f * std::sin(t * 4.0f) : 1.0f;
+			dl->AddRectFilled(b0, b1, bereit ? IM_COL32(40, static_cast<int>(170 * puls), 70, 255) : IM_COL32(70, 40, 40, 255), 6.f);
+			dl->AddText(ImVec2(b0.x + fs * 0.6f, b0.y + fs * 0.3f), bereit ? IM_COL32(220, 255, 225, 255) : IM_COL32(255, 170, 160, 255), b);
+			ImGui::PopFont();
+		}
+		ImGui::Dummy(ImVec2(w, h));
+	}
+
+	// big TS2 style button (orange = main action)
+	static bool knopf(const char* t, float w, bool orange, bool an = true)
+	{
+		ImGui::BeginDisabled(!an);
+		ImGui::PushStyleColor(ImGuiCol_Button, orange ? ImVec4(0.85f, 0.45f, 0.10f, 1.0f) : ImVec4(0.14f, 0.30f, 0.58f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, orange ? ImVec4(1.0f, 0.58f, 0.18f, 1.0f) : ImVec4(0.22f, 0.46f, 0.78f, 1.0f));
+		ImGui::PushFont(ps2xschrift::kopf(), ImGui::GetFontSize() * 0.95f);
+		const bool r = ImGui::Button(t, ImVec2(w, ImGui::GetFontSize() * 2.3f));
+		ImGui::PopFont(); ImGui::PopStyleColor(2); ImGui::EndDisabled();
+		return r;
+	}
+
+	void seite()
+	{
+		const ImVec4 gold(1.00f, 0.80f, 0.32f, 1.0f), cyan(0.42f, 0.86f, 1.00f, 1.0f);
+		int z, cd; bool host; std::string st; std::vector<Lobby> lb; std::vector<Mitglied> mg; std::vector<Zeile> ch;
+		{ std::lock_guard<std::mutex> lk(m); z = zustand; cd = countdown; host = ichHost; st = status; lb = lobbys; mg = mitglieder; ch = chat; }
+		const float fs = ImGui::GetFontSize(), breite = ImGui::GetContentRegionAvail().x;
+		ImGui::PushFont(ps2xschrift::kopf(), fs * 1.15f);
+		ImGui::TextColored(cyan, "%s", tr("STORY CO-OP ONLINE"));
+		ImGui::PopFont();
+		ImGui::TextDisabled("%s", tr("Play the whole story together over the internet. Player 1 is Cortez, player 2 is Hart."));
+		if (!st.empty()) ImGui::TextColored(gold, "%s", tr(st.c_str()));
+		ImGui::Spacing();
+		if (z == 0 || z == 1)
+		{
+			if (knopf(z == 1 ? tr("CONNECTING...") : tr("GO ONLINE"), fs * 14, true, z == 0)) befehl("connect");
+			ImGui::TextDisabled("%s", tr("Uses the server you picked under PLAY ONLINE. No port forwarding needed."));
+		}
+		else if (z == 2)
+		{
+			if (knopf(tr("CREATE LOBBY"), fs * 14, true)) befehl("create");
+			ImGui::Spacing();
+			ImGui::SeparatorText(tr("Open lobbies"));
+			if (lb.empty()) ImGui::TextDisabled("%s", tr("No open lobby on this server yet. Create one and invite a friend."));
+			for (const auto& l : lb)
+			{
+				ImGui::PushID(l.session.c_str());
+				ImDrawList* dl = ImGui::GetWindowDrawList();
+				const ImVec2 p = ImGui::GetCursorScreenPos(); const float h = fs * 2.8f;
+				dl->AddRectFilled(p, ImVec2(p.x + breite, p.y + h), IM_COL32(16, 26, 60, 220), 8.f);
+				dl->AddRect(p, ImVec2(p.x + breite, p.y + h), IM_COL32(90, 170, 255, 180), 8.f, 1.5f);
+				ImGui::PushFont(ps2xschrift::kopf(), fs * 1.0f);
+				dl->AddText(ImVec2(p.x + fs * 0.8f, p.y + fs * 0.35f), IM_COL32(235, 245, 255, 255), l.host.c_str());
+				ImGui::PopFont();
+				const std::string rang = fmt::format("{} {}  {}   {}/2", tr("Level"), l.level, ps2xRang(l.level), l.spieler);
+				dl->AddText(ImVec2(p.x + fs * 0.8f, p.y + fs * 1.6f), ps2xRangFarbe(l.level), rang.c_str());
+				pingBalken(dl, ImVec2(p.x + breite - fs * 12.5f, p.y + fs * 0.9f), fs * 0.9f, l.ping);
+				ImGui::SetCursorScreenPos(ImVec2(p.x + breite - fs * 8.5f, p.y + fs * 0.4f));
+				if (knopf(tr("JOIN"), fs * 7.8f, true, l.spieler < 2)) befehl("join " + l.session);
+				ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h + fs * 0.4f));
+				ImGui::PopID();
+			}
+		}
+		else if (z >= 3)
+		{
+			const float kw = (breite - fs) * 0.5f, kh = fs * 9.0f;
+			const Mitglied* p1 = nullptr; const Mitglied* p2 = nullptr;
+			for (const auto& x : mg) { if (x.host) p1 = &x; else if (!p2) p2 = &x; }
+			karte(p1, 0, kw, kh); ImGui::SameLine(0, fs); karte(p2, 1, kw, kh);
+			ImGui::Spacing();
+			if (z == 4)
+			{
+				ImGui::PushFont(ps2xschrift::kopf(), fs * 2.2f);
+				const std::string s = fmt::format("{} {}", tr("STARTING IN"), std::max(cd, 0));
+				const float tw = ImGui::CalcTextSize(s.c_str()).x;
+				ImGui::SetCursorPosX((breite - tw) * 0.5f + ImGui::GetStyle().WindowPadding.x);
+				ImGui::TextColored(gold, "%s", s.c_str());
+				ImGui::PopFont();
+				ImGui::TextDisabled("%s", tr("The game restarts in co-op mode on both PCs. Don't touch anything."));
+			}
+			else
+			{
+				bool alleBereit = mg.size() >= 2; for (const auto& x : mg) alleBereit = alleBereit && x.bereit;
+				if (host) { if (knopf(tr("START CO-OP"), fs * 12, true, alleBereit)) befehl("start"); }
+				else
+				{
+					bool ich = false; for (const auto& x : mg) if (!x.host) ich = x.bereit;
+					if (knopf(ich ? tr("NOT READY") : tr("READY"), fs * 12, !ich)) befehl(ich ? "ready 0" : "ready 1");
+				}
+				ImGui::SameLine();
+				if (knopf(tr("LEAVE"), fs * 8, false)) befehl("leave");
+				// chat
+				ImGui::SeparatorText(tr("Chat"));
+				ImGui::BeginChild("##koopchat", ImVec2(0, fs * 6.5f), ImGuiChildFlags_Borders);
+				for (const auto& c : ch)
+				{
+					if (c.name == "*") ImGui::TextDisabled("%s", c.text.c_str());
+					else { ImGui::TextColored(cyan, "%s:", c.name.c_str()); ImGui::SameLine(); ImGui::TextWrapped("%s", c.text.c_str()); }
+				}
+				if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f) ImGui::SetScrollHereY(1.0f);
+				ImGui::EndChild();
+				static char eingabe[120] = {};
+				ImGui::SetNextItemWidth(breite - fs * 6.5f);
+				const bool enter = ImGui::InputText("##koopmsg", eingabe, sizeof eingabe, ImGuiInputTextFlags_EnterReturnsTrue);
+				ImGui::SameLine();
+				if ((ImGui::Button(tr("Send"), ImVec2(fs * 5.5f, 0)) || enter) && eingabe[0]) { befehl(std::string("chat ") + eingabe); eingabe[0] = 0; ImGui::SetKeyboardFocusHere(-1); }
+				if (host && !alleBereit) ImGui::TextDisabled("%s", tr("Start unlocks when player 2 is ready."));
+			}
+		}
+	}
+}
+
 static bool s_onlineTabWaehlen = false;
 static bool s_opTabWaehlen = false;   // open the menu on the Online+ page
 static bool s_hubModus = false;       // menu shows the Online+ hub (opened from the game's main menu item)
@@ -2960,11 +3177,13 @@ static const int kBotSetsN = 9;
 				const int i = static_cast<int>(d / 2.6);
 				if (i < 4) seite = folge[i]; else { demoFertig = true; demoStart = true; }
 			}
-			const char* seiten[] = {tr("BOT MATCH"), tr("PLAY ONLINE"), tr("PROFILE & STATS"), tr("SETTINGS")};
-			const float bw = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 3) / 4.0f;
-			for (int i = 0; i < 4; ++i)
+			const char* seiten[] = {tr("BOT MATCH"), tr("PLAY ONLINE"), tr("PROFILE & STATS"), tr("SETTINGS"), tr("ONLINE CO-OP")};
+			const int kOrdnung[] = {0, 4, 1, 2, 3};   // tab order on screen: bot match, co-op, online, profile, settings
+			const float bw = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 4) / 5.0f;
+			for (int k = 0; k < 5; ++k)
 			{
-				if (i) ImGui::SameLine();
+				const int i = kOrdnung[k];
+				if (k) ImGui::SameLine();
 				const bool akt = seite == i;
 				ImGui::PushStyleColor(ImGuiCol_Button, akt ? ImVec4(0.16f, 0.36f, 0.62f, 1.0f) : ImVec4(0.10f, 0.12f, 0.20f, 0.95f));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.46f, 0.78f, 1.0f));
@@ -3007,6 +3226,7 @@ static const int kBotSetsN = 9;
 				ImGui::TextDisabled("%s", tr("Don't touch the controller for a few seconds while the menus run."));
 				ImGui::TextDisabled("%s", tr("* = has to be unlocked in the game first (Arcade League / Challenge)."));
 			}
+			else if (seite == 4) koop::seite();
 			else if (seite == 1)
 			{
 				if (online::aktiv()) onlineTab(c, closeReq);
@@ -5628,6 +5848,7 @@ PS2XGS_API int ps2xgs_text_get(int id, char* buf, int len)
 		}
 	}
 	else if (id == 2) { std::lock_guard<std::mutex> lk(ps2xmenu::m); t = ps2xmenu::cfg.onlineServer; }
+	else if (id == 5) t = ps2xmenu::koop::naechsterBefehl();   // online co-op lobby: next command of the player
 	const int n = static_cast<int>(std::min<size_t>(t.size(), static_cast<size_t>(len - 1)));
 	std::memcpy(buf, t.data(), static_cast<size_t>(n)); buf[n] = 0;
 	return n;
@@ -5637,6 +5858,7 @@ PS2XGS_API int ps2xgs_text_get(int id, char* buf, int len)
 PS2XGS_API void ps2xgs_text(int id, const char* text)
 {
 	if (!text) return;
+	if (id == 5) { ps2xmenu::koop::stand(text); return; }   // online co-op lobby state from the game side
 	std::lock_guard<std::mutex> lk(ps2xfeed::m);
 	if (id == 1)
 	{
