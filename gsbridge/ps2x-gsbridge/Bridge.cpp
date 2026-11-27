@@ -6457,6 +6457,16 @@ PS2XGS_API void ps2xgs_text(int id, const char* text)
 {
 	if (!text) return;
 	if (id == 5) { ps2xmenu::koop::stand(text); return; }   // online co-op lobby state from the game side
+	if (id == 7)   // the game shows a frontend screen: on an ultrawide window ("fill the window") menus are shown at 16:9 with bars
+	{
+		const bool fe = text[0] == '1';
+		if (EmuConfig.GS.AspectRatio == AspectRatioType::Stretch)
+		{
+			const bool breit = s_wi.surface_width && s_wi.surface_height && static_cast<u64>(s_wi.surface_width) * 9u * 100u > static_cast<u64>(s_wi.surface_height) * 16u * 103u;
+			EmuConfig.CurrentAspectRatio = (fe && breit) ? AspectRatioType::R16_9 : AspectRatioType::Stretch;
+		}
+		return;
+	}
 	std::lock_guard<std::mutex> lk(ps2xfeed::m);
 	if (id == 1)
 	{

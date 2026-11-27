@@ -7557,6 +7557,18 @@ index 8291c3b..4095d48 100644
  void GSvsync(u32 field, bool registers_written)
  {
  	// Update this here because we need to check if the pending draw affects the current frame, so our regs need to be updated.
+@@ -1001,7 +1013,10 @@ void* GSAllocateWrappedMemory(size_t size, size_t repeat)
+ {
+ 	pxAssert(s_shm_fd == -1);
+ 
+-	const char* file_name = "/GS.mem";
++	// ps2x: the name was the same for every process ("/GS.mem"), so two instances starting at the same moment (online lobby
++	// tests, several players on one PC) hit O_EXCL and aborted. One name per process.
++	char file_name[64];
++	snprintf(file_name, sizeof(file_name), "/GS.mem.%d", static_cast<int>(getpid()));
+ 	s_shm_fd = shm_open(file_name, O_RDWR | O_CREAT | O_EXCL, 0600);
+ 	if (s_shm_fd != -1)
+ 	{
 diff --git a/pcsx2/GS/GS.h b/pcsx2/GS/GS.h
 index 892f406..864878d 100644
 --- a/pcsx2/GS/GS.h
