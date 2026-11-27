@@ -1508,7 +1508,7 @@ namespace ps2xmenu
 			{"F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot", "F1 / Guide: Menue   F7: freie Kamera   F8: Video aufnehmen   F9: FPS   F10: Turbo   F11 oder Alt+Enter: Vollbild   F12: Screenshot"},
 			{"Menu: F1   |   Gamepad: Select + Start (or Guide)", "Menue: F1   |   Gamepad: Select + Start (oder Guide)"},
 			// Online co-op lobby (Online+ hub)
-			{"ONLINE CO-OP", "ONLINE-KOOP"}, {"STORY CO-OP ONLINE", "STORY-KOOP ONLINE"}, {"Play the whole story together over the internet. Player 1 is Cortez, player 2 is Hart.", "Spielt die ganze Story zusammen uebers Internet. Spieler 1 ist Cortez, Spieler 2 ist Hart."},
+			{"ONLINE CO-OP", "ONLINE-KOOP"}, {"Online Co-op", "Online-Koop"}, {"STORY CO-OP ONLINE", "STORY-KOOP ONLINE"}, {"Play the whole story together over the internet. Player 1 is Cortez, player 2 is Hart.", "Spielt die ganze Story zusammen uebers Internet. Spieler 1 ist Cortez, Spieler 2 ist Hart."},
 			{"GO ONLINE", "ONLINE GEHEN"}, {"CONNECTING...", "VERBINDE..."}, {"Uses the server you picked under PLAY ONLINE. No port forwarding needed.", "Nutzt den Server, den du unter ONLINE SPIELEN gewaehlt hast. Keine Portfreigabe noetig."},
 			{"CREATE LOBBY", "LOBBY ERSTELLEN"}, {"Open lobbies", "Offene Lobbys"}, {"No open lobby on this server yet. Create one and invite a friend.", "Noch keine offene Lobby auf diesem Server. Erstelle eine und lade einen Freund ein."},
 			{"JOIN", "BEITRETEN"}, {"STARTING IN", "START IN"}, {"The game restarts in co-op mode on both PCs. Don't touch anything.", "Das Spiel startet auf beiden PCs im Koop-Modus neu. Nichts druecken."},
@@ -3598,6 +3598,14 @@ static const int kBotSetsN = 9;
 				static bool einmal = false;
 				if (!einmal) { einmal = true; if (online::liste.empty()) online::aktualisieren(c.onlineFavs, c.onlineServer); }
 				onlineTab(c, closeReq);
+				ImGui::EndTabItem();
+			}
+			// Online co-op lobby (story co-op over the online server); PS2XGS_MENU_TAB=koop opens the menu here once (test runs)
+			static bool s_koopWaehlen = [] { const char* e = std::getenv("PS2XGS_MENU_TAB"); return e && std::strcmp(e, "koop") == 0; }();
+			if (online::aktiv() && std::strcmp(cfgName(), "ts2-recomp") == 0 && ImGui::BeginTabItem(tr("Online Co-op"), nullptr, s_koopWaehlen ? ImGuiTabItemFlags_SetSelected : 0))
+			{
+				s_koopWaehlen = false;
+				koop::seite();
 				ImGui::EndTabItem();
 			}
 			// PS2XGS_MENU_TAB=crystalcut (test runs): open the menu on this tab once
