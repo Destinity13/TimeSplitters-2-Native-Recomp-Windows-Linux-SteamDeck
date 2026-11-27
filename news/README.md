@@ -4,6 +4,7 @@ Patch notes, dev logs and what we're working on next. The same posts also show u
 
 | Date | Post | Type |
 |---|---|---|
+| 2026-11-27 | [Crystal Cut 1.3.3 patch notes](2026-11-27-patch-notes-1-3-3.md) | Release |
 | 2026-11-25 | [1.3.3 is almost here](2026-11-25-devlog-1-3-3-almost-here.md) | Devlog |
 | 2026-11-24 | [Why widescreen is the hard part, and where we are](2026-11-24-why-widescreen-is-hard.md) | Devlog |
 | 2026-11-24 | [Devlog: the full Crystal Cut polish list](2026-11-24-devlog-polish-list.md) | Devlog |

@@ -36,8 +36,8 @@ Now with the content that was cut before release, found again on your own disc. 
 
 <table>
 <tr>
+<td width="50%" valign="top"><a href="news/2026-11-27-patch-notes-1-3-3.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-27 · Release</sub><br><b><a href="news/2026-11-27-patch-notes-1-3-3.md">Crystal Cut 1.3.3 patch notes</a></b><br><sub>Aiming, controls and a setup that runs on a lot more PCs. Update from the launcher, saves and settings are kept.</sub></td>
 <td width="50%" valign="top"><a href="news/2026-11-25-devlog-1-3-3-almost-here.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-25 · Devlog</sub><br><b><a href="news/2026-11-25-devlog-1-3-3-almost-here.md">1.3.3 is almost here</a></b><br><sub>Hip fire on the crosshair, auto aim with modern controls, mouse and gamepad together, the VU1 setup error fixed and setup for older CPUs. In testing now, release in the next hours.</sub></td>
-<td width="50%" valign="top"><a href="news/2026-11-24-why-widescreen-is-hard.md"><img src="news/img/2026-11-24-mapmaker-after.jpg" width="100%" alt=""></a><br><sub>2026-11-24 · Devlog</sub><br><b><a href="news/2026-11-24-why-widescreen-is-hard.md">Why widescreen is the hard part, and where we are</a></b><br><sub>Where most of the current bugs come from, what is already fixed and what comes next.</sub></td>
 </tr>
 </table>
 
@@ -45,7 +45,7 @@ Now with the content that was cut before release, found again on your own disc. 
 <!-- news:end -->
 
 > [!IMPORTANT]
-> **The current version is Crystal Cut 1.3.2.** [Patch notes](news/2026-11-21-patch-notes-1-3-2.md) · From 1.3.1 on, the launcher updates itself: just press Update.
+> **The current version is Crystal Cut 1.3.3.** [Patch notes](news/2026-11-27-patch-notes-1-3-3.md) · From 1.3.1 on, the launcher updates itself: just press Update.
 >
 > Coming from 1.2 or older: extract the new version into a **new** folder and set it up once with your disc (USA or PAL). To keep your saves, copy the
 > `savedata` folder from your old install into the new one. On Windows, extract the zip with 7-Zip: the built-in

@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-27T12:00:00Z",
+    "title": "Crystal Cut 1.3.3 patch notes",
+    "tag": "Release",
+    "body": "Hip fire on the crosshair, scopes that pan, the controller always wins over the mouse, auto aim with modern controls, no more Siberia shake, the VU1 setup error fixed and setup for older CPUs. Press Update, your saves are kept.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-27-patch-notes-1-3-3.md"
+  },
+  {
     "date": "2026-11-25T14:00:00Z",
     "title": "1.3.3 is almost here",
     "tag": "Devlog",
