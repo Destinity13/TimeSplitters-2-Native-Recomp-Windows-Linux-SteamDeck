@@ -1508,7 +1508,14 @@ namespace ps2xmenu
 			{"F1 / Guide: menu   F7: free camera   F8: record video   F9: FPS   F10: turbo   F11 or Alt+Enter: fullscreen   F12: screenshot", "F1 / Guide: Menue   F7: freie Kamera   F8: Video aufnehmen   F9: FPS   F10: Turbo   F11 oder Alt+Enter: Vollbild   F12: Screenshot"},
 			{"Menu: F1   |   Gamepad: Select + Start (or Guide)", "Menue: F1   |   Gamepad: Select + Start (oder Guide)"},
 			// Online co-op lobby (Online+ hub)
-			{"ONLINE CO-OP", "ONLINE-KOOP"}, {"Online Co-op", "Online-Koop"}, {"WAITING FOR PLAYER", "WARTE AUF SPIELER"}, {"Lobby created", "Lobby erstellt"}, {" joined the lobby", " ist beigetreten"}, {" left", " hat die Lobby verlassen"}, {" lost connection", " hat die Verbindung verloren"},
+			{"ONLINE CO-OP", "ONLINE-KOOP"}, {"Online Co-op", "Online-Koop"}, {"Map Vote", "Kartenabstimmung"}, {"On", "An"}, {"Off", "Aus"}, {"VOTE FOR THE NEXT MATCH", "STIMMT FUER DAS NAECHSTE MATCH AB"}, {"PLAYERS", "SPIELER"}, {"Character", "Charakter"}, {"MATCH STARTING", "MATCH STARTET"}, {"ONLINE LOBBY", "ONLINE-LOBBY"}, {"FIND A LOBBY", "LOBBY FINDEN"}, {"is the Party Leader", "ist Party-Leiter"},
+			{"STARTING IN:", "START IN:"}, {"SECONDS", "SEKUNDEN"}, {"READY:", "BEREIT:"}, {"PLAYERS:", "SPIELER:"}, {"ARCADE ONLINE", "ARCADE ONLINE"}, {"THE STORY", "DIE STORY"},
+			{"Cortez and Hart, all ten missions", "Cortez und Hart, alle zehn Missionen"}, {"players max", "Spieler max."}, {"Story Co-op, mission picked in game", "Story-Koop, Mission wird im Spiel gewaehlt"}, {"on", "auf"},
+			{"Go Online", "Online gehen"}, {"Connecting ...", "Verbinde ..."}, {"Create Lobby", "Lobby erstellen"}, {"Join", "Beitreten"}, {"No open lobby yet. Create one and invite a friend.", "Noch keine offene Lobby. Erstelle eine und lade einen Freund ein."},
+			{"Start Co-op", "Koop starten"}, {"Start Match", "Match starten"}, {"Change Mode", "Modus"}, {"Change Map", "Karte"}, {"Ready", "Bereit"}, {"Not Ready", "Nicht bereit"}, {"Leave Lobby", "Lobby verlassen"},
+			{"players", "Spieler"}, {"Open slot", "Freier Platz"}, {"HOW IT WORKS", "SO GEHT'S"}, {"Story co-op and arcade online", "Story-Koop und Arcade online"},
+			{"Create a lobby or join one from the list.", "Lobby erstellen oder einer aus der Liste beitreten."}, {"Story Co-op: two players, Cortez and Hart.", "Story-Koop: zwei Spieler, Cortez und Hart."},
+			{"Arcade: Deathmatch, Capture the Bag and more, up to 8.", "Arcade: Deathmatch, Capture the Bag und mehr, bis 8 Spieler."}, {"Everyone plays on his own PC, no port forwarding.", "Jeder spielt am eigenen PC, keine Portfreigabe."}, {"WAITING FOR PLAYER", "WARTE AUF SPIELER"}, {"Lobby created", "Lobby erstellt"}, {" joined the lobby", " ist beigetreten"}, {" left", " hat die Lobby verlassen"}, {" lost connection", " hat die Verbindung verloren"},
 			{"Player 2 joined, waiting for ready", "Spieler 2 ist da, warte auf Bereit"}, {"Everyone is ready, start the co-op!", "Alle bereit, Koop starten!"}, {"In the lobby, press Ready when you are set", "In der Lobby, druecke Bereit, wenn du so weit bist"}, {"STORY CO-OP ONLINE", "STORY-KOOP ONLINE"}, {"Play the whole story together over the internet. Player 1 is Cortez, player 2 is Hart.", "Spielt die ganze Story zusammen uebers Internet. Spieler 1 ist Cortez, Spieler 2 ist Hart."},
 			{"GO ONLINE", "ONLINE GEHEN"}, {"CONNECTING...", "VERBINDE..."}, {"Uses the server you picked under PLAY ONLINE. No port forwarding needed.", "Nutzt den Server, den du unter ONLINE SPIELEN gewaehlt hast. Keine Portfreigabe noetig."},
 			{"CREATE LOBBY", "LOBBY ERSTELLEN"}, {"Open lobbies", "Offene Lobbys"}, {"No open lobby on this server yet. Create one and invite a friend.", "Noch keine offene Lobby auf diesem Server. Erstelle eine und lade einen Freund ein."},
@@ -2260,7 +2267,7 @@ namespace ps2xmenu
 namespace koop
 {
 	struct Lobby { std::string session, host; int spieler = 1, ping = -1, level = 0; };
-	struct Mitglied { std::string name; bool bereit = false, host = false; int ping = -1, level = 0; };
+	struct Mitglied { std::string name; bool bereit = false, host = false; int ping = -1, level = 0; std::string figur; };
 	struct Zeile { std::string name, text; };
 	std::mutex m;
 	int zustand = 0, countdown = 0;
@@ -2270,6 +2277,10 @@ namespace koop
 	std::vector<Mitglied> mitglieder;
 	std::vector<Zeile> chat;
 	std::deque<std::string> befehle;
+	bool sichtbarAlt = false;
+	extern std::atomic<bool> bildschirm; extern int modusNr, maxSp; extern std::string modusName, karteName;
+	std::string meineFigur = "Sgt Cortez";
+	bool voteAn = true; int voteSek = 0, voteMeine = -1, voteN[3] = {}; std::string voteText[3];
 	long long zuletztMs = 0;
 
 	void befehl(const std::string& b) { std::lock_guard<std::mutex> lk(m); if (befehle.size() < 16) befehle.push_back(b); }
@@ -2286,9 +2297,14 @@ namespace koop
 			if (f.empty() || f[0].empty()) continue;
 			if (f[0] == "S" && f.size() >= 5) { zustand = std::atoi(f[1].c_str()); ichHost = f[3] == "1"; status = f[4]; }
 			else if (f[0] == "L" && f.size() >= 6) lobbys.push_back({f[1], f[2], std::atoi(f[3].c_str()), std::atoi(f[4].c_str()), std::atoi(f[5].c_str())});
-			else if (f[0] == "M" && f.size() >= 6) mitglieder.push_back({f[1], f[2] == "1", f[4] == "1", std::atoi(f[3].c_str()), std::atoi(f[5].c_str())});
+			else if (f[0] == "M" && f.size() >= 6) mitglieder.push_back({f[1], f[2] == "1", f[4] == "1", std::atoi(f[3].c_str()), std::atoi(f[5].c_str()), f.size() >= 7 ? f[6] : std::string()});
+			else if (f[0] == "F" && f.size() >= 2) meineFigur = f[1];
+			else if (f[0] == "X" && f.size() >= 2) voteAn = f[1] == "1";
+			else if (f[0] == "W" && f.size() >= 9) { voteSek = std::atoi(f[1].c_str()); voteMeine = std::atoi(f[2].c_str()); for (int i = 0; i < 3; ++i) { voteText[i] = f[3 + 2 * i]; voteN[i] = std::atoi(f[4 + 2 * i].c_str()); } }
 			else if (f[0] == "C" && f.size() >= 3) chat.push_back({f[1], f[2]});
 			else if (f[0] == "G" && f.size() >= 2) countdown = std::atoi(f[1].c_str());
+			else if (f[0] == "V" && f.size() >= 2) { const bool v = f[1] == "1"; if (v != sichtbarAlt) { sichtbarAlt = v; bildschirm.store(v); } }
+			else if (f[0] == "O" && f.size() >= 5) { modusNr = std::atoi(f[1].c_str()); maxSp = std::atoi(f[2].c_str()); modusName = f[3]; karteName = f[4]; }
 		}
 		zuletztMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 	}
@@ -2471,6 +2487,565 @@ namespace koop
 	}
 }
 
+namespace koop {
+	// ===================== full-screen online lobby (Halo 3 / Reach style, TS2 look) =====================
+	// Drawn by the bridge over the game's menu background when the player opens "Co-op Lobby" in the Online+ menu.
+	// Left: lobby title, party leader, status, playlist card (mode + map), actions. Right: roster with emblems, team
+	// colours, rank, ping, ready/host marks, open slots. Gamepad: d-pad/stick + X select, triangle/circle back.
+	// Everything scales with the window: a 16:9 safe area centred in any aspect ratio (4:3 ... 32:9).
+	std::atomic<bool> bildschirm{false};
+	int modusNr = 0, maxSp = 2; std::string modusName = "Story Co-op", karteName;
+
+	static ImU32 farbeAus(const std::string& s, int helligkeit)
+	{
+		unsigned h = 2166136261u; for (unsigned char ch : s) h = (h ^ ch) * 16777619u;
+		static const ImU32 kF[] = {IM_COL32(230, 90, 60, 255), IM_COL32(70, 170, 255, 255), IM_COL32(250, 200, 60, 255), IM_COL32(120, 220, 110, 255),
+			IM_COL32(200, 110, 240, 255), IM_COL32(60, 220, 210, 255), IM_COL32(250, 140, 40, 255), IM_COL32(240, 240, 240, 255)};
+		ImU32 c = kF[h % 8];
+		if (helligkeit < 100) { ImVec4 v = ImGui::ColorConvertU32ToFloat4(c); v.x *= helligkeit / 100.f; v.y *= helligkeit / 100.f; v.z *= helligkeit / 100.f; c = ImGui::ColorConvertFloat4ToU32(v); }
+		return c;
+	}
+	// player emblem: background disc in one colour, a symbol (star, skull-ish, chevron, ring) in another, from the name
+	static void emblem(ImDrawList* dl, ImVec2 c, float r, const std::string& name)
+	{
+		unsigned h = 5381u; for (unsigned char ch : name) h = h * 33u + ch;
+		dl->AddCircleFilled(c, r, farbeAus(name, 45), 24);
+		dl->AddCircle(c, r, IM_COL32(255, 255, 255, 120), 24, 1.2f);
+		const ImU32 v = farbeAus(name + "#", 100);
+		switch (h % 4)
+		{
+		case 0: { ImVec2 p[10]; for (int i = 0; i < 10; ++i) { const float a = -1.5708f + i * 0.6283f, rr = (i & 1) ? r * 0.32f : r * 0.72f; p[i] = ImVec2(c.x + std::cos(a) * rr, c.y + std::sin(a) * rr); } dl->AddConvexPolyFilled(p, 10, v); break; }
+		case 1: dl->AddCircleFilled(ImVec2(c.x, c.y - r * 0.1f), r * 0.45f, v, 16); dl->AddRectFilled(ImVec2(c.x - r * 0.28f, c.y + r * 0.2f), ImVec2(c.x + r * 0.28f, c.y + r * 0.55f), v);
+			dl->AddCircleFilled(ImVec2(c.x - r * 0.17f, c.y - r * 0.12f), r * 0.12f, farbeAus(name, 45)); dl->AddCircleFilled(ImVec2(c.x + r * 0.17f, c.y - r * 0.12f), r * 0.12f, farbeAus(name, 45)); break;
+		case 2: for (int i = 0; i < 2; ++i) { const float y = c.y - r * 0.25f + i * r * 0.38f; dl->AddTriangleFilled(ImVec2(c.x - r * 0.6f, y), ImVec2(c.x, y + r * 0.35f), ImVec2(c.x + r * 0.6f, y), v); } break;
+		default: dl->AddCircle(c, r * 0.5f, v, 20, r * 0.22f); break;
+		}
+	}
+	// rank mark: one to three chevrons, colour by rank tier (5 levels per rank)
+	static void rangZeichen(ImDrawList* dl, ImVec2 p, float s, int level)
+	{
+		const ImU32 c = ps2xRangFarbe(level);
+		const int n = 1 + std::min(2, (level % 15) / 5);
+		for (int i = 0; i < n; ++i) { const float y = p.y + s * 0.15f + i * s * 0.27f; dl->AddTriangleFilled(ImVec2(p.x, y), ImVec2(p.x + s * 0.5f, y + s * 0.25f), ImVec2(p.x + s, y), c); }
+		if (level >= 50) dl->AddCircleFilled(ImVec2(p.x + s * 0.5f, p.y + s * 0.95f), s * 0.12f, IM_COL32(255, 220, 90, 255));
+	}
+	static void tasteSymbol(ImDrawList* dl, ImVec2 c, float r, int art)   // 0 = X (cross), 1 = triangle
+	{
+		dl->AddCircleFilled(c, r, IM_COL32(20, 24, 36, 230)); dl->AddCircle(c, r, IM_COL32(190, 200, 230, 200), 16, 1.2f);
+		if (art == 0) { const float k = r * 0.45f; dl->AddLine(ImVec2(c.x - k, c.y - k), ImVec2(c.x + k, c.y + k), IM_COL32(130, 170, 255, 255), 2.f); dl->AddLine(ImVec2(c.x - k, c.y + k), ImVec2(c.x + k, c.y - k), IM_COL32(130, 170, 255, 255), 2.f); }
+		else dl->AddTriangle(ImVec2(c.x, c.y - r * 0.5f), ImVec2(c.x - r * 0.5f, c.y + r * 0.4f), ImVec2(c.x + r * 0.5f, c.y + r * 0.4f), IM_COL32(110, 230, 160, 255), 2.f);
+	}
+	static bool teamModus(int nr) { return nr == 3 || nr == 4; }   // Team Deathmatch, Capture the Bag
+
+	// one action row in the left panel (Halo style: plain text, highlighted bar when selected). The selection is our
+	// own (d-pad/stick or arrows move it, X/Enter or a click activates), so it works without ImGui's nav focus.
+	static int s_wahl = 0, s_zeilenN = 0, s_zeileNr = 0; static bool s_aktiv = false;
+	static bool aktionZeile(const char* id, const std::string& text, float w, float h, bool an = true)
+	{
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		const ImVec2 p = ImGui::GetCursorScreenPos();
+		const int nr = s_zeileNr++;
+		ImGui::BeginDisabled(!an);
+		const bool klick = ImGui::InvisibleButton(id, ImVec2(w, h));
+		ImGui::EndDisabled();
+		if (ImGui::IsItemHovered() && an) s_wahl = nr;
+		const bool f = s_wahl == nr;
+		const bool r = klick || (f && s_aktiv);
+		ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h));
+		if (f && an)
+		{
+			const float t = static_cast<float>(ImGui::GetTime());
+			dl->AddRectFilledMultiColor(p, ImVec2(p.x + w, p.y + h), IM_COL32(60, 140, 255, 200), IM_COL32(40, 90, 200, 60), IM_COL32(40, 90, 200, 60), IM_COL32(60, 140, 255, 200));
+			dl->AddRectFilled(p, ImVec2(p.x + 4.f, p.y + h), IM_COL32(255, 210, 90, static_cast<int>(200 + 55 * std::sin(t * 5.f))));
+		}
+		ImGui::PushFont(ps2xschrift::kopf(), h * 0.50f);
+		const float th = ImGui::GetFontSize();
+		dl->AddText(ImVec2(p.x + h * 0.45f, p.y + (h - th) * 0.5f), !an ? IM_COL32(110, 120, 140, 255) : f ? IM_COL32(255, 255, 255, 255) : IM_COL32(200, 215, 240, 255), text.c_str());
+		ImGui::PopFont();
+		return r && an;
+	}
+	// text that has to fit a width: shrink the font until it does
+	static void textPassend(ImDrawList* dl, ImFont* f, float gr, ImVec2 p, float maxW, ImU32 c, const char* t)
+	{
+		ImGui::PushFont(f, gr);
+		const float w = ImGui::CalcTextSize(t).x;
+		if (w > maxW) { ImGui::PopFont(); ImGui::PushFont(f, gr * maxW / w); }
+		dl->AddText(p, c, t);
+		ImGui::PopFont();
+	}
+
+	static float rx0(ImVec2 o, float bw) { return o.x + bw * 0.57f; }
+	// returns false when the screen was closed
+	bool bildschirmZeichnen()
+	{
+		int z, cd; bool host; std::string st; std::vector<Lobby> lb; std::vector<Mitglied> mg; std::vector<Zeile> ch; int mn, mx; std::string mname, kname;
+		{ std::lock_guard<std::mutex> lk(m); z = zustand; cd = countdown; host = ichHost; st = status; lb = lobbys; mg = mitglieder; ch = chat; mn = modusNr; mx = maxSp; mname = modusName; kname = karteName; }
+		const ImVec2 ds = ImGui::GetIO().DisplaySize;
+		// 16:9 safe area, centred (on 21:9/32:9 the sides stay free, on 4:3 it shrinks to the width)
+		const float bw = std::min(ds.x, ds.y * 16.f / 9.f), bh = bw * 9.f / 16.f;
+		const ImVec2 o((ds.x - bw) * 0.5f, (ds.y - bh) * 0.5f);
+		const float u = bh / 100.f;   // 1 unit = 1 % of the safe area height
+		ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(ds);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+		ImGui::Begin("##haloLobby", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		const float t = static_cast<float>(ImGui::GetTime());
+		// darken the game's menu behind, blue vignette like the TS2 frontend
+		dl->AddRectFilledMultiColor(ImVec2(0, 0), ds, IM_COL32(4, 8, 24, 212), IM_COL32(10, 18, 48, 196), IM_COL32(6, 10, 30, 220), IM_COL32(2, 4, 14, 236));   // the TS2 backdrop shows faintly, its menu box does not distract
+		// input for the own selection (counted rows of the last frame)
+		{
+			const bool runter = ImGui::IsKeyPressed(ImGuiKey_GamepadDpadDown) || ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadLStickDown);
+			const bool hoch = ImGui::IsKeyPressed(ImGuiKey_GamepadDpadUp) || ImGui::IsKeyPressed(ImGuiKey_UpArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadLStickUp);
+			if (s_zeilenN > 0) { if (runter) s_wahl = (s_wahl + 1) % s_zeilenN; if (hoch) s_wahl = (s_wahl + s_zeilenN - 1) % s_zeilenN; s_wahl = std::clamp(s_wahl, 0, s_zeilenN - 1); }
+			s_aktiv = ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown, false) || ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
+			s_zeileNr = 0;
+		}
+		// moving scan line, a TS2 touch
+		{ const float y = std::fmod(t * 0.08f, 1.f) * ds.y; dl->AddRectFilled(ImVec2(0, y), ImVec2(ds.x, y + 2.f), IM_COL32(90, 160, 255, 25)); }
+
+		// ---------------- left panel ----------------
+		const float lx = o.x + bw * 0.05f, lw = bw * 0.40f;
+		float y = o.y + 6.f * u;
+		dl->AddRectFilled(ImVec2(lx - 2.f * u, o.y + 4.f * u), ImVec2(lx + lw + 2.f * u, o.y + bh - 3.f * u), IM_COL32(6, 12, 34, 150));
+		dl->AddRectFilledMultiColor(ImVec2(rx0(o, bw) - 1.f * u, o.y + 3.f * u), ImVec2(rx0(o, bw) + bw * 0.38f + 1.f * u, o.y + 7.5f * u), IM_COL32(40, 80, 160, 200), IM_COL32(20, 40, 90, 120), IM_COL32(20, 40, 90, 120), IM_COL32(40, 80, 160, 200));
+		ImGui::PushFont(ps2xschrift::kopf(), 6.2f * u);
+		const char* titel = z >= 5 ? tr("MATCH STARTING") : z >= 3 ? tr("ONLINE LOBBY") : tr("FIND A LOBBY");
+		dl->AddText(ImVec2(lx, y), IM_COL32(240, 245, 255, 255), titel);
+		ImGui::PopFont();
+		y += 7.5f * u;
+		ImGui::PushFont(ps2xschrift::text(), 3.0f * u);
+		if (z >= 3)
+		{
+			std::string leiter = "-"; for (const auto& x : mg) if (x.host) leiter = x.name;
+			// crown
+			const ImVec2 k(lx, y + 0.4f * u); const float s = 2.2f * u;
+			const ImVec2 kr[5] = {ImVec2(k.x, k.y + s), ImVec2(k.x, k.y + s * 0.25f), ImVec2(k.x + s * 0.5f, k.y + s * 0.6f), ImVec2(k.x + s, k.y + s * 0.25f), ImVec2(k.x + s, k.y + s)};
+			dl->AddConcavePolyFilled(kr, 5, IM_COL32(255, 205, 80, 255));
+			dl->AddText(ImVec2(lx + 3.f * u, y), IM_COL32(255, 205, 80, 255), fmt::format("{} {}", leiter, tr("is the Party Leader")).c_str());
+		}
+		else dl->AddText(ImVec2(lx, y), IM_COL32(255, 205, 80, 255), st.empty() ? tr("Story co-op and arcade online") : tr(st.c_str()));
+		y += 4.5f * u;
+		dl->AddLine(ImVec2(lx, y), ImVec2(lx + lw, y), IM_COL32(120, 170, 255, 90), 1.f);
+		y += 1.5f * u;
+		// status rows (label left, value right)
+		auto zeile = [&](const char* k, const std::string& v, ImU32 fv) {
+			dl->AddText(ImVec2(lx, y), IM_COL32(150, 170, 210, 255), tr(k));
+			const float vw = ImGui::CalcTextSize(v.c_str()).x;
+			dl->AddText(ImVec2(lx + lw - vw, y), fv, v.c_str());
+			y += 3.6f * u; };
+		if (z >= 3)
+		{
+			int bereit = 0; for (const auto& x : mg) bereit += x.bereit ? 1 : 0;
+			if (z == 4) zeile("STARTING IN:", fmt::format("{} {}", std::max(cd, 0), tr("SECONDS")), IM_COL32(255, 230, 120, 255));
+			else zeile("READY:", fmt::format("{} / {}", bereit, static_cast<int>(mg.size())), IM_COL32(255, 255, 255, 255));
+			zeile("PLAYERS:", fmt::format("{} / {}", static_cast<int>(mg.size()), mx), IM_COL32(255, 255, 255, 255));
+			ImGui::PushFont(ps2xschrift::text(), 2.6f * u);
+			dl->AddText(ImVec2(lx, y), IM_COL32(170, 190, 225, 220), tr(st.c_str()));
+			ImGui::PopFont();
+			y += 4.f * u;
+		}
+		ImGui::PopFont();
+		// playlist card (mode + map), like "SOCIAL BIG TEAM"
+		if (z >= 3)
+		{
+			ImGui::PushFont(ps2xschrift::kopf(), 2.8f * u);
+			dl->AddText(ImVec2(lx, y), IM_COL32(220, 230, 255, 255), mn == 0 ? tr("STORY CO-OP") : tr("ARCADE ONLINE"));
+			ImGui::PopFont();
+			y += 4.f * u;
+			const ImVec2 a(lx, y), b(lx + lw, y + 22.f * u);
+			// image area: era-tinted gradient with grid and a big emblem-like mode icon
+			const unsigned hk = static_cast<unsigned>(std::hash<std::string>{}(kname + mname));
+			const ImU32 c1 = farbeAus(kname + mname, 55), c2 = IM_COL32(8, 12, 30, 255);
+			dl->AddRectFilledMultiColor(a, b, c1, c2, c2, c1);
+			for (int i = 1; i < 12; ++i) { const float gx = a.x + (b.x - a.x) * i / 12.f; dl->AddLine(ImVec2(gx, a.y), ImVec2(gx, b.y), IM_COL32(255, 255, 255, 12), 1.f); }
+			for (int i = 1; i < 6; ++i) { const float gy = a.y + (b.y - a.y) * i / 6.f; dl->AddLine(ImVec2(a.x, gy), ImVec2(b.x, gy), IM_COL32(255, 255, 255, 12), 1.f); }
+			emblem(dl, ImVec2(a.x + 11.f * u, (a.y + b.y) * 0.5f), 8.f * u, mname + std::to_string(hk % 7));
+			std::string grossName = mn == 0 ? std::string(tr("THE STORY")) : kname; for (char& c : grossName) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+			textPassend(dl, ps2xschrift::kopf(), 4.4f * u, ImVec2(a.x + 22.f * u, a.y + 6.f * u), (b.x - a.x) - 24.f * u, IM_COL32(255, 255, 255, 240), grossName.c_str());
+			ImGui::PushFont(ps2xschrift::text(), 2.8f * u);
+			dl->AddText(ImVec2(a.x + 22.f * u, a.y + 12.f * u), IM_COL32(200, 220, 255, 230), mn == 0 ? tr("Cortez and Hart, all ten missions") : fmt::format("{} {}", mx, tr("players max")).c_str());
+			ImGui::PopFont();
+			dl->AddRect(a, b, IM_COL32(140, 190, 255, 160), 0.f, 1.5f);
+			y = b.y + 1.2f * u;
+			ImGui::PushFont(ps2xschrift::text(), 3.0f * u);
+			dl->AddText(ImVec2(lx, y), IM_COL32(240, 245, 255, 255), mn == 0 ? tr("Story Co-op, mission picked in game") : fmt::format("{} {} {}", mname, tr("on"), kname).c_str());
+			ImGui::PopFont();
+			y += 5.f * u;
+		}
+		// actions
+		ImGui::SetCursorScreenPos(ImVec2(lx, y));
+		const float ah = 4.6f * u;
+		bool zu = false;
+		if (z <= 1)
+		{
+			if (aktionZeile("##on", z == 1 ? tr("Connecting ...") : tr("Go Online"), lw, ah, z == 0)) befehl("connect");
+			ImGui::SetItemDefaultFocus();
+		}
+		else if (z == 2)
+		{
+			if (aktionZeile("##neu", tr("Create Lobby"), lw, ah)) befehl("create");
+			ImGui::SetItemDefaultFocus();
+			for (const auto& l : lb)
+				if (aktionZeile(("##j" + l.session).c_str(), fmt::format("{}   {} {}/{}   {} ms", tr("Join"), l.host, l.spieler, 2, std::max(l.ping, 0)), lw, ah, true)) befehl("join " + l.session);
+			if (lb.empty()) { ImGui::PushFont(ps2xschrift::text(), 2.8f * u); ImGui::SetCursorScreenPos(ImVec2(lx + 2.f * u, ImGui::GetCursorScreenPos().y + 1.f * u)); ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.85f, 1.f), "%s", tr("No open lobby yet. Create one and invite a friend.")); ImGui::PopFont(); }
+		}
+		else if (z == 3)
+		{
+			bool ich = false; for (const auto& x : mg) if (!x.host) ich = ich || x.bereit;
+			if (host)
+			{
+				bool alle = mg.size() >= 2; for (const auto& x : mg) alle = alle && x.bereit;
+				if (aktionZeile("##start", mn == 0 ? tr("Start Co-op") : tr("Start Match"), lw, ah, alle)) befehl("start");
+				ImGui::SetItemDefaultFocus();
+				if (aktionZeile("##mode", fmt::format("{}: {}", tr("Change Mode"), mname), lw, ah)) befehl("mode");
+				if (aktionZeile("##map", fmt::format("{}: {}", tr("Change Map"), mn == 0 ? std::string("-") : kname), lw, ah, mn != 0)) befehl("map");
+			}
+			else
+			{
+				if (aktionZeile("##ready", ich ? tr("Not Ready") : tr("Ready"), lw, ah)) befehl(ich ? "ready 0" : "ready 1");
+				ImGui::SetItemDefaultFocus();
+			}
+			{
+				const int vor = s_zeileNr;
+				if (aktionZeile("##figur", fmt::format("{}: {}", tr("Character"), meineFigur), lw, ah)) befehl("figur +");
+				if (s_wahl == vor && (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft) || ImGui::IsKeyPressed(ImGuiKey_LeftArrow))) befehl("figur -");
+				if (s_wahl == vor && (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight) || ImGui::IsKeyPressed(ImGuiKey_RightArrow))) befehl("figur +");
+			}
+			if (aktionZeile("##leave", tr("Leave Lobby"), lw, ah)) befehl("leave");
+		}
+		s_zeilenN = s_zeileNr;
+		// footer button hints
+		{
+			const float fy = o.y + bh - 6.f * u;
+			ImGui::PushFont(ps2xschrift::text(), 3.0f * u);
+			tasteSymbol(dl, ImVec2(lx + 1.4f * u, fy + 1.6f * u), 1.4f * u, 0);
+			dl->AddText(ImVec2(lx + 3.6f * u, fy), IM_COL32(230, 235, 250, 255), tr("Select"));
+			tasteSymbol(dl, ImVec2(lx + 16.f * u, fy + 1.6f * u), 1.4f * u, 1);
+			dl->AddText(ImVec2(lx + 18.2f * u, fy), IM_COL32(230, 235, 250, 255), tr("Back"));
+			ImGui::PopFont();
+		}
+
+		// ---------------- right panel: roster ----------------
+		const float rx = o.x + bw * 0.57f, rw = bw * 0.38f;
+		float ry = o.y + 8.f * u;
+		ImGui::PushFont(ps2xschrift::text(), 3.0f * u);
+		if (z >= 3)
+		{
+			dl->AddText(ImVec2(rx + rw * 0.35f, ry - 4.f * u), IM_COL32(220, 230, 255, 255), fmt::format("{} {}", static_cast<int>(mg.size()), tr("players")).c_str());
+			const float zh = 6.4f * u;
+			const int slots = std::max(mx, static_cast<int>(mg.size()));
+			for (int i = 0; i < slots; ++i)
+			{
+				const ImVec2 a(rx, ry), b(rx + rw, ry + zh - 0.5f * u);
+				if (i < static_cast<int>(mg.size()))
+				{
+					const Mitglied& x = mg[static_cast<size_t>(i)];
+					const bool rot = teamModus(mn) && (i % 2 == 1);
+					const ImU32 c1 = rot ? IM_COL32(150, 30, 40, 230) : IM_COL32(30, 70, 150, 230), c2 = rot ? IM_COL32(90, 15, 25, 200) : IM_COL32(15, 35, 90, 200);
+					dl->AddRectFilledMultiColor(a, b, c1, c2, c2, c1);
+					dl->AddRect(a, b, x.bereit ? IM_COL32(120, 255, 150, 150) : IM_COL32(255, 255, 255, 40), 0.f, 1.f);
+					emblem(dl, ImVec2(a.x + zh * 0.5f, a.y + zh * 0.47f), zh * 0.38f, x.name);
+					ImGui::PushFont(ps2xschrift::text(), 3.1f * u);
+					dl->AddText(ImVec2(a.x + zh * 1.05f, a.y + 0.2f * u), IM_COL32(255, 255, 255, 255), x.name.c_str());
+					ImGui::PopFont();
+					ImGui::PushFont(ps2xschrift::text(), 2.0f * u);
+					dl->AddText(ImVec2(a.x + zh * 1.05f, a.y + 3.6f * u), ps2xRangFarbe(x.level), fmt::format("{}   {}  {} {}", x.figur, ps2xRang(x.level), tr("Level"), x.level).c_str());
+					ImGui::PopFont();
+					// right side: host crown / ready tick, rank chevrons, ping bars
+					float px = b.x - 3.f * u;
+					pingBalken(dl, ImVec2(px - 1.5f * u, a.y + 1.4f * u), 2.4f * u, x.ping);
+					px -= 4.5f * u;
+					rangZeichen(dl, ImVec2(px - 2.f * u, a.y + 1.f * u), 2.6f * u, x.level);
+					px -= 5.f * u;
+					if (x.host) { const ImVec2 k(px - 2.f * u, a.y + 1.4f * u); const float s = 2.2f * u; const ImVec2 kr[5] = {ImVec2(k.x, k.y + s), ImVec2(k.x, k.y + s * 0.25f), ImVec2(k.x + s * 0.5f, k.y + s * 0.6f), ImVec2(k.x + s, k.y + s * 0.25f), ImVec2(k.x + s, k.y + s)}; dl->AddConcavePolyFilled(kr, 5, IM_COL32(255, 205, 80, 255)); }
+					else if (x.bereit) { const ImVec2 k(px - 2.f * u, a.y + 2.6f * u); dl->AddLine(k, ImVec2(k.x + 0.8f * u, k.y + 0.9f * u), IM_COL32(120, 255, 150, 255), 2.5f); dl->AddLine(ImVec2(k.x + 0.8f * u, k.y + 0.9f * u), ImVec2(k.x + 2.4f * u, k.y - 1.f * u), IM_COL32(120, 255, 150, 255), 2.5f); }
+				}
+				else
+				{
+					dl->AddRectFilled(a, b, IM_COL32(20, 26, 44, 150));
+					dl->AddRect(a, b, IM_COL32(255, 255, 255, 25), 0.f, 1.f);
+					const float al = 0.5f + 0.25f * std::sin(t * 2.f + i);
+					dl->AddText(ImVec2(a.x + zh * 1.05f, a.y + 1.2f * u), IM_COL32(150, 170, 210, static_cast<int>(255 * al)), tr("Open slot"));
+				}
+				ry += zh;
+			}
+			// last chat lines under the roster, small and faint like Halo's voice indicators
+			ry += 2.f * u;
+			ImGui::PushFont(ps2xschrift::text(), 2.4f * u);
+			const size_t ab = ch.size() > 4 ? ch.size() - 4 : 0;
+			for (size_t i = ab; i < ch.size(); ++i)
+			{
+				std::string zl = ch[i].name == "*" ? std::string(tr(ch[i].text.c_str())) : ch[i].name + ": " + ch[i].text;
+				dl->AddText(ImVec2(rx, ry), ch[i].name == "*" ? IM_COL32(140, 170, 220, 200) : IM_COL32(230, 235, 250, 230), zl.c_str());
+				ry += 3.f * u;
+			}
+			ImGui::PopFont();
+		}
+		else
+		{
+			// browsing: a big hint card on the right
+			ImGui::PushFont(ps2xschrift::kopf(), 3.4f * u);
+			dl->AddText(ImVec2(rx, ry), IM_COL32(220, 230, 255, 255), tr("HOW IT WORKS"));
+			ImGui::PopFont();
+			ry += 6.f * u;
+			const char* kInfo[] = {"Create a lobby or join one from the list.", "Story Co-op: two players, Cortez and Hart.", "Arcade: Deathmatch, Capture the Bag and more, up to 8.", "Everyone plays on his own PC, no port forwarding."};
+			for (const char* s : kInfo) { dl->AddCircleFilled(ImVec2(rx + 0.8f * u, ry + 1.6f * u), 0.5f * u, IM_COL32(255, 205, 80, 255)); dl->AddText(ImVec2(rx + 2.5f * u, ry), IM_COL32(210, 220, 245, 240), tr(s)); ry += 4.2f * u; }
+		}
+		ImGui::PopFont();
+		// back: circle/triangle or Escape closes the screen (the game's Online+ menu is behind it)
+		if (z != 4 && (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))) zu = true;
+		if (z >= 5) zu = true;   // arcade match: the game's menus are driven now (lobby plan), the screen steps aside
+		ImGui::End();
+		ImGui::PopStyleVar();
+		return !zu;
+	}
+	// ===================== the lobby screen inside the game (TS2 frontend look) =====================
+	// The game shows its own screen (animated backdrop, banner "Online Lobby", footer "X Select / triangle Back");
+	// this draws the two lobby boxes into the game picture, in the style of the TS2 menu boxes: deep indigo glass,
+	// rounded corners, a light blue glowing rim, the light blue selection band and lavender text of the game's menus.
+	// Layout follows Halo 3's lobby (party on the right, playlist and actions on the left), sized from the game picture.
+	static void ts2Box(ImDrawList* dl, ImVec2 a, ImVec2 b, float r, float t)
+	{
+		dl->AddRectFilledMultiColor(ImVec2(a.x + r * 0.3f, a.y + r * 0.3f), ImVec2(b.x - r * 0.3f, b.y - r * 0.3f), IM_COL32(26, 20, 62, 236), IM_COL32(34, 26, 78, 236), IM_COL32(16, 12, 40, 240), IM_COL32(12, 10, 32, 240));
+		dl->AddRectFilled(a, b, IM_COL32(18, 14, 46, 120), r);
+		const float puls = 0.75f + 0.25f * std::sin(t * 1.6f);
+		for (int i = 4; i >= 1; --i) dl->AddRect(ImVec2(a.x - i, a.y - i), ImVec2(b.x + i, b.y + i), IM_COL32(80, 140, 255, static_cast<int>(28 * puls / i)), r + i, 3.0f);
+		dl->AddRect(a, b, IM_COL32(120, 170, 255, static_cast<int>(230 * puls)), r, 2.2f);
+		dl->AddRect(ImVec2(a.x + 3, a.y + 3), ImVec2(b.x - 3, b.y - 3), IM_COL32(70, 110, 220, 90), r - 2, 1.0f);
+	}
+	static bool ts2Zeile(const char* id, const std::string& text, float x, float y, float w, float h, bool an = true)
+	{
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		ImGui::SetCursorScreenPos(ImVec2(x, y));
+		const int nr = s_zeileNr++;
+		ImGui::BeginDisabled(!an);
+		const bool klick = ImGui::InvisibleButton(id, ImVec2(w, h));
+		ImGui::EndDisabled();
+		if (ImGui::IsItemHovered() && an) s_wahl = nr;
+		const bool f = s_wahl == nr;
+		if (f)   // the game's selection band: light blue, brighter in the middle
+		{
+			dl->AddRectFilledMultiColor(ImVec2(x, y), ImVec2(x + w * 0.5f, y + h), IM_COL32(40, 60, 150, 120), IM_COL32(70, 100, 210, 220), IM_COL32(70, 100, 210, 220), IM_COL32(40, 60, 150, 120));
+			dl->AddRectFilledMultiColor(ImVec2(x + w * 0.5f, y), ImVec2(x + w, y + h), IM_COL32(70, 100, 210, 220), IM_COL32(40, 60, 150, 120), IM_COL32(40, 60, 150, 120), IM_COL32(70, 100, 210, 220));
+		}
+		ImGui::PushFont(ps2xschrift::kopf(), h * 0.56f);
+		const ImVec2 ts = ImGui::CalcTextSize(text.c_str());
+		dl->AddText(ImVec2(x + (w - ts.x) * 0.5f, y + (h - ts.y) * 0.5f), !an ? IM_COL32(110, 105, 140, 255) : f ? IM_COL32(150, 220, 255, 255) : IM_COL32(225, 220, 245, 255), text.c_str());
+		ImGui::PopFont();
+		return (klick || (f && s_aktiv)) && an;
+	}
+
+	void ts2LobbyZeichnen()
+	{
+		int z, cd; bool host; std::string st; std::vector<Lobby> lb; std::vector<Mitglied> mg; std::vector<Zeile> ch; int mn, mx; std::string mname, kname, figur;
+		bool vAn; int vSek, vMeine, vN[3]; std::string vText[3];
+		{ std::lock_guard<std::mutex> lk(m); z = zustand; cd = countdown; host = ichHost; st = status; lb = lobbys; mg = mitglieder; ch = chat; mn = modusNr; mx = maxSp; mname = modusName; kname = karteName; figur = meineFigur;
+		  vAn = voteAn; vSek = voteSek; vMeine = voteMeine; for (int i = 0; i < 3; ++i) { vN[i] = voteN[i]; vText[i] = voteText[i]; } }
+		const ImGuiIO& io = ImGui::GetIO();
+		// the game picture in the window
+		float r4[4] = {0, 0, 0, 0}; ps2xSpielRect(r4);
+		const float ww = g_gs_device ? static_cast<float>(g_gs_device->GetWindowWidth()) : io.DisplaySize.x;
+		const float sk = ww > 0.0f ? io.DisplaySize.x / ww : 1.0f;
+		ImVec2 go(0, 0), gs = io.DisplaySize;
+		if (r4[2] - r4[0] > 16.0f && r4[3] - r4[1] > 16.0f) { go = ImVec2(r4[0] * sk, r4[1] * sk); gs = ImVec2((r4[2] - r4[0]) * sk, (r4[3] - r4[1]) * sk); }
+		// the frontend's own area: 4:3 menus centred, on wide pictures the boxes may use up to 16:9
+		const float bw = std::min(gs.x, gs.y * 16.f / 9.f) * 0.94f, u = gs.y / 100.f;
+		const float x0 = go.x + (gs.x - bw) * 0.5f;
+		const float top = go.y + gs.y * 0.215f, unten = go.y + gs.y * 0.885f;   // below the banner, above the footer bar
+		ImGui::SetNextWindowPos(ImVec2(0, 0)); ImGui::SetNextWindowSize(io.DisplaySize);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+		ImGui::Begin("##ts2Lobby", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		const float t = static_cast<float>(ImGui::GetTime());
+		// selection input (own rows)
+		{
+			const bool runter = ImGui::IsKeyPressed(ImGuiKey_GamepadDpadDown) || ImGui::IsKeyPressed(ImGuiKey_DownArrow);
+			const bool hoch = ImGui::IsKeyPressed(ImGuiKey_GamepadDpadUp) || ImGui::IsKeyPressed(ImGuiKey_UpArrow);
+			if (s_zeilenN > 0) { if (runter) s_wahl = (s_wahl + 1) % s_zeilenN; if (hoch) s_wahl = (s_wahl + s_zeilenN - 1) % s_zeilenN; s_wahl = std::clamp(s_wahl, 0, s_zeilenN - 1); }
+			s_aktiv = ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown, false) || ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
+			s_zeileNr = 0;
+		}
+		const float rad = 2.2f * u;
+		// ---------------- left box: party, status, playlist, actions ----------------
+		const ImVec2 la(x0, top), lbx(x0 + bw * 0.47f, unten);
+		ts2Box(dl, la, lbx, rad, t);
+		const float lx = la.x + 2.2f * u, lw = (lbx.x - la.x) - 4.4f * u;
+		float y = la.y + 1.8f * u;
+		ImGui::PushFont(ps2xschrift::text(), 2.9f * u);
+		auto zeile = [&](const char* k, const std::string& v, ImU32 fv) {
+			dl->AddText(ImVec2(lx, y), IM_COL32(160, 170, 225, 255), tr(k));
+			const float vw = ImGui::CalcTextSize(v.c_str()).x; dl->AddText(ImVec2(lx + lw - vw, y), fv, v.c_str()); y += 3.5f * u; };
+		if (z >= 3)
+		{
+			std::string leiter = "-"; for (const auto& x : mg) if (x.host) leiter = x.name;
+			const ImVec2 k(lx, y + 0.5f * u); const float s = 2.0f * u;
+			const ImVec2 kr[5] = {ImVec2(k.x, k.y + s), ImVec2(k.x, k.y + s * 0.25f), ImVec2(k.x + s * 0.5f, k.y + s * 0.6f), ImVec2(k.x + s, k.y + s * 0.25f), ImVec2(k.x + s, k.y + s)};
+			dl->AddConcavePolyFilled(kr, 5, IM_COL32(255, 205, 80, 255));
+			dl->AddText(ImVec2(lx + 2.8f * u, y), IM_COL32(255, 205, 80, 255), fmt::format("{} {}", leiter, tr("is the Party Leader")).c_str());
+			y += 4.2f * u;
+			int bereit = 0; for (const auto& x : mg) bereit += x.bereit ? 1 : 0;
+			if (z == 4) zeile("STARTING IN:", fmt::format("{} {}", std::max(cd, 0), tr("SECONDS")), IM_COL32(255, 230, 120, 255));
+			else zeile("READY:", fmt::format("{} / {}", bereit, static_cast<int>(mg.size())), IM_COL32(240, 240, 255, 255));
+			zeile("PLAYERS:", fmt::format("{} / {}", static_cast<int>(mg.size()), mx), IM_COL32(240, 240, 255, 255));
+		}
+		else
+		{
+			dl->AddText(ImVec2(lx, y), IM_COL32(255, 205, 80, 255), st.empty() ? tr("Story co-op and arcade online") : tr(st.c_str()));
+			y += 4.2f * u;
+		}
+		ImGui::PopFont();
+		dl->AddLine(ImVec2(lx, y), ImVec2(lx + lw, y), IM_COL32(110, 150, 255, 110), 1.f);
+		y += 1.4f * u;
+		// playlist card
+		if (z >= 3)
+		{
+			const ImVec2 a(lx, y), b(lx + lw, y + 15.f * u);
+			const ImU32 c1 = farbeAus(kname + mname, 60), c2 = IM_COL32(14, 10, 36, 255);
+			dl->AddRectFilledMultiColor(a, b, c1, c2, c2, c1);
+			for (int i = 1; i < 10; ++i) { const float gx = a.x + (b.x - a.x) * i / 10.f; dl->AddLine(ImVec2(gx, a.y), ImVec2(gx, b.y), IM_COL32(255, 255, 255, 10), 1.f); }
+			emblem(dl, ImVec2(a.x + 7.5f * u, (a.y + b.y) * 0.5f), 5.6f * u, mname + "*");
+			std::string gross = mn == 0 ? std::string(tr("THE STORY")) : kname; for (char& c : gross) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+			textPassend(dl, ps2xschrift::kopf(), 3.6f * u, ImVec2(a.x + 15.f * u, a.y + 3.6f * u), (b.x - a.x) - 16.f * u, IM_COL32(255, 255, 255, 245), gross.c_str());
+			textPassend(dl, ps2xschrift::text(), 2.7f * u, ImVec2(a.x + 15.f * u, a.y + 8.6f * u), (b.x - a.x) - 16.f * u, IM_COL32(190, 205, 255, 235),
+				(mn == 0 ? std::string(tr("Story Co-op, mission picked in game")) : fmt::format("{} {} {}", mname, tr("on"), kname)).c_str());
+			dl->AddRect(a, b, IM_COL32(120, 170, 255, 150), 0.f, 1.2f);
+			y = b.y + 1.6f * u;
+		}
+		// actions as TS2 menu rows
+		const float ah = 4.3f * u;
+		if (z <= 1) { if (ts2Zeile("##on", z == 1 ? tr("Connecting ...") : tr("Go Online"), lx, y, lw, ah, z == 0)) befehl("connect"); y += ah; }
+		else if (z == 2)
+		{
+			if (ts2Zeile("##neu", tr("Create Lobby"), lx, y, lw, ah)) befehl("create");
+			y += ah;
+			for (const auto& l : lb) { if (y > unten - ah * 2.f) break; if (ts2Zeile(("##j" + l.session).c_str(), fmt::format("{}  {}  {}/{}  {} ms", tr("Join"), l.host, l.spieler, 2, std::max(l.ping, 0)), lx, y, lw, ah)) befehl("join " + l.session); y += ah; }
+			if (lb.empty()) { ImGui::PushFont(ps2xschrift::text(), 2.6f * u); const char* hint = tr("No open lobby yet. Create one and invite a friend."); const float tw = ImGui::CalcTextSize(hint).x; dl->AddText(ImVec2(lx + (lw - tw) * 0.5f, y + 1.f * u), IM_COL32(170, 175, 220, 230), hint); ImGui::PopFont(); y += ah; }
+		}
+		else if (z == 3)
+		{
+			bool ich = false; for (const auto& x : mg) if (!x.host) ich = ich || x.bereit;
+			if (host)
+			{
+				bool alle = mg.size() >= 2; for (const auto& x : mg) alle = alle && x.bereit;
+				if (ts2Zeile("##start", mn == 0 ? tr("Start Co-op") : tr("Start Match"), lx, y, lw, ah, alle)) befehl("start"); y += ah;
+				if (ts2Zeile("##mode", fmt::format("{}: {}", tr("Mode"), mname), lx, y, lw, ah)) befehl("mode"); y += ah;
+				if (ts2Zeile("##map", fmt::format("{}: {}", tr("Map"), mn == 0 ? std::string("-") : kname), lx, y, lw, ah, mn != 0)) befehl("map"); y += ah;
+			}
+			else { if (ts2Zeile("##ready", ich ? tr("Not Ready") : tr("Ready"), lx, y, lw, ah)) befehl(ich ? "ready 0" : "ready 1"); y += ah; }
+			if (host && mn != 0) { if (ts2Zeile("##vote", fmt::format("{}: {}", tr("Map Vote"), vAn ? tr("On") : tr("Off")), lx, y, lw, ah)) befehl("votetoggle"); y += ah; }
+			const int vor = s_zeileNr;
+			if (ts2Zeile("##figur", fmt::format("{}: {}", tr("Character"), figur), lx, y, lw, ah)) befehl("figur +"); y += ah;
+			if (s_wahl == vor && (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft) || ImGui::IsKeyPressed(ImGuiKey_LeftArrow))) befehl("figur -");
+			if (s_wahl == vor && (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight) || ImGui::IsKeyPressed(ImGuiKey_RightArrow))) befehl("figur +");
+			if (ts2Zeile("##leave", tr("Leave Lobby"), lx, y, lw, ah)) befehl("leave"); y += ah;
+		}
+		else if (z == 8)
+		{
+			// map vote: three mode/map pairs, votes as gold bars, own vote marked, seconds left
+			ImGui::PushFont(ps2xschrift::kopf(), 2.9f * u);
+			const std::string kopf = fmt::format("{}   {}", tr("VOTE FOR THE NEXT MATCH"), vSek);
+			const float tw = ImGui::CalcTextSize(kopf.c_str()).x; dl->AddText(ImVec2(lx + (lw - tw) * 0.5f, y), IM_COL32(255, 215, 110, 255), kopf.c_str());
+			ImGui::PopFont();
+			y += 4.2f * u;
+			int ges = 0; for (int i = 0; i < 3; ++i) ges += vN[i];
+			for (int i = 0; i < 3; ++i)
+			{
+				const ImVec2 a(lx, y);
+				if (ts2Zeile(("##v" + std::to_string(i)).c_str(), vText[i], lx, y, lw, ah)) befehl("vote " + std::to_string(i));
+				const float anteil = ges > 0 ? static_cast<float>(vN[i]) / static_cast<float>(ges) : 0.f;
+				dl->AddRectFilled(ImVec2(a.x, a.y + ah - 0.5f * u), ImVec2(a.x + lw * anteil, a.y + ah - 0.1f * u), IM_COL32(255, 200, 80, 230));
+				ImGui::PushFont(ps2xschrift::text(), 2.4f * u);
+				const std::string sn = fmt::format("{}", vN[i]); dl->AddText(ImVec2(a.x + lw - ImGui::CalcTextSize(sn.c_str()).x - 0.6f * u, a.y + 0.8f * u), IM_COL32(255, 215, 110, 255), sn.c_str());
+				ImGui::PopFont();
+				if (vMeine == i) dl->AddCircleFilled(ImVec2(a.x + 1.2f * u, a.y + ah * 0.5f), 0.6f * u, IM_COL32(255, 215, 110, 255));
+				y += ah;
+			}
+		}
+		else if (z >= 4)
+		{
+			ImGui::PushFont(ps2xschrift::kopf(), 4.0f * u);
+			const std::string s2 = z == 4 ? fmt::format("{} {}", tr("STARTING IN"), std::max(cd, 0)) : std::string(tr("MATCH STARTING"));
+			const float tw = ImGui::CalcTextSize(s2.c_str()).x; dl->AddText(ImVec2(lx + (lw - tw) * 0.5f, y + 1.f * u), IM_COL32(255, 220, 120, 255), s2.c_str());
+			ImGui::PopFont();
+		}
+		s_zeilenN = s_zeileNr;
+
+		// ---------------- right box: the party ----------------
+		const ImVec2 ra(x0 + bw * 0.50f, top), rb(x0 + bw, unten);
+		ts2Box(dl, ra, rb, rad, t);
+		const float rx = ra.x + 1.8f * u, rw = (rb.x - ra.x) - 3.6f * u;
+		float ry = ra.y + 1.6f * u;
+		ImGui::PushFont(ps2xschrift::kopf(), 2.8f * u);
+		{
+			const std::string kopf = z >= 3 ? fmt::format("{}  {} / {}", tr("PLAYERS"), static_cast<int>(mg.size()), mx) : std::string(tr("HOW IT WORKS"));
+			const float tw = ImGui::CalcTextSize(kopf.c_str()).x;
+			dl->AddText(ImVec2(rx + (rw - tw) * 0.5f, ry), IM_COL32(150, 220, 255, 255), kopf.c_str());
+		}
+		ImGui::PopFont();
+		ry += 4.4f * u;
+		if (z >= 3)
+		{
+			const int slots = std::max(mx, static_cast<int>(mg.size()));
+			const float verf = (unten - 1.6f * u) - ry - (ch.empty() ? 0.f : 8.f * u);
+			const float zh = std::min(6.0f * u, verf / static_cast<float>(std::max(slots, 1)));
+			for (int i = 0; i < slots; ++i)
+			{
+				const ImVec2 a(rx, ry + 0.25f * zh * 0.1f), b(rx + rw, ry + zh - 0.35f * u);
+				if (i < static_cast<int>(mg.size()))
+				{
+					const Mitglied& x = mg[static_cast<size_t>(i)];
+					const bool rot = teamModus(mn) && (i % 2 == 1);
+					dl->AddRectFilledMultiColor(a, b, rot ? IM_COL32(120, 30, 60, 220) : IM_COL32(50, 60, 150, 220), rot ? IM_COL32(70, 16, 40, 160) : IM_COL32(30, 34, 100, 160),
+						rot ? IM_COL32(70, 16, 40, 160) : IM_COL32(30, 34, 100, 160), rot ? IM_COL32(120, 30, 60, 220) : IM_COL32(50, 60, 150, 220));
+					if (x.bereit) dl->AddRect(a, b, IM_COL32(130, 255, 170, 170), 0.f, 1.2f);
+					emblem(dl, ImVec2(a.x + zh * 0.5f, (a.y + b.y) * 0.5f), zh * 0.36f, x.name);
+					ImGui::PushFont(ps2xschrift::text(), std::min(3.0f * u, zh * 0.48f));
+					dl->AddText(ImVec2(a.x + zh * 1.02f, a.y + zh * 0.02f), IM_COL32(245, 245, 255, 255), x.name.c_str());
+					ImGui::PopFont();
+					ImGui::PushFont(ps2xschrift::text(), std::min(2.0f * u, zh * 0.33f));
+					dl->AddText(ImVec2(a.x + zh * 1.02f, a.y + zh * 0.52f), ps2xRangFarbe(x.level), fmt::format("{}   {} {}", x.figur, ps2xRang(x.level), x.level).c_str());
+					ImGui::PopFont();
+					float px = b.x - 1.2f * u - 2.4f * u;
+					pingBalken(dl, ImVec2(px, a.y + zh * 0.22f), std::min(2.4f * u, zh * 0.45f), x.ping);
+					px -= 4.f * u;
+					rangZeichen(dl, ImVec2(px, a.y + zh * 0.15f), std::min(2.6f * u, zh * 0.5f), x.level);
+					px -= 3.4f * u;
+					if (x.host) { const ImVec2 k(px, a.y + zh * 0.25f); const float s = std::min(2.2f * u, zh * 0.4f); const ImVec2 kr[5] = {ImVec2(k.x, k.y + s), ImVec2(k.x, k.y + s * 0.25f), ImVec2(k.x + s * 0.5f, k.y + s * 0.6f), ImVec2(k.x + s, k.y + s * 0.25f), ImVec2(k.x + s, k.y + s)}; dl->AddConcavePolyFilled(kr, 5, IM_COL32(255, 205, 80, 255)); }
+					else if (x.bereit) { const ImVec2 k(px, a.y + zh * 0.45f); dl->AddLine(k, ImVec2(k.x + 0.8f * u, k.y + 0.9f * u), IM_COL32(130, 255, 170, 255), 2.5f); dl->AddLine(ImVec2(k.x + 0.8f * u, k.y + 0.9f * u), ImVec2(k.x + 2.4f * u, k.y - 1.f * u), IM_COL32(130, 255, 170, 255), 2.5f); }
+				}
+				else
+				{
+					dl->AddRectFilled(a, b, IM_COL32(24, 20, 56, 170));
+					ImGui::PushFont(ps2xschrift::text(), std::min(2.6f * u, zh * 0.42f));
+					dl->AddText(ImVec2(a.x + zh * 1.02f, a.y + zh * 0.22f), IM_COL32(150, 150, 210, static_cast<int>(255 * (0.55f + 0.2f * std::sin(t * 2.f + i)))), tr("Open slot"));
+					ImGui::PopFont();
+				}
+				ry += zh;
+			}
+			ry += 1.f * u;
+			ImGui::PushFont(ps2xschrift::text(), 2.3f * u);
+			const size_t ab = ch.size() > 3 ? ch.size() - 3 : 0;
+			for (size_t i = ab; i < ch.size(); ++i)
+			{
+				if (ry > unten - 3.f * u) break;
+				std::string zl = ch[i].name == "*" ? std::string(tr(ch[i].text.c_str())) : ch[i].name + ": " + ch[i].text;
+				for (const char* sx : {" joined the lobby", " left", " lost connection"}) { const size_t n = std::strlen(sx); if (ch[i].name == "*" && ch[i].text.size() > n && ch[i].text.compare(ch[i].text.size() - n, n, sx) == 0) zl = ch[i].text.substr(0, ch[i].text.size() - n) + tr(sx); }
+				dl->AddText(ImVec2(rx, ry), ch[i].name == "*" ? IM_COL32(150, 170, 230, 210) : IM_COL32(230, 230, 250, 235), zl.c_str());
+				ry += 2.9f * u;
+			}
+			ImGui::PopFont();
+		}
+		else
+		{
+			ImGui::PushFont(ps2xschrift::text(), 2.7f * u);
+			const char* kInfo[] = {"Create a lobby or join one from the list.", "Story Co-op: two players, Cortez and Hart.", "Arcade: Deathmatch, Capture the Bag and more, up to 8.", "Everyone plays on his own PC, no port forwarding."};
+			for (const char* s : kInfo) { dl->AddCircleFilled(ImVec2(rx + 0.8f * u, ry + 1.5f * u), 0.45f * u, IM_COL32(255, 205, 80, 255)); textPassend(dl, ps2xschrift::text(), 2.7f * u, ImVec2(rx + 2.4f * u, ry), rw - 2.6f * u, IM_COL32(215, 215, 245, 240), tr(s)); ry += 4.4f * u; }
+			ImGui::PopFont();
+		}
+		ImGui::End();
+		ImGui::PopStyleVar();
+	}
+}
 static bool s_onlineTabWaehlen = false;
 static bool s_opTabWaehlen = false;   // open the menu on the Online+ page
 static bool s_hubModus = false;       // menu shows the Online+ hub (opened from the game's main menu item)
@@ -2835,7 +3410,10 @@ static const int kBotSetsN = 9;
 		}
 		if (!open.load())
 		{
-			s_prevNav = 0;
+			// the game's lobby screen is up (Online+ -> Co-op Lobby): its content, drawn into the game picture; the game
+			// keeps running, its own screen handles triangle = back
+			if (koop::bildschirm.load() && active.load()) { feedInput(); if (!styled) { style(); styled = true; } koop::ts2LobbyZeichnen(); }
+			else s_prevNav = 0;
 			// The first seconds: a subtle hint how to open the menu
 			static const auto s_t0 = std::chrono::steady_clock::now();
 			const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - s_t0).count();
@@ -3133,6 +3711,7 @@ static const int kBotSetsN = 9;
 		}
 		feedInput();
 		if (!styled) { style(); styled = true; }
+
 		ImGuiIO& io = ImGui::GetIO();
 		const ImVec2 ds = io.DisplaySize;
 		// Hintergrund abdunkeln
