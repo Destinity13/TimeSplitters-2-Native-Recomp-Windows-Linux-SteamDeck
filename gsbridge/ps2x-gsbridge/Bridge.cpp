@@ -1245,6 +1245,7 @@ namespace ps2xfeed
 {
 	struct Zeile { std::string killer, opfer; int fl; long long ms; };
 	std::mutex m; std::vector<Zeile> zeilen; std::string tafel;
+	std::string info;                      // header of the scoreboard from the game: "mode\tmap\trules\tlobby" (text 6), empty outside lobby matches
 	std::atomic<bool> tab{false};          // Tab held (keyboard) -> Online+ scoreboard
 	std::atomic<long long> tafelMs{0};     // last scoreboard data from the game (= a match is running)
 	bool imMatch() { return ps2xosd::jetztMs() - tafelMs.load() < 2000; }
@@ -3561,8 +3562,8 @@ static const int kBotSetsN = 9;
 				ImDrawList* dl = ImGui::GetForegroundDrawList();
 				ps2xImSpiel spiel(dl); const ImVec2 ds = spiel.ds;
 				const long long jetzt = ps2xosd::jetztMs();
-				std::vector<ps2xfeed::Zeile> zl; std::string tafel;
-				{ std::lock_guard<std::mutex> lk(ps2xfeed::m); zl = ps2xfeed::zeilen; tafel = ps2xfeed::tafel; }
+				std::vector<ps2xfeed::Zeile> zl; std::string tafel, tafelInfo;
+				{ std::lock_guard<std::mutex> lk(ps2xfeed::m); zl = ps2xfeed::zeilen; tafel = ps2xfeed::tafel; tafelInfo = ps2xfeed::info; }
 				ImFont* tf = ps2xschrift::fett(); if (!tf) tf = ImGui::GetFont();
 				const float fs = std::max(14.0f, ds.y * 0.028f), pad = fs * 0.35f;
 				float y = ds.y * 0.205f;
@@ -3588,11 +3589,18 @@ static const int kBotSetsN = 9;
 					txt(o, mitA((z.fl & 2) ? IM_COL32(255, 210, 90, 255) : IM_COL32(235, 235, 235, 255)), so);
 					y += fs + pad + fs * 0.25f;
 				}
-				// scoreboard (hold Select on the pad or Tab on the keyboard) - replaces the game's own score screen in Online+
+				// scoreboard (hold Select on the pad or Tab on the keyboard) - replaces the game's own score screen in Online+.
+				// Look of the in-game online lobby: dark navy panel, blue glowing edge, header bar with mode and map.
 				const u32 b = ps2xosd::btns.load();
 				static const bool tafelImmer = std::getenv("PS2XGS_TAFEL_IMMER") != nullptr;   // tests: always show it
-				if (((b & 1u) || ps2xfeed::tab.load() || tafelImmer) && ps2xfeed::imMatch())
+				static long long tafelAuf = 0;   // ms the board was opened (fade/slide in)
+				const bool tafelAn = ((b & 1u) || ps2xfeed::tab.load() || tafelImmer) && ps2xfeed::imMatch();
+				if (!tafelAn) tafelAuf = 0;
+				if (tafelAn)
 				{
+					if (!tafelAuf) tafelAuf = jetzt;
+					const float ein = std::clamp(static_cast<float>(jetzt - tafelAuf) / 140.0f, 0.0f, 1.0f), einS = 1.0f - (1.0f - ein) * (1.0f - ein);
+					const auto A = [&](ImU32 c2) { const ImU32 a2 = static_cast<ImU32>(static_cast<float>(c2 >> 24) * einS); return (c2 & 0x00FFFFFFu) | (a2 << 24); };
 					struct E { std::string n; int k, d, su, serie, best; bool ich; };
 					std::vector<E> e; size_t p0 = 0;
 					while (p0 < tafel.size())
@@ -3605,48 +3613,96 @@ static const int kBotSetsN = 9;
 						auto zi = [&](size_t i) { return i < f.size() ? std::atoi(f[i].c_str()) : 0; };
 						e.push_back({f[0], zi(1), zi(2), zi(4), zi(5), zi(6), f[3] == "1"});
 					}
+					std::vector<std::string> inf; { size_t q = 0; while (!tafelInfo.empty()) { const size_t t2 = tafelInfo.find('\t', q); inf.push_back(tafelInfo.substr(q, t2 == std::string::npos ? std::string::npos : t2 - q)); if (t2 == std::string::npos) break; q = t2 + 1; } }
 					auto punkte = [](const E& x) { return x.k - x.su; };
 					std::stable_sort(e.begin(), e.end(), [&](const E& x, const E& y2) { return punkte(x) != punkte(y2) ? punkte(x) > punkte(y2) : x.d < y2.d; });
+					std::string meinName; { std::lock_guard<std::mutex> lk(m); meinName = cfg.onlineName; }
+					if (meinName.empty()) meinName = "YOU";
 					ImFont* kf = ps2xschrift::kopf(); if (!kf) kf = ImGui::GetFont();
-					const float zh = fs * 1.45f, bw = std::min(ds.x * 0.86f, fs * 40.0f), x0 = (ds.x - bw) * 0.5f;
-					const float hh = fs * 2.7f, y0 = ds.y * 0.10f, h = hh + zh * (std::max<size_t>(e.size(), 1) + 1) + fs * 3.4f;
-					dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + bw, y0 + h), IM_COL32(8, 10, 24, 232), fs * 0.4f);
-					dl->AddRect(ImVec2(x0, y0), ImVec2(x0 + bw, y0 + h), IM_COL32(80, 160, 255, 200), fs * 0.4f, 2.0f);
-					dl->AddText(kf, fs * 1.3f, ImVec2(x0 + fs, y0 + fs * 0.6f), IM_COL32(110, 210, 255, 255), "SCOREBOARD");
-					const int lv = ps2xstats::level();
-					const std::string rg = fmt::format("LV {}  {}", lv, ps2xRang(lv));
-					const ImVec2 rs = tf->CalcTextSizeA(fs, FLT_MAX, 0, rg.c_str());
-					dl->AddText(tf, fs, ImVec2(x0 + bw - fs - rs.x, y0 + fs * 0.85f), ps2xRangFarbe(lv), rg.c_str());
-					// columns: # | player | score | kills | deaths | suicides | K/D | streak | best
-					const float sp[] = {x0 + fs, x0 + fs * 2.6f, x0 + bw - fs * 24.0f, x0 + bw - fs * 20.5f, x0 + bw - fs * 17.0f, x0 + bw - fs * 13.3f,
-						x0 + bw - fs * 9.6f, x0 + bw - fs * 6.4f, x0 + bw - fs * 3.2f};
-					const char* kopfz[] = {"#", "PLAYER", "SCORE", "KILLS", "DEATHS", "SUIC.", "K/D", "STREAK", "BEST"};
-					float yy = y0 + hh;
-					for (int i = 0; i < 9; ++i) dl->AddText(tf, fs * 0.82f, ImVec2(sp[i], yy), IM_COL32(140, 150, 180, 255), kopfz[i]);
-					yy += zh;
+					const float zh = fs * 1.62f, bw = std::min(ds.x * 0.88f, fs * 42.0f), x0 = (ds.x - bw) * 0.5f;
+					const float kh = fs * 3.3f, sh = fs * 1.5f, fh = fs * 3.3f;   // header bar, column header, footer
+					const size_t nz = std::max<size_t>(e.size(), 1);
+					const float h = kh + sh + zh * nz + fs * 0.5f + fh;
+					const float y0 = std::max(fs, (ds.y - h) * 0.42f) + (1.0f - einS) * fs * 1.2f, rd = fs * 0.5f;
+					const ImU32 blau = IM_COL32(90, 150, 255, 255), hell = IM_COL32(150, 205, 255, 255), gold = IM_COL32(255, 205, 80, 255);
+					// the match behind goes a little darker, soft glow around the panel, panel, edge
+					dl->AddRectFilled(ImVec2(0, 0), ds, A(IM_COL32(2, 3, 10, 110)));
+					for (int g = 4; g >= 1; --g) dl->AddRect(ImVec2(x0 - g * 2.0f, y0 - g * 2.0f), ImVec2(x0 + bw + g * 2.0f, y0 + h + g * 2.0f), A(IM_COL32(70, 120, 255, 14 + (4 - g) * 12)), rd + g * 2.0f, 2.5f);
+					dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + bw, y0 + h), A(IM_COL32(8, 10, 26, 238)), rd);
+					dl->AddRectFilledMultiColor(ImVec2(x0 + 2, y0 + rd), ImVec2(x0 + bw - 2, y0 + kh), A(IM_COL32(28, 44, 110, 235)), A(IM_COL32(46, 30, 110, 235)), A(IM_COL32(18, 14, 52, 235)), A(IM_COL32(14, 20, 56, 235)));
+					dl->AddRectFilled(ImVec2(x0 + 2, y0 + 2), ImVec2(x0 + bw - 2, y0 + rd + 1), A(IM_COL32(32, 42, 112, 235)), rd, ImDrawFlags_RoundCornersTop);
+					dl->AddLine(ImVec2(x0 + 2, y0 + kh), ImVec2(x0 + bw - 2, y0 + kh), A(IM_COL32(110, 170, 255, 220)), 2.0f);
+					dl->AddRect(ImVec2(x0, y0), ImVec2(x0 + bw, y0 + h), A(IM_COL32(96, 150, 255, 235)), rd, 2.0f);
+					// header: mode (big) + map, right: rules + lobby (only for lobby matches; else a plain title)
+					const std::string modus = inf.size() >= 2 && !inf[0].empty() ? inf[0] : std::string("SCOREBOARD");
+					std::string modusG = modus; for (char& ch : modusG) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+					dl->AddText(kf, fs * 1.25f, ImVec2(x0 + fs + 1, y0 + fs * 0.42f + 1), A(IM_COL32(0, 0, 0, 200)), modusG.c_str());
+					dl->AddText(kf, fs * 1.25f, ImVec2(x0 + fs, y0 + fs * 0.42f), A(IM_COL32(235, 242, 255, 255)), modusG.c_str());
+					if (inf.size() >= 2) dl->AddText(tf, fs * 0.95f, ImVec2(x0 + fs, y0 + fs * 1.95f), A(hell), inf[1].c_str());
+					else dl->AddText(tf, fs * 0.95f, ImVec2(x0 + fs, y0 + fs * 1.95f), A(hell), fmt::format("{} player{}", e.size(), e.size() == 1 ? "" : "s").c_str());
+					auto rechtsT = [&](ImFont* f2, float gr, float xr, float yy2, ImU32 c2, const std::string& t2) { const ImVec2 sz = f2->CalcTextSizeA(gr, FLT_MAX, 0, t2.c_str()); dl->AddText(f2, gr, ImVec2(xr - sz.x, yy2), c2, t2.c_str()); };
+					if (inf.size() >= 4) { rechtsT(tf, fs * 0.95f, x0 + bw - fs, y0 + fs * 0.55f, A(IM_COL32(225, 230, 245, 255)), inf[3]); rechtsT(tf, fs * 0.85f, x0 + bw - fs, y0 + fs * 1.95f, A(IM_COL32(150, 165, 205, 255)), inf[2]); }
+					else { const int lv0 = ps2xstats::level(); rechtsT(tf, fs * 0.95f, x0 + bw - fs, y0 + fs * 1.2f, A(ps2xRangFarbe(lv0)), fmt::format("LV {}  {}", lv0, ps2xRang(lv0))); }
+					// columns: place | player (+ score bar) | score | kills | deaths | K/D | streak | best   (numbers right aligned)
+					const float xr[] = {x0 + bw - fs * 15.6f, x0 + bw - fs * 12.4f, x0 + bw - fs * 9.2f, x0 + bw - fs * 6.2f, x0 + bw - fs * 3.4f, x0 + bw - fs * 0.9f};
+					const char* kopfz[] = {"SCORE", "KILLS", "DEATHS", "K/D", "STREAK", "BEST"};
+					float yy = y0 + kh + fs * 0.35f;
+					dl->AddText(tf, fs * 0.78f, ImVec2(x0 + fs * 3.1f, yy), A(IM_COL32(130, 145, 190, 255)), "PLAYER");
+					for (int i = 0; i < 6; ++i) rechtsT(tf, fs * 0.78f, xr[i], yy, A(IM_COL32(130, 145, 190, 255)), kopfz[i]);
+					yy = y0 + kh + sh;
+					const int beste = e.empty() ? 0 : std::max(1, punkte(e.front()));
 					int platz = 0; const E* ich = nullptr; int meinPlatz = 0;
 					for (const auto& x : e)
 					{
 						++platz;
-						if (x.ich) { ich = &x; meinPlatz = platz; dl->AddRectFilled(ImVec2(x0 + fs * 0.4f, yy - fs * 0.15f), ImVec2(x0 + bw - fs * 0.4f, yy + fs * 1.2f), IM_COL32(70, 50, 0, 200), fs * 0.2f); }
-						const ImU32 c = x.ich ? IM_COL32(255, 210, 90, 255) : (platz == 1 ? IM_COL32(255, 240, 180, 255) : IM_COL32(230, 230, 235, 255));
-						const std::string sv[] = {std::to_string(platz), x.ich ? std::string("YOU") : x.n, std::to_string(punkte(x)), std::to_string(x.k), std::to_string(x.d), std::to_string(x.su),
+						const float ry0 = yy, ry1 = yy + zh - fs * 0.16f, rx0 = x0 + fs * 0.5f, rx1 = x0 + bw - fs * 0.5f;
+						if (x.ich)
+						{
+							ich = &x; meinPlatz = platz;
+							dl->AddRectFilledMultiColor(ImVec2(rx0, ry0), ImVec2(rx1, ry1), A(IM_COL32(120, 84, 0, 190)), A(IM_COL32(60, 44, 10, 60)), A(IM_COL32(60, 44, 10, 60)), A(IM_COL32(120, 84, 0, 190)));
+							dl->AddRectFilled(ImVec2(rx0, ry0), ImVec2(rx0 + fs * 0.18f, ry1), A(gold));
+						}
+						else dl->AddRectFilled(ImVec2(rx0, ry0), ImVec2(rx1, ry1), A((platz & 1) ? IM_COL32(40, 52, 110, 70) : IM_COL32(24, 30, 70, 50)), fs * 0.15f);
+						// place badge: gold, silver, bronze, then plain
+						const ImU32 pf = platz == 1 ? IM_COL32(255, 205, 80, 255) : platz == 2 ? IM_COL32(200, 210, 225, 255) : platz == 3 ? IM_COL32(215, 140, 80, 255) : IM_COL32(70, 84, 140, 255);
+						const ImVec2 pm(x0 + fs * 1.75f, (ry0 + ry1) * 0.5f);
+						dl->AddCircleFilled(pm, fs * 0.58f, A(platz <= 3 ? pf : IM_COL32(26, 32, 70, 255)), 20);
+						if (platz > 3) dl->AddCircle(pm, fs * 0.58f, A(pf), 20, 1.5f);
+						{ const std::string pt = std::to_string(platz); const ImVec2 sz = tf->CalcTextSizeA(fs * 0.9f, FLT_MAX, 0, pt.c_str()); dl->AddText(tf, fs * 0.9f, ImVec2(pm.x - sz.x * 0.5f, pm.y - sz.y * 0.5f), A(platz <= 3 ? IM_COL32(18, 16, 30, 255) : IM_COL32(200, 210, 240, 255)), pt.c_str()); }
+						const ImU32 c = x.ich ? gold : (platz == 1 ? IM_COL32(255, 244, 200, 255) : IM_COL32(228, 232, 245, 255));
+						const float ty = ry0 + (zh - fs * 0.16f - fs) * 0.5f - fs * 0.12f;
+						dl->AddText(tf, fs, ImVec2(x0 + fs * 3.1f, ty), A(c), (x.ich ? meinName : x.n).c_str());
+						// score bar under the name: share of the leader's score
+						const float bx0 = x0 + fs * 3.1f, bx1 = xr[0] - fs * 3.4f, by = ry1 - fs * 0.26f;
+						if (bx1 > bx0 + fs)
+						{
+							const float ant = std::clamp(static_cast<float>(std::max(0, punkte(x))) / static_cast<float>(beste), 0.0f, 1.0f);
+							dl->AddRectFilled(ImVec2(bx0, by), ImVec2(bx1, by + fs * 0.12f), A(IM_COL32(40, 50, 100, 200)), fs * 0.06f);
+							if (ant > 0.0f) dl->AddRectFilled(ImVec2(bx0, by), ImVec2(bx0 + (bx1 - bx0) * ant, by + fs * 0.12f), A(x.ich ? gold : blau), fs * 0.06f);
+						}
+						const std::string sv[] = {std::to_string(punkte(x)), std::to_string(x.k), std::to_string(x.d),
 							fmt::format("{:.2f}", x.d ? static_cast<float>(x.k) / x.d : static_cast<float>(x.k)), std::to_string(x.serie), std::to_string(x.best)};
-						for (int i = 0; i < 9; ++i) dl->AddText(tf, fs, ImVec2(sp[i], yy), c, sv[i].c_str());
+						rechtsT(tf, fs * 1.15f, xr[0], ty - fs * 0.08f, A(c), sv[0]);   // (Michroma's zero reads as a box at this size)
+						for (int i = 1; i < 6; ++i) rechtsT(tf, fs, xr[i], ty, A(i == 4 && x.serie >= 3 ? IM_COL32(255, 130, 70, 255) : (x.ich ? gold : IM_COL32(205, 212, 232, 255))), sv[i]);
 						yy += zh;
 					}
-					if (e.empty()) dl->AddText(tf, fs, ImVec2(sp[1], yy), IM_COL32(160, 160, 170, 255), "Waiting for match data...");
-					// footer: own progress this session
-					yy = y0 + h - fs * 2.6f;
-					dl->AddLine(ImVec2(x0 + fs, yy - fs * 0.3f), ImVec2(x0 + bw - fs, yy - fs * 0.3f), IM_COL32(80, 160, 255, 120), 1.5f);
+					if (e.empty()) dl->AddText(tf, fs, ImVec2(x0 + fs * 3.1f, yy + fs * 0.2f), A(IM_COL32(160, 165, 190, 255)), "Waiting for match data ...");
+					// footer: own place, rank, XP bar
+					const float fy = y0 + h - fh;
+					dl->AddLine(ImVec2(x0 + fs, fy), ImVec2(x0 + bw - fs, fy), A(IM_COL32(90, 150, 255, 130)), 1.5f);
+					const int lv = ps2xstats::level();
 					const long long xp = ps2xstats::xp(), a0 = ps2xstats::xpFuer(lv), b0 = ps2xstats::xpFuer(lv + 1);
-					const std::string fz = ich ? fmt::format("Place {} of {}    Kills {}    Best streak {}    XP {} / {}", meinPlatz, e.size(), ich->k, ich->best, xp, lv >= 50 ? xp : b0)
-					                            : fmt::format("XP {} / {}", xp, lv >= 50 ? xp : b0);
-					dl->AddText(tf, fs * 0.95f, ImVec2(x0 + fs, yy), IM_COL32(200, 205, 220, 255), fz.c_str());
-					const float bx0 = x0 + fs, bx1 = x0 + bw - fs, by = yy + fs * 1.3f;
+					static const char* kOrd[] = {"th", "st", "nd", "rd"};
+					const std::string links = ich ? fmt::format("{}{} of {}", meinPlatz, kOrd[(meinPlatz % 100 >= 11 && meinPlatz % 100 <= 13) ? 0 : (meinPlatz % 10 <= 3 ? meinPlatz % 10 : 0)], e.size()) : std::string();
+					if (!links.empty()) dl->AddText(kf, fs * 0.9f, ImVec2(x0 + fs, fy + fs * 0.5f), A(gold), links.c_str());
+					const std::string rg = fmt::format("LV {}  {}", lv, ps2xRang(lv));
+					const ImVec2 ls = kf->CalcTextSizeA(fs * 0.9f, FLT_MAX, 0, links.c_str());
+					dl->AddText(tf, fs * 0.95f, ImVec2(x0 + fs + (links.empty() ? 0.0f : ls.x + fs * 1.2f), fy + fs * 0.55f), A(ps2xRangFarbe(lv)), rg.c_str());
+					rechtsT(tf, fs * 0.9f, x0 + bw - fs, fy + fs * 0.55f, A(IM_COL32(190, 198, 222, 255)), lv >= 50 ? fmt::format("XP {}", xp) : fmt::format("XP {} / {}", xp, b0));
+					const float bx0 = x0 + fs, bx1 = x0 + bw - fs, by = fy + fs * 2.0f;
 					const float frac = lv >= 50 ? 1.0f : std::clamp(static_cast<float>(xp - a0) / static_cast<float>(std::max(1LL, b0 - a0)), 0.0f, 1.0f);
-					dl->AddRectFilled(ImVec2(bx0, by), ImVec2(bx1, by + fs * 0.45f), IM_COL32(40, 45, 70, 255), fs * 0.2f);
-					dl->AddRectFilled(ImVec2(bx0, by), ImVec2(bx0 + (bx1 - bx0) * frac, by + fs * 0.45f), ps2xRangFarbe(lv), fs * 0.2f);
+					dl->AddRectFilled(ImVec2(bx0, by), ImVec2(bx1, by + fs * 0.4f), A(IM_COL32(30, 36, 76, 255)), fs * 0.2f);
+					if (frac > 0.0f) dl->AddRectFilled(ImVec2(bx0, by), ImVec2(bx0 + (bx1 - bx0) * frac, by + fs * 0.4f), A(ps2xRangFarbe(lv)), fs * 0.2f);
 				}
 			}
 			{
@@ -6487,6 +6543,7 @@ PS2XGS_API void ps2xgs_text(int id, const char* text)
 		ps2xmenu::save();
 		ps2xfeed::m.lock();
 	}
+	else if (id == 6) ps2xfeed::info = text;
 	else if (id == 2) { ps2xfeed::tafel = text; if (*text) ps2xfeed::tafelMs.store(ps2xosd::jetztMs()); else ps2xfeed::tafelMs.store(0); }
 }
 PS2XGS_API void ps2xgs_online_status(const char* text)
