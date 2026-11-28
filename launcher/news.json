@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-28T03:30:00Z",
+    "title": "Online lobbies are coming to TimeSplitters 2",
+    "tag": "Coming soon",
+    "body": "**A real online lobby, built into the game.** Since 1.0 you can play the old LAN mode over a server. Now TimeSplitters 2 gets what it never had: a place to meet before the match, right in the game's own menus.\n- **Host a lobby** from the main menu and pick the mode and map\n- **Your friends see it in the list** and join with one press\n- **Match settings that fit the mode**, then a map vote with 15 seconds on the clock\n- **Story Co-op online**, cutscenes included\nTested with four copies of the game, three of them with added lag, all in the same match. Work in progress, no date yet. Screenshots and the whole story in the devlog.",
+    "url": "https://github.com/Destinity13/TimeSplitters-2-Native-Recomp-Windows-Linux-SteamDeck/blob/main/news/2026-11-28-devlog-online-lobbies.md"
+  },
+  {
     "date": "2026-11-27T12:00:00Z",
     "title": "Crystal Cut 1.3.3 patch notes",
     "tag": "Release",

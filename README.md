@@ -36,8 +36,8 @@ Now with the content that was cut before release, found again on your own disc. 
 
 <table>
 <tr>
+<td width="50%" valign="top"><a href="news/2026-11-28-devlog-online-lobbies.md"><img src="news/img/online-hero.jpg" width="100%" alt=""></a><br><sub>2026-11-28 · Coming soon</sub><br><b><a href="news/2026-11-28-devlog-online-lobbies.md">Online lobbies are coming to TimeSplitters 2</a></b><br><sub>Host a lobby, your friends see it in the list and join, the host sets up the match, everyone votes on the map. All inside the game. Work in progress.</sub></td>
 <td width="50%" valign="top"><a href="news/2026-11-27-patch-notes-1-3-3.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-27 · Release</sub><br><b><a href="news/2026-11-27-patch-notes-1-3-3.md">Crystal Cut 1.3.3 patch notes</a></b><br><sub>Aiming, controls and a setup that runs on a lot more PCs. Update from the launcher, saves and settings are kept.</sub></td>
-<td width="50%" valign="top"><a href="news/2026-11-25-devlog-1-3-3-almost-here.md"><img src="docs/screenshots/banner_crystalcut.jpg" width="100%" alt=""></a><br><sub>2026-11-25 · Devlog</sub><br><b><a href="news/2026-11-25-devlog-1-3-3-almost-here.md">1.3.3 is almost here</a></b><br><sub>Hip fire on the crosshair, auto aim with modern controls, mouse and gamepad together, the VU1 setup error fixed and setup for older CPUs. In testing now, release in the next hours.</sub></td>
 </tr>
 </table>
 
